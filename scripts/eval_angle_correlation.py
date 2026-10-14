@@ -54,15 +54,15 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import ear3d                                                   # noqa: E402
 import skin as sk                                              # noqa: E402
 from ear3d.config import DEFAULTS, EAR3D_DIR                   # noqa: E402
-from eval_test import best_ckpt                                # noqa: E402
 from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS,         # noqa: E402
-                       EarLandmarkerPipeline)
+                       EarLandmarkerPipeline, find_best_checkpoint)
 
 # derived from third-party 3D data, so it defaults outside the repo
 PKL = Path(tempfile.gettempdir()) / "angle_correlation.pkl"
 FIG = Path(tempfile.gettempdir()) / "angle_correlation.png"
 
-pipe=EarLandmarkerPipeline(BLAZEEAR_DIR/DETECTOR_WEIGHTS,best_ckpt("manual_occ_s42"),
+pipe=EarLandmarkerPipeline(BLAZEEAR_DIR/DETECTOR_WEIGHTS,
+                           find_best_checkpoint("manual_occ_s42"),
                            device="cuda",smooth=False)
 YAWS=[-40,-30,-20,-10,0,10,20,30,40]
 HEADS=["pp12","pp11","pp10","pp16","pp19","pp20"]

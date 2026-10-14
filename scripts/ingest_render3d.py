@@ -55,7 +55,6 @@ from ear3d.camera import cone_angles                               # noqa: E402
 from ear3d.frames import find_ears, head_pose, load_head           # noqa: E402
 from ear3d.label import label_two_pass, triangulate_landmarks      # noqa: E402
 from ear3d.render import render                                    # noqa: E402
-from eval_test import best_ckpt                                    # noqa: E402
 from skin import LABEL_TONE, apply_skin                            # noqa: E402
 
 OUT = ROOT / "data" / "render3d"
@@ -120,7 +119,8 @@ def main() -> None:
                         "views instead of lifting the face-on render alone")
     args = p.parse_args()
 
-    from ear3d.twod import BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarDetector, EarLandmarkerPipeline
+    from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarDetector,
+                            EarLandmarkerPipeline, find_best_checkpoint)
     cfg = dict(DEFAULTS, run=args.label_run)
     if args.tri_views:
         # Triangulated labels, not a single-view lift. Measured by leave-one-view-
@@ -149,7 +149,8 @@ def main() -> None:
     # smooth=False: the tracker is for video; on a still it would smooth a
     # one-frame track against wall-clock time and shift the landmarks.
     pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS,
-                                 best_ckpt(args.label_run), device="cuda", smooth=False)
+                                 find_best_checkpoint(args.label_run),
+                                 device="cuda", smooth=False)
 
     heads = sorted(glob.glob(str(HUTUBS / "*.ply"))) + sorted(glob.glob(str(SONICOM / "*.stl")))
     rng = np.random.default_rng(args.seed)

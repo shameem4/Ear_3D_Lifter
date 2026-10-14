@@ -249,9 +249,8 @@ def main():
     warnings.filterwarnings("ignore")
     import open3d as o3d
     from PIL import Image
-    from eval_test import best_ckpt
     from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS,
-                           EarLandmarkerPipeline)
+                           EarLandmarkerPipeline, find_best_checkpoint)
 
     cfg = dict(DEFAULTS, mesh=a.mesh, ear=a.ear, skin=not a.no_skin)
     K = a.n_points
@@ -265,7 +264,7 @@ def main():
         from skin import apply_skin
         apply_skin(mesh, seed=cfg["skin_seed"], tone=cfg["tone"],
                    ao_strength=cfg["ao_strength"], n_rays=cfg["ao_rays"])
-    ck = best_ckpt(cfg["run"])
+    ck = find_best_checkpoint(cfg["run"])
     pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS, ck,
                                  device=cfg["device"], smooth=False)
 

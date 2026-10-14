@@ -315,14 +315,16 @@ def main():
         return
 
     cfg = dict(DEFAULTS)
-    from eval_test import best_ckpt
-    from ear3d.twod import BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarLandmarkerPipeline
-    pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS,
-                                 best_ckpt(cfg["run"]), device=cfg["device"],
-                                 smooth=False)
+    from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarLandmarkerPipeline,
+                            find_best_checkpoint)
+    # Once, not twice: picking the best checkpoint torch.loads every candidate in
+    # the run directory to read the score stored inside it.
+    ck = find_best_checkpoint(cfg["run"])
+    pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS, ck,
+                                 device=cfg["device"], smooth=False)
     print(f"template {pathlib.Path(a.template).name}, "
           f"{len(V)} verts, canonical mm")
-    print(f"landmarker {best_ckpt(cfg['run']).name}\n")
+    print(f"landmarker {ck.name}\n")
 
     R = R_VIEW.copy()
     angles = cone_angles(a.views, a.cone)

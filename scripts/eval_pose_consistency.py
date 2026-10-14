@@ -77,8 +77,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from render3d_ears import ears, load_ear, project, render, rot, unproject_rays  # noqa: E402
-from eval_test import best_ckpt                                                 # noqa: E402
-from ear3d.twod import LandmarkPredictor                                         # noqa: E402
+from ear3d.twod import LandmarkPredictor, find_best_checkpoint                   # noqa: E402
 
 SIZE = 600
 TRAIN_OCC = 0.777
@@ -147,7 +146,7 @@ def main() -> None:
 
     YAWS = [-50, -40, -30, -20, -10, 0, 10, 20, 30, 40, 50]
     PITCHES = [-30, -20, -10, 0, 10, 20, 30]
-    preds = {r: LandmarkPredictor(best_ckpt(r), "cuda") for r in args.runs}
+    preds = {r: LandmarkPredictor(find_best_checkpoint(r), "cuda") for r in args.runs}
 
     mem = ears()
     rng = np.random.default_rng(args.seed)

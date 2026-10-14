@@ -469,9 +469,8 @@ def main():
     import torch
     from PIL import Image
     from model.depth_module import EarDepth3DModule
-    from eval_test import best_ckpt
     from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS,
-                           EarLandmarkerPipeline)
+                           EarLandmarkerPipeline, find_best_checkpoint)
     from scripts.fit_photo_depth import weak_perspective
 
     cfg = dict(DEFAULTS, mesh=a.mesh, ear=a.ear, skin=not a.no_skin)
@@ -487,9 +486,7 @@ def main():
         apply_skin(mesh, seed=cfg["skin_seed"], tone=cfg["tone"],
                    ao_strength=cfg["ao_strength"], n_rays=cfg["ao_rays"])
 
-    ck = best_ckpt(cfg["run"])
-    if ck is None:
-        sys.exit(f"no checkpoint for run {cfg['run']!r} under runs/checkpoints/")
+    ck = find_best_checkpoint(cfg["run"])
     # smooth=False: the tracker is for video, and on a single still it would
     # smooth a one-frame track against wall-clock time and shift the landmarks.
     pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS, ck,

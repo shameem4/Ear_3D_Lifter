@@ -47,14 +47,15 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import ear3d, skin as sk
 from ear3d.config import DEFAULTS, EAR3D_DIR
-from ear3d.twod import BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarLandmarkerPipeline
-from eval_test import best_ckpt
+from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarLandmarkerPipeline,
+                        find_best_checkpoint)
 # derived from third-party 3D data, so it caches outside the repo
 PKL = Path(tempfile.gettempdir()) / "angle_split_half.pkl"
 YAWS=[-40,-30,-20,-10,0,10,20,30,40]
 HEADS=["pp12","pp11","pp10","pp16","pp19","pp20","pp21","pp22"]
 if not PKL.exists():
-    pipe=EarLandmarkerPipeline(BLAZEEAR_DIR/DETECTOR_WEIGHTS,best_ckpt("manual_occ_s42"),
+    pipe=EarLandmarkerPipeline(BLAZEEAR_DIR/DETECTOR_WEIGHTS,
+                               find_best_checkpoint("manual_occ_s42"),
                                device="cuda",smooth=False)
     base=EAR3D_DIR/"3D head meshes"
     P=np.full((len(HEADS),len(YAWS),55,3),np.nan); OK=np.zeros((len(HEADS),len(YAWS),55),bool)

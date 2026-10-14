@@ -746,11 +746,9 @@ def main():
 
     # --- the shipped pipeline, which owns detection, ROI and landmarking -----
     sys.path.insert(0, str(ROOT / "scripts"))
-    from eval_test import best_ckpt
-    from ear3d.twod import BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarLandmarkerPipeline
-    ck = best_ckpt(cfg["run"])
-    if ck is None:
-        sys.exit(f"no checkpoint for run {cfg['run']!r} under runs/checkpoints/")
+    from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarLandmarkerPipeline,
+                            find_best_checkpoint)
+    ck = find_best_checkpoint(cfg["run"])
     # smooth=False: the tracker is for video. On a single still it would smooth a
     # one-frame track against wall-clock time and shift the landmarks.
     pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS, ck,

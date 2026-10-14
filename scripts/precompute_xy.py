@@ -51,12 +51,12 @@ def main():
     from PIL import Image
     from torch.utils.data import DataLoader, Dataset
 
-    from eval_test import best_ckpt
+    from ear3d.twod import find_best_checkpoint
     from model.lightning_module import EarLandmarkerModule
 
-    ck = a.ckpt or best_ckpt(a.run)
-    if not ck:
-        sys.exit(f"no checkpoint for run {a.run!r}")
+    # find_best_checkpoint raises with the directory it searched, so there is no
+    # None to test for here.
+    ck = a.ckpt or find_best_checkpoint(a.run)
     print(f"using {ck}")
     mod = EarLandmarkerModule.load_from_checkpoint(ck, map_location=a.device).eval()
     net = mod.model.to(a.device)
