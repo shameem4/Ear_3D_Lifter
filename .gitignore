@@ -1,0 +1,67 @@
+/data/preprocessed
+/data/raw
+*.pyc
+/runs
+
+# local test fixtures (personal photos)
+/fixtures/*
+!/fixtures/README.md
+
+# downloaded face test set (third-party images, see metadata.json for licences)
+/data/face_testset/
+
+# optional synthetic training source (regenerate with scripts/ingest_synthetic.py)
+/data/synthetic/
+# Commissioned manual annotations and their ingested form. Images are from the
+# wild under permissive terms and the labels are work-for-hire, but neither is
+# this repository's to redistribute wholesale; scripts/ingest_manual.py rebuilds
+# data/manual/ from new_manual_data/.
+/new_manual_data/
+/data/manual/
+
+# article authoring -- drafting artifacts, not part of the model repo
+/generate_article.py
+/Ear_Landmarker_Article.docx
+/ChatGPT Image*.png
+
+# Third-party research data -- never commit, never redistribute.
+# Lives in ../clean_3d_data (outside every repo). CC BY 4.0 would permit
+# redistribution with attribution; we deliberately do not, to keep provenance
+# with the owners. ../clean_3d_data/fetch_sources.sh re-downloads from source.
+/clean_3d_data/
+/data/3d/
+*.ply
+*.stl
+*.zip
+
+# Renders of third-party head meshes (HUTUBS / AudioEar3D) -- derived works of
+# research data we deliberately do not redistribute. Rebuild with
+# scripts/ingest_render3d.py; the source meshes live in ../clean_3d_data.
+/data/render3d/
+# Every depth corpus variant, not just the first one. `data/depth3d/` alone
+# let data/depth3d_v5 into a commit: a version-specific rule stops matching
+# the moment the corpus is regenerated under a new name.
+data/depth3d*/
+/data/depth3d*/
+.venv_da3/
+/data/photo3d/
+data/photo3d/
+
+# A real person's head scan. NEVER commit, NEVER redistribute. Both spellings
+# because a rule anchored only at the root silently stops applying the moment
+# the folder is referenced from a subdirectory.
+/supersecret/
+supersecret/
+
+# HSRD-100 (CC BY 4.0). Permissively licensed, but data still stays local.
+/data/hsrd100/
+data/hsrd100/
+
+# Multi-view lift outputs: renders, depth maps and consensus per ear. Large
+# (169 MB for one ear) and derived -- regenerate with scripts/moge_multiview.py.
+# Both spellings, as elsewhere in this file, so a relative or rooted path is
+# caught either way.
+/data/mv_hutubs/
+data/mv_hutubs/
+/data/mv_*/
+data/mv_*/

@@ -1,0 +1,125 @@
+EarLandmarker
+Copyright 2026 Shameem Hameed
+
+Licensed under the Apache License, Version 2.0 (the "License"); see LICENSE.
+
+This product includes, depends on, or was derived from the following third-party
+material, which carries its own terms. Apache-2.0 covers this repository's own
+source code and does not override any of them.
+
+--------------------------------------------------------------------------------
+1. BlazeEar and trainable_blazeface  --  Apache License 2.0
+   Copyright (c) 2026 Shameem Hameed
+--------------------------------------------------------------------------------
+
+Both were relicensed from CC BY-NC 4.0 to Apache-2.0, so the earlier conflict is
+resolved. Material used here:
+  - docs/blazeear_inference.js      verbatim copy of BlazeEar's browser pipeline
+  - docs/BlazeEar_web.onnx          BlazeEar's trained ear detector
+  - inference.py, model/facemesh_ear.py, scripts/build_*_testset.py
+                                    import from BlazeEar at runtime
+
+BlazeEar's own detector training data is Roboflow-sourced and declares CC BY 4.0
+on five of seven sets; two state no licence.
+
+--------------------------------------------------------------------------------
+2. MediaPipe (Google LLC)  --  Apache License 2.0
+--------------------------------------------------------------------------------
+
+Compatible. Used for:
+  - BlazeFace face-detection weights, via BlazeEar's two-stage pipeline
+  - blazeface_landmark.pth, loaded by model/facemesh_ear.py for the architecture
+    comparison in RESULTS.md
+  - the BlazeBlock architecture pattern the backbone follows
+
+docs/BlazeFace_web.onnx derives from MediaPipe's published weights.
+
+--------------------------------------------------------------------------------
+3. Training data for the shipped weights  --  COMMISSIONED, NO ONWARD RESTRICTION
+--------------------------------------------------------------------------------
+
+No dataset is redistributed here; data/raw, data/preprocessed, data/manual and
+runs/ are all gitignored. docs/EarLandmarker_web.onnx IS tracked, and as of this
+version it is trained on ONE source:
+
+| source      | samples | images                        | annotations        |
+|-------------|---------|-------------------------------|--------------------|
+| manual      |  10,535 | collected from the wild,      | commissioned       |
+|             |         | vetted to exclude non-        | work-for-hire via  |
+|             |         | permissive/non-commercial     | a crowd-annotation |
+|             |         | licences                      | platform           |
+
+The annotations follow the 55-point ear convention (iBUG's point ordering:
+0-19 outer helix, 20-34 inner helix, 35-49 concha border, 50-54 superior crus).
+The CONVENTION is a numbering scheme, not a dataset; no iBUG annotation data is
+used, redistributed or derived from in these weights.
+
+The weights are offered under Apache-2.0, the same as the code.
+
+DISCLOSURE -- MODEL-ASSISTED ANNOTATION
+The annotation task was seeded with predictions from an earlier model
+(v6_persp65) which annotators then corrected, rather than being drawn from
+scratch. That earlier model was trained on the iBUG-derived corpus described in
+section 4, and iBUG's terms reach "any portion of derived data". The copyright
+holder's position is that human correction of a machine-proposed starting point
+produces an independent work: measured on this set, the final labels differ from
+the seeding model's prediction by more than one pixel (at 192px) on 51% of all
+points, with a median displacement of ~1px against ~4px for annotation of the
+same model's own training distribution.
+
+This is recorded because it is a judgment call rather than a clean chain, and
+anyone relying on these weights should be able to see the basis for it. If you
+need provenance with no such question attached, retrain on annotations drawn
+from scratch; scripts/ingest_manual.py takes any directory of image +
+55-line "x y" annotation pairs.
+
+--------------------------------------------------------------------------------
+4. Earlier training data  --  NON-COMMERCIAL, NO LONGER IN THE SHIPPED WEIGHTS
+--------------------------------------------------------------------------------
+
+Versions of docs/EarLandmarker_web.onnx before this one were trained on the
+corpus below, 98% of which is non-commercial by two independent routes. Those
+earlier weights were research-use only. They are superseded, but the sources are
+still what data/preprocessed holds, so anything you train from it inherits these
+terms:
+
+| source      | samples | licence                              | commercial use |
+|-------------|---------|--------------------------------------|----------------|
+| collectionB |   3,153 | iBUG: non-commercial research only   | NO             |
+| collectionA |     605 | iBUG: non-commercial research only   | NO             |
+| AudioEar2D  |   2,000 | annotations CC BY 4.0, IMAGES FFHQ   | NO             |
+| AudioEar3D  |     112 | CC BY 4.0, provenance unverified     | unclear        |
+
+AudioEar (Huang et al., AAAI 2023) publishes its annotations CC BY 4.0, confirmed
+on its Zenodo record (https://zenodo.org/records/7592895). But AudioEar2D's 2,000
+IMAGES are drawn from FFHQ, and FFHQ (https://github.com/NVlabs/ffhq-dataset) is
+
+    Creative Commons BY-NC-SA 4.0
+
+for the dataset, with the underlying Flickr images under licences that NVIDIA
+summarises as "allow free use, redistribution, and adaptation for NON-COMMERCIAL
+purposes". A permissive licence on annotations does not make the pixels they
+annotate permissive, and the model was trained on the pixels.
+
+The iBUG ear data (Zhou & Zaferiou, "Deformable Models of Ears in-the-wild",
+FG 2017, https://ibug.doc.ic.ac.uk/resources/ibug-ears/) states:
+
+    "The dataset is available for non-commercial research purposes only."
+
+    "You agree not to reproduce, duplicate, copy, sell, trade, resell or
+    exploit for any commercial purposes, any portion of the annotations and
+    ANY PORTION OF DERIVED DATA."
+
+    "You agree not to further copy, publish or distribute any portion of
+    annotations of the dataset."
+
+Identification basis: these sources use iBUG's exact 55-point scheme, verified
+against the iBUG page, and collectionA's 605 samples match its documented
+Collection A count.
+
+WHAT THIS MEANS IN PRACTICE
+  - The SOURCE CODE in this repository is Apache-2.0.
+  - The SHIPPED WEIGHTS in docs/EarLandmarker_web.onnx are Apache-2.0, subject
+    to the disclosure in section 3.
+  - ANY MODEL YOU TRAIN from data/preprocessed is non-commercial, because that
+    directory still holds the section 4 sources. Train from data/manual instead.
