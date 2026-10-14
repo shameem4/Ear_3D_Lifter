@@ -64,6 +64,15 @@ def gt_box(lm_frame, cam, w, h):
             min(w - 1.0, x1 + mx), min(h - 1.0, y1 + my))
 
 
+def to_xyxy(b):
+    """EarDetector.detect returns [ymin, xmin, ymax, xmax]; everything here is
+    (x0, y0, x1, y1). Comparing the two directly does not raise -- it quietly
+    transposes the box and reports a plausible, wrong IoU. It read 0.43 on a
+    detection that is actually 0.77, which looked like loose localisation and
+    was nothing of the kind."""
+    return (float(b[1]), float(b[0]), float(b[3]), float(b[2]))
+
+
 def iou(a, b):
     ix0, iy0 = max(a[0], b[0]), max(a[1], b[1])
     ix1, iy1 = min(a[2], b[2]), min(a[3], b[3])
@@ -113,7 +122,7 @@ def main():
             best, conf = None, 0.0
             if len(b):
                 k = int(np.argmax(b[:, 4]))
-                best, conf = tuple(float(v) for v in b[k, :4]), float(b[k, 4])
+                best, conf = to_xyxy(b[k, :4]), float(b[k, 4])
             fn = f"{name}_y{yaw:+03.0f}.png"
             Image.fromarray(img).save(out / "images" / fn)
             rows.append(dict(

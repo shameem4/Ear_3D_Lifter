@@ -438,6 +438,19 @@ def main():
     p.add_argument("--render", action="store_true", help="write overlay PNGs and look")
     p.add_argument("--render-dir", default="runs/escape_audit")
     p.add_argument("--no-snap", action="store_true", help="cfg['snap'] = False")
+    p.add_argument("--detector-conf", type=float, default=None, metavar="C",
+                   help="detector score floor. The shipped 0.70+ was fitted for "
+                        "PHOTOGRAPHS, where precision matters and several ears "
+                        "may be present. These frames contain exactly one ear by "
+                        "construction, so a threshold buys nothing and costs "
+                        "recall: on the GT test set, 56.5%% -> 97.6%% at IoU>=0.3 "
+                        "with this low and --full-frame on.")
+    p.add_argument("--full-frame", action="store_true",
+                   help="run the ear model on the whole frame instead of on "
+                        "BlazeFace crops. The face stage exists to make a small "
+                        "ear bigger; an ear-centred render has no face in it and "
+                        "needs no help, and measured on the GT test set "
+                        "full-frame beats two-stage 97.6%% to 89.3%%.")
     p.add_argument("--snap-sweep", nargs="*", type=float, default=None,
                    metavar="FRAC",
                    help="also score these cliff-snap radii, as a fraction of ear "
@@ -460,7 +473,12 @@ def main():
     # smooth=False: the tracker is for video; on a single still it would smooth a
     # one-frame track against wall-clock time and shift the landmarks.
     pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS, ck,
-                                 device=cfg["device"], smooth=False)
+                                 device=cfg["device"], smooth=False,
+                                 detector_confidence=a.detector_conf)
+    if a.full_frame:
+        # Caller-side, not a BlazeEar change: its fitted thresholds stay as they
+        # are for photographs. Only this pipeline's view of them changes.
+        pipe.detector.two_stage = False
 
     if a.grid is not None:
         ax = np.arange(-a.grid, a.grid + 1e-6, a.grid_step)
