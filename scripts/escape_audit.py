@@ -91,6 +91,7 @@ from ear3d import DEFAULTS, Camera                                 # noqa: E402
 from ear3d.backproject import backproject, backproject_snapped     # noqa: E402
 from ear3d.camera import camera_ke, cone_angles, orbit_extrinsic   # noqa: E402
 from ear3d.frames import frame_from, in_frame, plane_normal      # noqa: E402
+from ear3d.label import pick                                       # noqa: E402
 from ear3d.render import MATERIAL, light_scene, render              # noqa: E402
 from ear3d.scheme import GROUPS, GROUP_NAMES, group_of             # noqa: E402
 
@@ -290,46 +291,6 @@ def audit_ear(name, cfg, pipe, angles, dataset="hutubs", render_dir=None, radii=
     return rows
 
 
-def pick(res, cfg, hw):
-    """Choose WHICH detection to lift when the detector returns several.
-
-    Score alone is the obvious rule and it is not the best one here, because
-    these frames are built to hold exactly one ear, centred, by construction --
-    a prior the detector knows nothing about. Measured on the 168-render
-    ground-truth set, choosing among the top 10 detections:
-
-        rule                                IoU>=0.3  IoU>=0.5  median IoU
-        argmax (score only)                    97.6%     95.8%       0.711
-        most central                           88.1%     78.0%       0.700
-        largest area                           98.8%     96.4%       0.711
-        score / (1 + 4 * dist from centre)    100.0%     97.6%       0.711
-        oracle (best box available)           100.0%     98.2%       0.711
-
-    Centrality ALONE is much worse than score alone -- the prior is weak and
-    cannot carry the decision by itself. Weighting score by it reaches the
-    oracle at IoU>=0.3. Note the median IoU is identical under every rule: the
-    gain is entirely in the tail, rescuing the handful of frames where the top
-    box is on the cheek, and no rule improves localisation. Selection decides
-    which surviving box you get; it cannot make that box better.
-
-    TWO CAVEATS, both load-bearing. The factor 4 is a first guess fitted on
-    those same 168 renders, so it is provisional. And the rule is only valid
-    because THIS pipeline centres the ear deliberately -- it must not be
-    carried over to photographs, or to any caller that does not.
-
-    bbox is [ymin, xmin, ymax, xmax]; reading it as xyxy silently transposes.
-    """
-    if cfg.get("select") != "central" or len(res) == 1:
-        return max(res, key=lambda d: float(d["confidence"]))
-    h, w = hw
-    def key(d):
-        b = np.asarray(d["bbox"], float)
-        cx, cy = (b[1] + b[3]) / 2.0, (b[0] + b[2]) / 2.0
-        dist = np.hypot(cx - w / 2.0, cy - h / 2.0) / w
-        return float(d["confidence"]) / (1.0 + 4.0 * dist)
-    return max(res, key=key)
-
-
 def on_ear(d_head, d_ear, uv, scale, tol_mm=5.0):
     """Is the surface the camera SEES at this pixel the ear?
 
@@ -485,17 +446,19 @@ def main():
                         "construction, so a threshold buys nothing and costs "
                         "recall: on the GT test set, 56.5%% -> 97.6%% at IoU>=0.3 "
                         "with this low and --full-frame on.")
-    p.add_argument("--select", choices=["score", "central"], default="score",
+    p.add_argument("--select", choices=["score", "central"], default=None,
                    help="which detection to lift when several come back. "
                         "'central' weights the score by distance from frame "
                         "centre, which these frames justify and photographs do "
                         "not -- see pick().")
-    p.add_argument("--full-frame", action="store_true",
+    p.add_argument("--full-frame", action=argparse.BooleanOptionalAction,
+                   default=None,
                    help="run the ear model on the whole frame instead of on "
                         "BlazeFace crops. The face stage exists to make a small "
                         "ear bigger; an ear-centred render has no face in it and "
                         "needs no help, and measured on the GT test set "
-                        "full-frame beats two-stage 97.6%% to 89.3%%.")
+                        "full-frame beats two-stage 97.6%% to 89.3%%. "
+                        "--no-full-frame measures the two-stage path.")
     p.add_argument("--snap-sweep", nargs="*", type=float, default=None,
                    metavar="FRAC",
                    help="also score these cliff-snap radii, as a fraction of ear "
@@ -505,26 +468,26 @@ def main():
 
     cfg = dict(DEFAULTS)
     cfg["snap"] = not a.no_snap
-    cfg["select"] = a.select
     cfg["interactive"] = False
 
     ears = a.ears
     if a.all:
         ears = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("pp*.npz"))
 
-    from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS,                # noqa
-                            EarLandmarkerPipeline, find_best_checkpoint)
-    ck = find_best_checkpoint(cfg["run"])
-    print(f"landmarker {ck.name}")
-    # smooth=False: the tracker is for video; on a single still it would smooth a
-    # one-frame track against wall-clock time and shift the landmarks.
-    pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS, ck,
-                                 device=cfg["device"], smooth=False,
-                                 detector_confidence=a.detector_conf)
-    if a.full_frame:
-        # Caller-side, not a BlazeEar change: its fitted thresholds stay as they
-        # are for photographs. Only this pipeline's view of them changes.
-        pipe.detector.two_stage = False
+    from ear3d.twod import make_pipeline                                   # noqa
+    # The flags OVERRIDE config.py so this harness can still measure the old
+    # behaviour -- which is the whole reason the defaults there could be set.
+    # None means "leave config.py alone". An --select that defaulted to
+    # "score" would have quietly undone the measured default on every run.
+    if a.detector_conf is not None:
+        cfg["detector_conf"] = a.detector_conf
+    if a.full_frame is not None:
+        cfg["detector_full_frame"] = a.full_frame
+    if a.select is not None:
+        cfg["select"] = a.select
+    pipe, ck = make_pipeline(cfg)
+    print(f"landmarker {ck.name}  (conf {cfg['detector_conf']}, "
+          f"full_frame {cfg['detector_full_frame']}, select {cfg['select']})")
 
     if a.grid is not None:
         ax = np.arange(-a.grid, a.grid + 1e-6, a.grid_step)

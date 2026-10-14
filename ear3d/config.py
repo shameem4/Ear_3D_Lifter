@@ -28,6 +28,49 @@ DEFAULTS = dict(
     run="manual_occ_s42",   # checkpoint under runs/checkpoints/<run>/
     device="cuda",
 
+    # --- the 2D detector, on RENDERS ----------------------------------------
+    # These three defaults are measured on renders and are WRONG for
+    # photographs. They live here because this config is the render path.
+    #
+    # Ground truth for all of it: 168 renders with boxes projected from
+    # wrap-fitted 3D landmarks (scripts/make_detector_testset.py), plus 112
+    # ears x 49 views scored against the wrap (scripts/escape_audit.py).
+    #
+    #   config                              detect@IoU>=0.3   @0.5
+    #   two-stage, shipped threshold              56.5%      54.8%
+    #   full-frame, shipped threshold             66.1%      64.9%
+    #   two-stage,  conf 0.05 + best-pick         89.3%      83.3%
+    #   full-frame, conf 0.05 + best-pick         97.6%      95.8%
+    #
+    # The detector was never blind to these ears: over all 3584 raw anchors
+    # EVERY one of the 168 renders carries a box at IoU>=0.5 (median 0.742).
+    # It put a correct box down and scored it under the operating point --
+    # 52 of 168 images have a correct box scoring below 0.70. The cause is
+    # framing: BlazeEar trained on ears at a median 0.223 of frame height and
+    # this path runs them at 0.774, above its 99.6th percentile. Cropping real
+    # PHOTOGRAPHS to this framing makes the model worse on photographs (25.0%)
+    # than it is on these renders (62.5%), so this is not a render-domain gap
+    # and fine-tuning on renders is not indicated.
+    detector_conf=0.05,     # NOT a quality gate, and dropping it is not free.
+                            # On the views the shipped threshold already
+                            # accepted, low and shipped are identical (2.62% vs
+                            # 2.66% of landmarks >10 mm off the ear), so this
+                            # only ADDS views. The added ones are worse -- 12.25%
+                            # against 2.62% -- but there are many more of them:
+                            # counting landmarks that pass the on-ear filter and
+                            # land within 15 mm of their own ground-truth point,
+                            # 93,736 -> 204,810, a 2.18x yield at a 2.57% ->
+                            # 4.92% bad rate. Raise it toward 0.70 when a clean
+                            # label matters more than a plentiful one.
+    detector_full_frame=True,
+                            # Skip BlazeFace and run the ear model on the whole
+                            # frame. The face stage exists to make a SMALL ear
+                            # bigger; an ear-centred render has no face in it to
+                            # crop to. Worth 97.6% against 89.3%.
+    select="central",       # Which detection to lift when several come back --
+                            # see label.pick(). Only valid because this path
+                            # frames the ear centrally on purpose.
+
     # --- head pose ----------------------------------------------------------
     use_mediapipe=True,     # derive the face-on direction from a FaceMesh head
                             # frame instead of the ear detector's 6-view sweep

@@ -101,6 +101,7 @@ def skinned(V, F):
 def sweep(Vr, F, cfg, pipe, angles, verbose=True):
     """Landmark every view, stepping camera distance past the blind bands."""
     from ear3d.camera import Camera, orbit_extrinsic
+    from ear3d.label import pick
     from ear3d.render import render
     uv = np.full((len(angles), 55, 2), np.nan)
     cams, hits = [], 0
@@ -112,7 +113,7 @@ def sweep(Vr, F, cfg, pipe, angles, verbose=True):
             img, _, cam = render(mesh, c2, E=orbit_extrinsic(yaw, pitch, c2))
             res = pipe(img, timestamp=0.0)
             if res:
-                b = max(res, key=lambda d: float(d["confidence"]))
+                b = pick(res, c2, img.shape[:2])
                 got = (np.asarray(b["landmarks"], float), cam,
                        float(b["confidence"]), mag)
                 break
@@ -315,13 +316,8 @@ def main():
         return
 
     cfg = dict(DEFAULTS)
-    from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarLandmarkerPipeline,
-                            find_best_checkpoint)
-    # Once, not twice: picking the best checkpoint torch.loads every candidate in
-    # the run directory to read the score stored inside it.
-    ck = find_best_checkpoint(cfg["run"])
-    pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS, ck,
-                                 device=cfg["device"], smooth=False)
+    from ear3d.twod import make_pipeline
+    pipe, ck = make_pipeline(cfg)
     print(f"template {pathlib.Path(a.template).name}, "
           f"{len(V)} verts, canonical mm")
     print(f"landmarker {ck.name}\n")

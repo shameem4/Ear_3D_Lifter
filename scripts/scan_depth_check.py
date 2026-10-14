@@ -469,8 +469,8 @@ def main():
     import torch
     from PIL import Image
     from model.depth_module import EarDepth3DModule
-    from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS,
-                           EarLandmarkerPipeline, find_best_checkpoint)
+    from ear3d.label import pick
+    from ear3d.twod import make_pipeline
     from scripts.fit_photo_depth import weak_perspective
 
     cfg = dict(DEFAULTS, mesh=a.mesh, ear=a.ear, skin=not a.no_skin)
@@ -486,11 +486,7 @@ def main():
         apply_skin(mesh, seed=cfg["skin_seed"], tone=cfg["tone"],
                    ao_strength=cfg["ao_strength"], n_rays=cfg["ao_rays"])
 
-    ck = find_best_checkpoint(cfg["run"])
-    # smooth=False: the tracker is for video, and on a single still it would
-    # smooth a one-frame track against wall-clock time and shift the landmarks.
-    pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS, ck,
-                                 device=cfg["device"], smooth=False)
+    pipe, ck = make_pipeline(cfg)
     print(f"landmarker {ck.name}")
 
     pose = head_pose(mesh, cfg)
@@ -549,7 +545,7 @@ def main():
             if soft:
                 return None
             sys.exit("the pipeline found no ear in the pinna-frame render")
-        return np.asarray(max(r, key=lambda d: float(d["confidence"]))
+        return np.asarray(pick(r, cfg, np.asarray(im).shape[:2])
                           ["landmarks"], float)[:K]
 
     lm2 = landmark_render(img2, 0.0)

@@ -15,6 +15,11 @@ Selection wins by 0.09 points, about 3% relative, on 47 of 70 splits. The oracle
 is far better than either, so most of what a per-landmark angle could buy is not
 reachable by choosing it from four subjects.
 
+THE FIGURES ABOVE PREDATE the detector defaults added in config.py (full frame,
+conf 0.05, centrality-weighted selection), and the cached pickle is NOT keyed on
+them -- delete it before re-running or you will re-read the old configuration's
+data.
+
 AN EARLIER VERSION OF THIS FILE CLAIMED THE OPPOSITE -- that selection was clearly
 worse, on 67 of 70 splits. That was measured through the 180 degree camera roll
 fixed in aab7e38, which rendered every orbited view upside down. On the corrected
@@ -40,6 +45,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+from scipy import stats
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -47,16 +53,14 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import ear3d, skin as sk
 from ear3d.config import DEFAULTS, EAR3D_DIR
-from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarLandmarkerPipeline,
-                        find_best_checkpoint)
+from ear3d.label import pick
+from ear3d.twod import make_pipeline
 # derived from third-party 3D data, so it caches outside the repo
 PKL = Path(tempfile.gettempdir()) / "angle_split_half.pkl"
 YAWS=[-40,-30,-20,-10,0,10,20,30,40]
 HEADS=["pp12","pp11","pp10","pp16","pp19","pp20","pp21","pp22"]
 if not PKL.exists():
-    pipe=EarLandmarkerPipeline(BLAZEEAR_DIR/DETECTOR_WEIGHTS,
-                               find_best_checkpoint("manual_occ_s42"),
-                               device="cuda",smooth=False)
+    pipe,_=make_pipeline(dict(DEFAULTS, device="cuda"), run="manual_occ_s42")
     base=EAR3D_DIR/"3D head meshes"
     P=np.full((len(HEADS),len(YAWS),55,3),np.nan); OK=np.zeros((len(HEADS),len(YAWS),55),bool)
     EXT=np.full(len(HEADS),np.nan)
@@ -79,7 +83,7 @@ if not PKL.exists():
             img,depth,cam=ear3d.render(g,cfg,E=E)
             res=pipe(img,timestamp=0.0)
             if not res: continue
-            b=max(res,key=lambda z:z["confidence"])
+            b=pick(res,cfg,img.shape[:2])
             Q,hit,_=ear3d.backproject_snapped(depth,np.asarray(b["landmarks"],float),cam,cfg)
             P[hi,yi]=Q; OK[hi,yi]=hit & np.isfinite(Q).all(1)
         print(f"{name}: {int(OK[hi].any(1).sum())}/{len(YAWS)} views")

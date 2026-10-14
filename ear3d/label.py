@@ -16,6 +16,52 @@ from .frames import frame_from, in_frame, plane_normal
 from .render import render
 from .scheme import STRIPS, STRIP_NAMES
 
+def pick(res, cfg, img_hw):
+    """Choose WHICH detection to lift when the detector returns several.
+
+    Score alone is the obvious rule and it is not the best one on this path,
+    because these frames are built to hold exactly one ear, centred -- a prior
+    the detector knows nothing about. Measured over the top 10 detections on
+    168 renders with ground-truth boxes:
+
+        rule                                IoU>=0.3  IoU>=0.5  median IoU
+        argmax (score only)                    97.6%     95.8%       0.711
+        most central                           88.1%     78.0%       0.700
+        largest area                           98.8%     96.4%       0.711
+        score / (1 + 4 * dist from centre)    100.0%     97.6%       0.711
+        oracle (best box available)           100.0%     98.2%       0.711
+
+    Centrality ALONE is far worse than score alone: the prior is weak and
+    cannot carry the decision, only break ties. Note median IoU is identical
+    under every rule including the oracle -- the gain is entirely in the tail,
+    rescuing the four frames whose top box is on the cheek. Selection decides
+    which surviving box you get; it cannot make that box better.
+
+    End to end against the wrap, 112 ears x 49 views, this takes views losing
+    at least half their 55 landmarks from 4.66% to 1.24%. It is a WASH once a
+    per-landmark on-ear filter runs, because a frame whose top box is on the
+    cheek yields landmarks whose pixels do not show the ear and those are
+    dropped anyway -- so this earns its place only where no such filter does.
+
+    THREE CAVEATS. The factor 4 was fitted in-sample on those 168 renders. The
+    rule is valid only because this path centres the ear deliberately and must
+    not be carried to photographs. And `bbox` is [ymin, xmin, ymax, xmax] --
+    reading it as xyxy transposes silently and still returns a number.
+    """
+    if not res:
+        return None
+    if cfg.get("select") != "central" or len(res) == 1:
+        return max(res, key=lambda d: float(d["confidence"]))
+    h, w = img_hw
+
+    def key(d):
+        b = np.asarray(d["bbox"], float)
+        cx, cy = (b[1] + b[3]) / 2.0, (b[0] + b[2]) / 2.0
+        return float(d["confidence"]) / (1.0 + 4.0 * np.hypot(cx - w / 2.0,
+                                                              cy - h / 2.0) / w)
+    return max(res, key=key)
+
+
 def landmark_whole_frame(mesh, cfg, pipe):
     """Render the whole head and landmark it with the SHIPPED pipeline.
 
@@ -30,8 +76,8 @@ def landmark_whole_frame(mesh, cfg, pipe):
     res = pipe(img, timestamp=0.0)
     if not res:
         return img, depth, cam, None, 0.0
-    # Several ears can be detected on a head render; take the most confident.
-    best = max(res, key=lambda d: float(d["confidence"]))
+    # Several ears can be detected on a head render; pick() decides which.
+    best = pick(res, cfg, img.shape[:2])
     # NOTE this is the DETECTOR's box confidence, which is what the pipeline
     # returns. It is not the landmarker's per-point confidence and must not be
     # compared against it -- the pipeline does not expose that, because it owns
@@ -162,7 +208,7 @@ def multiview(mesh, cfg, pipe):
             out.append(np.full((55, 3), np.nan))
             ok.append(np.zeros(55, bool))
             continue
-        best = max(res, key=lambda d: float(d["confidence"]))
+        best = pick(res, cfg, img.shape[:2])
         lm = np.asarray(best["landmarks"], float)
         P, hit, _ = backproject_snapped(depth, lm, cam, cfg)
         print(f"  view ({yaw:+.0f},{pitch:+.0f}): det {float(best['confidence']):.2f}, "
@@ -228,7 +274,7 @@ def collect_rays(cfg, mesh, pipe, angles=None, verbose=True):
             if verbose:
                 print(f"  view ({yaw:+.0f},{pitch:+.0f}): no ear detected")
             continue
-        best = max(res, key=lambda d: float(d["confidence"]))
+        best = pick(res, cfg, img.shape[:2])
         uv[i] = np.asarray(best["landmarks"], float)
         if verbose:
             print(f"  view ({yaw:+.0f},{pitch:+.0f}): det "
@@ -292,16 +338,3 @@ def triangulate_landmarks(cfg, mesh, pipe, angles=None, verbose=True):
     uv, cams = collect_rays(cfg, mesh, pipe, angles=angles, verbose=verbose)
     return fit_rays(uv, cams, cfg.get("tri_method", "lsq"),
                     cfg.get("tri_thresh", 0.03))
-
-    ok = np.isfinite(P).all(axis=1)
-    if ok.sum() < 5:
-        return P, n_in, n_view
-    ext = float(np.ptp(P[ok], axis=0).max())
-    thresh = cfg["tri_thresh"] * ext
-    for k, (o, d) in rays.items():
-        q, inl = ransac_point(o, d, thresh, iters=160,
-                              rng=np.random.default_rng(k))
-        if q is not None:
-            P[k] = q
-            n_in[k] = int(inl.sum()) if inl is not None else 0
-    return P, n_in, n_view

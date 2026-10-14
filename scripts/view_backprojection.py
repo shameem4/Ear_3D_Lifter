@@ -265,7 +265,7 @@ def show(mesh, P3, hit, cfg, pipe, size=900, background=(0.5, 0.5, 0.5),
         res = pipe(img, timestamp=0.0)
         lm, conf = None, float("nan")
         if res:
-            best = max(res, key=lambda d: float(d["confidence"]))
+            best = pick(res, cfg, img.shape[:2])
             lm = np.asarray(best["landmarks"], float)
             conf = float(best["confidence"])
         job["uv"].append(lm if lm is not None else np.full((55, 2), np.nan))
@@ -746,13 +746,8 @@ def main():
 
     # --- the shipped pipeline, which owns detection, ROI and landmarking -----
     sys.path.insert(0, str(ROOT / "scripts"))
-    from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarLandmarkerPipeline,
-                            find_best_checkpoint)
-    ck = find_best_checkpoint(cfg["run"])
-    # smooth=False: the tracker is for video. On a single still it would smooth a
-    # one-frame track against wall-clock time and shift the landmarks.
-    pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS, ck,
-                                 device=cfg["device"], smooth=False)
+    from ear3d.twod import make_pipeline
+    pipe, ck = make_pipeline(cfg)
     print(f"landmarker {ck.name}")
 
     mesh, front, up, centre = load_subject(cfg)

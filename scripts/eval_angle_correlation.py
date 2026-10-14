@@ -23,6 +23,11 @@ curve is ASYMMETRIC: -40 is far worse than +40 on the outer helix. That handedne
 has now appeared three times -- here, in the detector failing at -25 but not +25,
 and in the right ear scoring better than the left on every head. Unexplained.
 
+THE TABLE ABOVE PREDATES the detector defaults added in config.py -- full-frame
+detection at conf 0.05 with centrality-weighted selection. Those recover views
+that previously returned nothing at all, so the per-yaw curve is measured over a
+different, larger set of views now. Re-run before quoting it.
+
 A CONFOUND TO READ WITH: 0 is the centre of the sampled range, so it is also the
 view closest to the mean viewpoint, and some of any dip there is sampling geometry
 rather than merit.
@@ -54,16 +59,14 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import ear3d                                                   # noqa: E402
 import skin as sk                                              # noqa: E402
 from ear3d.config import DEFAULTS, EAR3D_DIR                   # noqa: E402
-from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS,         # noqa: E402
-                       EarLandmarkerPipeline, find_best_checkpoint)
+from ear3d.label import pick                                   # noqa: E402
+from ear3d.twod import make_pipeline                            # noqa: E402
 
 # derived from third-party 3D data, so it defaults outside the repo
 PKL = Path(tempfile.gettempdir()) / "angle_correlation.pkl"
 FIG = Path(tempfile.gettempdir()) / "angle_correlation.png"
 
-pipe=EarLandmarkerPipeline(BLAZEEAR_DIR/DETECTOR_WEIGHTS,
-                           find_best_checkpoint("manual_occ_s42"),
-                           device="cuda",smooth=False)
+pipe,_=make_pipeline(dict(DEFAULTS, device="cuda"), run="manual_occ_s42")
 YAWS=[-40,-30,-20,-10,0,10,20,30,40]
 HEADS=["pp12","pp11","pp10","pp16","pp19","pp20"]
 base=EAR3D_DIR/"3D head meshes"
@@ -89,7 +92,7 @@ for hi,name in enumerate(HEADS):
         img,depth,cam=ear3d.render(g,cfg,E=E)
         res=pipe(img,timestamp=0.0)
         if not res: continue
-        b=max(res,key=lambda z:z["confidence"])
+        b=pick(res,cfg,img.shape[:2])
         Q,hit,_=ear3d.backproject_snapped(depth,np.asarray(b["landmarks"],float),cam,cfg)
         P[yi]=Q; ok[yi]=hit & np.isfinite(Q).all(1)
     ext=float(np.ptp(P0[hit0],axis=0).max()) if hit0.any() else 1.0

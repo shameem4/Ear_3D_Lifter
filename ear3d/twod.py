@@ -49,7 +49,33 @@ from inference import (                                           # noqa: E402
     find_best_checkpoint,
 )
 
-__all__ = ["EAR_LANDMARKER", "CHECKPOINTS", "BLAZEEAR_DIR",
+def make_pipeline(cfg, run=None):
+    """The shipped 2D pipeline, configured for RENDERS the way cfg says.
+
+    Eight scripts built this by hand and none of them agreed on the detector
+    settings, which is how the whole path ran at the photograph defaults on
+    renders for as long as it did -- losing 44% of views to a score threshold
+    that was never meant for this framing. The settings and their evidence live
+    in config.py; this is the one place that applies them.
+
+    cfg["detector_full_frame"] is set AFTER construction because
+    EarLandmarkerPipeline does not expose two_stage -- it builds its EarDetector
+    with the default. Reaching in is deliberate and is the caller's choice to
+    make, not a change to the 2D repository, whose thresholds stay fitted for
+    the domain they were fitted on.
+    """
+    ck = find_best_checkpoint(run or cfg["run"])
+    # smooth=False: the tracker is for video. On a single still it would smooth
+    # a one-frame track against wall-clock time and shift the landmarks.
+    pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS, ck,
+                                 device=cfg.get("device", "cuda"), smooth=False,
+                                 detector_confidence=cfg.get("detector_conf"))
+    if cfg.get("detector_full_frame"):
+        pipe.detector.two_stage = False
+    return pipe, ck
+
+
+__all__ = ["make_pipeline", "EAR_LANDMARKER", "CHECKPOINTS", "BLAZEEAR_DIR",
            "DETECTOR_WEIGHTS", "DETECTOR_INPUT_SIZE", "EarDetector",
            "EarLandmarkerPipeline", "LandmarkPredictor",
            "find_best_checkpoint"]

@@ -119,8 +119,7 @@ def main() -> None:
                         "views instead of lifting the face-on render alone")
     args = p.parse_args()
 
-    from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarDetector,
-                            EarLandmarkerPipeline, find_best_checkpoint)
+    from ear3d.twod import BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarDetector, make_pipeline
     cfg = dict(DEFAULTS, run=args.label_run)
     if args.tri_views:
         # Triangulated labels, not a single-view lift. Measured by leave-one-view-
@@ -148,9 +147,7 @@ def main() -> None:
     det = EarDetector(BLAZEEAR_DIR / DETECTOR_WEIGHTS, "cpu", 0.5)
     # smooth=False: the tracker is for video; on a still it would smooth a
     # one-frame track against wall-clock time and shift the landmarks.
-    pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS,
-                                 find_best_checkpoint(args.label_run),
-                                 device="cuda", smooth=False)
+    pipe, _ = make_pipeline(dict(cfg, device="cuda"), run=args.label_run)
 
     heads = sorted(glob.glob(str(HUTUBS / "*.ply"))) + sorted(glob.glob(str(SONICOM / "*.stl")))
     rng = np.random.default_rng(args.seed)

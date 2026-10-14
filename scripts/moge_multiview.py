@@ -45,7 +45,7 @@ from ear3d.backproject import backproject, backproject_snapped    # noqa: E402
 from ear3d.config import DEFAULTS                                 # noqa: E402
 from ear3d.frames import (frame_from, head_pose, in_frame,        # noqa: E402
                           load_head, plane_normal)
-from ear3d.label import landmark_whole_frame                      # noqa: E402
+from ear3d.label import landmark_whole_frame, pick                # noqa: E402
 from ear3d.render import render                                   # noqa: E402
 from ear3d.scheme import STRIPS, STRIP_NAMES                      # noqa: E402
 from scan_depth_check import (corpus_z, flag_scalp,               # noqa: E402
@@ -199,7 +199,7 @@ def frame_one_view(mesh, cfg, pipe, nrm, up, front, C, ear_h, yaw, pitch,
             if not r:
                 ok = False
                 break
-            lm = np.asarray(max(r, key=lambda d: float(d["confidence"]))
+            lm = np.asarray(pick(r, cfg, img.shape[:2])
                             ["landmarks"], float)[:K]
             W = img.shape[1]
             (x0, y0), (x1, y1) = lm.min(0), lm.max(0)
@@ -249,8 +249,7 @@ def main():
     warnings.filterwarnings("ignore")
     import open3d as o3d
     from PIL import Image
-    from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS,
-                           EarLandmarkerPipeline, find_best_checkpoint)
+    from ear3d.twod import make_pipeline
 
     cfg = dict(DEFAULTS, mesh=a.mesh, ear=a.ear, skin=not a.no_skin)
     K = a.n_points
@@ -264,9 +263,7 @@ def main():
         from skin import apply_skin
         apply_skin(mesh, seed=cfg["skin_seed"], tone=cfg["tone"],
                    ao_strength=cfg["ao_strength"], n_rays=cfg["ao_rays"])
-    ck = find_best_checkpoint(cfg["run"])
-    pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS, ck,
-                                 device=cfg["device"], smooth=False)
+    pipe, ck = make_pipeline(cfg)
 
     # the scan's own coordinates, for everything that leaves this script
     src = a.texture_obj or (a.mesh if a.mesh.lower().endswith(".obj") else "")
