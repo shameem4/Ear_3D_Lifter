@@ -316,7 +316,7 @@ def main():
 
     cfg = dict(DEFAULTS)
     from eval_test import best_ckpt
-    from inference import BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarLandmarkerPipeline
+    from ear3d.twod import BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarLandmarkerPipeline
     pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS,
                                  best_ckpt(cfg["run"]), device=cfg["device"],
                                  smooth=False)

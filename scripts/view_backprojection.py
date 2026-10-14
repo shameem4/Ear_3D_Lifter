@@ -667,7 +667,7 @@ def load_subject(cfg):
         print(f"using the {'left' if left else 'right'} ear, from the FaceMesh frame")
         return mesh, front, vert, (tr_l if left else tr_r)
 
-    from inference import BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarDetector
+    from ear3d.twod import BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarDetector
     det = EarDetector(BLAZEEAR_DIR / DETECTOR_WEIGHTS, "cpu", 0.5)
     found = find_ears(mesh, det, cfg)
     if not found:
@@ -747,7 +747,7 @@ def main():
     # --- the shipped pipeline, which owns detection, ROI and landmarking -----
     sys.path.insert(0, str(ROOT / "scripts"))
     from eval_test import best_ckpt
-    from inference import BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarLandmarkerPipeline
+    from ear3d.twod import BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarLandmarkerPipeline
     ck = best_ckpt(cfg["run"])
     if ck is None:
         sys.exit(f"no checkpoint for run {cfg['run']!r} under runs/checkpoints/")

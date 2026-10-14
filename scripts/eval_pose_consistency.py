@@ -78,7 +78,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from render3d_ears import ears, load_ear, project, render, rot, unproject_rays  # noqa: E402
 from eval_test import best_ckpt                                                 # noqa: E402
-from inference import LandmarkPredictor                                         # noqa: E402
+from ear3d.twod import LandmarkPredictor                                         # noqa: E402
 
 SIZE = 600
 TRAIN_OCC = 0.777

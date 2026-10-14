@@ -470,7 +470,7 @@ def main():
     from PIL import Image
     from model.depth_module import EarDepth3DModule
     from eval_test import best_ckpt
-    from inference import (BLAZEEAR_DIR, DETECTOR_WEIGHTS,
+    from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS,
                            EarLandmarkerPipeline)
     from scripts.fit_photo_depth import weak_perspective
 

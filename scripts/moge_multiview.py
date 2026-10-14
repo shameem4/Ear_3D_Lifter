@@ -250,7 +250,7 @@ def main():
     import open3d as o3d
     from PIL import Image
     from eval_test import best_ckpt
-    from inference import (BLAZEEAR_DIR, DETECTOR_WEIGHTS,
+    from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS,
                            EarLandmarkerPipeline)
 
     cfg = dict(DEFAULTS, mesh=a.mesh, ear=a.ear, skin=not a.no_skin)

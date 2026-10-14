@@ -55,7 +55,7 @@ import ear3d                                                   # noqa: E402
 import skin as sk                                              # noqa: E402
 from ear3d.config import DEFAULTS, EAR3D_DIR                   # noqa: E402
 from eval_test import best_ckpt                                # noqa: E402
-from inference import (BLAZEEAR_DIR, DETECTOR_WEIGHTS,         # noqa: E402
+from ear3d.twod import (BLAZEEAR_DIR, DETECTOR_WEIGHTS,         # noqa: E402
                        EarLandmarkerPipeline)
 
 # derived from third-party 3D data, so it defaults outside the repo

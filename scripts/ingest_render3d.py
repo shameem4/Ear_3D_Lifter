@@ -120,7 +120,7 @@ def main() -> None:
                         "views instead of lifting the face-on render alone")
     args = p.parse_args()
 
-    from inference import BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarDetector, EarLandmarkerPipeline
+    from ear3d.twod import BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarDetector, EarLandmarkerPipeline
     cfg = dict(DEFAULTS, run=args.label_run)
     if args.tri_views:
         # Triangulated labels, not a single-view lift. Measured by leave-one-view-

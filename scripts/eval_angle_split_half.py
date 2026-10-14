@@ -47,7 +47,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import ear3d, skin as sk
 from ear3d.config import DEFAULTS, EAR3D_DIR
-from inference import BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarLandmarkerPipeline
+from ear3d.twod import BLAZEEAR_DIR, DETECTOR_WEIGHTS, EarLandmarkerPipeline
 from eval_test import best_ckpt
 # derived from third-party 3D data, so it caches outside the repo
 PKL = Path(tempfile.gettempdir()) / "angle_split_half.pkl"
