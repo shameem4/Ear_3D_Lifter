@@ -227,12 +227,20 @@ def mask_depth(ear_mesh, cfg, E, size):
 
 
 def _unmirror(res, w):
-    """Put detections made on a mirrored image back into the original's pixels."""
-    w1 = w - 1.0
+    """Put detections made on a mirrored image back into the original's pixels.
+
+    w, NOT w - 1. The landmarker decodes a soft-argmax over pixel CENTRES,
+    xs = (i + 0.5) / W, so flipping the heatmap index i -> W-1-i maps the
+    coordinate to exactly 1 - x, and x_px = x * W inverts as W - x_px. The
+    w - 1 convention that pose libraries carry exists because their decoders
+    use i / (W - 1) or a hard argmax, which a flip leaves half a pixel off --
+    MMPose's shift_heatmap is the patch for it. This decoder needs no shift.
+    Measured, the difference is small but real and in this direction.
+    """
     for d in res:
-        d["landmarks"] = [[w1 - x, y] for x, y in d["landmarks"]]
+        d["landmarks"] = [[w - x, y] for x, y in d["landmarks"]]
         b = list(d["bbox"])
-        d["bbox"] = [b[0], w1 - b[3], b[2], w1 - b[1]]      # ymin xmin ymax xmax
+        d["bbox"] = [b[0], w - b[3], b[2], w - b[1]]        # ymin xmin ymax xmax
     return res
 
 
