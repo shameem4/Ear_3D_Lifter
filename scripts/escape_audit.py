@@ -226,7 +226,8 @@ def mask_depth(ear_mesh, cfg, E, size):
     return d
 
 
-def audit_ear(name, cfg, pipe, angles, dataset="hutubs", render_dir=None, radii=None):
+def audit_ear(name, cfg, pipe, angles, dataset="hutubs", render_dir=None, radii=None,
+              mirror=False):
     """One row per (view, landmark). Returns (rows, note)."""
     head, ear, lm = load_ear(name, dataset, cfg)
     R, C, scale = ear_frame(head, lm, cfg)
@@ -241,7 +242,17 @@ def audit_ear(name, cfg, pipe, angles, dataset="hutubs", render_dir=None, radii=
     for yaw, pitch in angles:
         E = orbit_extrinsic(yaw, pitch, cfg)
         img, depth, cam = render(g_head, cfg, E=E)
-        res = pipe(img, timestamp=0.0)
+        # Mirror ONLY what the model sees, and mirror the answer back, so the
+        # depth buffer, the camera and the lift are untouched by this.
+        if mirror:
+            res = pipe(np.ascontiguousarray(img[:, ::-1]), timestamp=0.0)
+            w1 = img.shape[1] - 1.0
+            for d in res:
+                d["landmarks"] = [[w1 - x, y] for x, y in d["landmarks"]]
+                b = list(d["bbox"])
+                d["bbox"] = [b[0], w1 - b[3], b[2], w1 - b[1]]   # ymin xmin ymax xmax
+        else:
+            res = pipe(img, timestamp=0.0)
         if not res:
             rows.append(dict(ear=name, yaw=yaw, pitch=pitch, j=-1, detected=0))
             continue
@@ -459,6 +470,18 @@ def main():
                         "needs no help, and measured on the GT test set "
                         "full-frame beats two-stage 97.6%% to 89.3%%. "
                         "--no-full-frame measures the two-stage path.")
+    p.add_argument("--mirror", choices=["none", "left", "right", "all"],
+                   default="none",
+                   help="show the model a horizontally mirrored image for LEFT "
+                        "ears and mirror the landmarks back. Canonical frame "
+                        "puts left and right ears at opposite on-screen "
+                        "handedness, and the model is measurably worse on the "
+                        "left one: detector confidence 0.631 against 0.837 over "
+                        "40 ears face-on, and escapes past 10 mm 5.73%% against "
+                        "0.09%%. Mirroring the image alone lifts left-ear "
+                        "confidence to 0.762 and leaves right ears unchanged. "
+                        "'right' and 'all' exist to check that the gain is the "
+                        "handedness and not the flip acting as augmentation.")
     p.add_argument("--snap-sweep", nargs="*", type=float, default=None,
                    metavar="FRAC",
                    help="also score these cliff-snap radii, as a fraction of ear "
@@ -501,7 +524,10 @@ def main():
     for i, name in enumerate(ears):
         try:
             got = audit_ear(name, cfg, pipe, angles, render_dir=rdir,
-                            radii=a.snap_sweep)
+                            radii=a.snap_sweep,
+                            mirror=a.mirror == "all" or
+                                   a.mirror == ("left" if name.endswith("_left")
+                                                else "right"))
         except (FileNotFoundError, KeyError, ValueError) as e:
             print(f"[{i + 1}/{len(ears)}] {name}: skipped -- {e}")
             continue
