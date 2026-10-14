@@ -7,32 +7,17 @@ The 55-point ear scheme is annotated on photographs, and a 2D detector
 points reliably. This repository is about the next step: recovering where
 those points sit in space — depth, pose, and a surface that agrees with them.
 
-## What is already settled
+## Prior research
 
-These came out of the work that preceded this repository, and they are
-recorded so they are not repeated. The long form is in
-`RESULTS_inherited.md`.
+A 3D effort preceded this repository. `RESEARCH_BRIEF.md` records what it
+measured — the data and templates that exist, the depth and pose results, the
+wrap pipeline's behaviour, and the claims that were later withdrawn.
+`RESULTS_inherited.md` is the long form, chronological.
 
-**Do not regress depth from an image.** Five learned depth heads were trained
-and every one of them lost to predicting z = 0 on real photographs. Depth
-that works comes from a geometric solve, or from a general-purpose depth model
-(MoGe-2 beat every ear-specific head at the shipped 2D model's pixels).
-
-**The wrap is ground truth.** Faceform Wrap fits the template to a scan to
-0.002 mm. 589 ears across HUTUBS, SONICOM and AudioEar3D are fitted and in one
-frame. That corpus, not a learned prior, is what a lift should be checked
-against.
-
-**Solve pose, never regress it.** The shape head transfers on renders and
-reverses on photographs; a mean ear plus a solved pose beats the learned
-depth head for 0.053 ms of work.
-
-**The template is fixed.** `ear_mean_v4` and the v7 basis, built with a
-size-preserving Procrustes. Landmark j is vertex j (`ear_lmv_v3`). Right ears
-mirror about Z, not X.
-
-**AudioEar3D cannot be a photo-3D benchmark.** A stranger's ear fits one of
-its clouds as well as its own. Costed and closed.
+It is a research record to consult, not a settled plan. The headline is that
+learned depth from an image never transferred to real photographs across five
+attempts, while a geometric solve and a general-purpose depth model did; the
+brief gives the measurements behind that, and what was never established.
 
 ## Layout
 
@@ -41,11 +26,14 @@ its clouds as well as its own. Costed and closed.
     scripts/    wrap and template pipeline, depth experiments, evaluation
     data/       depth dataset and the render-to-photo augmentation
 
-`ear3d/scheme.py` is the 55-point convention, shared with Ear_Landmarker by
-copy. It is constants only; if the convention ever changes it changes in both.
+`ear3d/scheme.py` is the 55-point convention, held by copy in both
+repositories. It is constants only; if the convention changes it changes in
+both.
 
-Five evaluation scripts import the 2D pipeline (`inference.py`) from
-Ear_Landmarker to produce landmarks to lift. Everything else stands alone.
+Eight scripts need to run the 2D model to produce landmarks to lift. They
+reach it through `ear3d/twod.py`, the single coupling point to
+Ear_Landmarker, which resolves that repository as a sibling or from
+`$EAR_LANDMARKER`. Everything else stands alone.
 
 ## Data
 

@@ -67,46 +67,21 @@ engineering it — that is off the table, not a challenge.
 Accepting licence terms, including gated HuggingFace repos, is the user's
 action and never Claude's.
 
-## What is settled — do not re-run these
+## Prior research
 
-`RESULTS_inherited.md` is the long form. The expensive negatives:
+`RESEARCH_BRIEF.md` is the inherited research record: what the previous effort
+measured, with its caveats and its retractions, plus where the corpora,
+templates and bases live. `RESULTS_inherited.md` is the long form.
 
-**Learned depth never transfers.** Five learned depth heads were trained and
-every one lost to predicting z = 0 on real photographs. Only the geometric
-solve works. A general depth model (MoGe-2) at the shipped 2D model's pixels
-beat every ear-specific head we trained.
+Read it as prior work, not as a decision already made for this project. It
+exists so results are not rediscovered by accident, and it is explicit about
+which findings are strong and which were withdrawn. If a direction it reports
+as closed looks worth reopening, the brief gives the evidence to argue with.
 
-**Solve pose, never regress it.** The shape head works on renders and
-reverses on photographs. A mean ear plus a solved pose beats the learned
-depth head, for 0.053 ms.
-
-**Back-projection is unreliable** as 3D ground truth — landmarks land on the
-scalp. **The wrap is ground truth**: Faceform Wrap fits the template to a
-scan to 0.002 mm.
-
-**AudioEar3D cannot be a photo-3D benchmark.** A stranger's ear fits one of
-its clouds as well as its own. Costed, closed.
-
-**Head 4 (one network for landmarks + mesh) loses to both.** Ship separate
-heads. **Implicit surfaces are not needed** — template topology beats them.
-
-**The source shortcut is real but unused by the depth head** — settled over
-six runs, do not re-litigate.
-
-## Current artefacts
-
-- `ear_mean_v4` + the v7 basis — rebuilt with a size-preserving Procrustes.
-  Every v5/v6 PCA file was built with a shrinking one and is a few percent
-  small.
-- `lm3d_v7_canonical_mm.npz` — the re-marked template. 50–54 is superior
-  crus, not lobe.
-- `ear_lmv_v3` — landmark j IS vertex j.
-- `escalated_v1` — the finished 476-ear corpus, 99.6% fold-free.
-- The unified 589-ear corpus (HUTUBS + SONICOM + AudioEar3D) in one frame.
-
-Right ears mirror about **Z**, not X. Basis files are unit-height, not mm,
-despite the old suffix; `UNITS.md` has the measured table. Cut the canal tube
-(54 faces) **after** the fit — it causes most of the folding.
+Two things in it are conventions rather than findings, and breaking them
+silently corrupts stored data: right ears mirror about **Z**, not X, and
+`lm_basis_*` files are unit-height, not millimetres (`UNITS.md` has the
+measured table).
 
 ## Working style
 
