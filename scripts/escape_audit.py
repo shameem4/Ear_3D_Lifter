@@ -226,8 +226,50 @@ def mask_depth(ear_mesh, cfg, E, size):
     return d
 
 
+def _unmirror(res, w):
+    """Put detections made on a mirrored image back into the original's pixels."""
+    w1 = w - 1.0
+    for d in res:
+        d["landmarks"] = [[w1 - x, y] for x, y in d["landmarks"]]
+        b = list(d["bbox"])
+        d["bbox"] = [b[0], w1 - b[3], b[2], w1 - b[1]]      # ymin xmin ymax xmax
+    return res
+
+
+def landmark_view(img, cfg, pipe, mode, hw):
+    """Detect and landmark one render under one test-time-augmentation mode.
+
+    Mirroring only ever touches what the MODEL sees. The depth buffer, the
+    camera and the lift never learn about it, so a gain here cannot come from
+    the geometry changing underneath.
+
+        none  as rendered
+        flip  the mirrored image alone, mirrored back
+        avg   the mean of the two arms, per landmark
+        best  whichever arm's chosen detection scored higher
+
+    'avg' and 'best' cost a second forward pass and no extra render.
+    """
+    a = pick(pipe(img, timestamp=0.0), cfg, hw) if mode != "flip" else None
+    b = None
+    if mode != "none":
+        b = pick(_unmirror(pipe(np.ascontiguousarray(img[:, ::-1]), timestamp=0.0),
+                           img.shape[1]), cfg, hw)
+    if mode == "none":
+        return a
+    if mode == "flip":
+        return b
+    if a is None or b is None:
+        return a or b
+    if mode == "best":
+        return a if float(a["confidence"]) >= float(b["confidence"]) else b
+    ua, ub = np.asarray(a["landmarks"], float), np.asarray(b["landmarks"], float)
+    return dict(a, landmarks=((ua + ub) / 2.0).tolist(),
+                confidence=(float(a["confidence"]) + float(b["confidence"])) / 2.0)
+
+
 def audit_ear(name, cfg, pipe, angles, dataset="hutubs", render_dir=None, radii=None,
-              mirror=False):
+              mirror="none"):
     """One row per (view, landmark). Returns (rows, note)."""
     head, ear, lm = load_ear(name, dataset, cfg)
     R, C, scale = ear_frame(head, lm, cfg)
@@ -242,21 +284,10 @@ def audit_ear(name, cfg, pipe, angles, dataset="hutubs", render_dir=None, radii=
     for yaw, pitch in angles:
         E = orbit_extrinsic(yaw, pitch, cfg)
         img, depth, cam = render(g_head, cfg, E=E)
-        # Mirror ONLY what the model sees, and mirror the answer back, so the
-        # depth buffer, the camera and the lift are untouched by this.
-        if mirror:
-            res = pipe(np.ascontiguousarray(img[:, ::-1]), timestamp=0.0)
-            w1 = img.shape[1] - 1.0
-            for d in res:
-                d["landmarks"] = [[w1 - x, y] for x, y in d["landmarks"]]
-                b = list(d["bbox"])
-                d["bbox"] = [b[0], w1 - b[3], b[2], w1 - b[1]]   # ymin xmin ymax xmax
-        else:
-            res = pipe(img, timestamp=0.0)
-        if not res:
+        best = landmark_view(img, cfg, pipe, mirror, depth.shape)
+        if best is None:
             rows.append(dict(ear=name, yaw=yaw, pitch=pitch, j=-1, detected=0))
             continue
-        best = pick(res, cfg, depth.shape)
         uv = np.asarray(best["landmarks"], float)
         conf = float(best["confidence"])
 
@@ -470,18 +501,17 @@ def main():
                         "needs no help, and measured on the GT test set "
                         "full-frame beats two-stage 97.6%% to 89.3%%. "
                         "--no-full-frame measures the two-stage path.")
-    p.add_argument("--mirror", choices=["none", "left", "right", "all"],
-                   default="none",
-                   help="show the model a horizontally mirrored image for LEFT "
-                        "ears and mirror the landmarks back. Canonical frame "
-                        "puts left and right ears at opposite on-screen "
-                        "handedness, and the model is measurably worse on the "
-                        "left one: detector confidence 0.631 against 0.837 over "
-                        "40 ears face-on, and escapes past 10 mm 5.73%% against "
-                        "0.09%%. Mirroring the image alone lifts left-ear "
-                        "confidence to 0.762 and leaves right ears unchanged. "
-                        "'right' and 'all' exist to check that the gain is the "
-                        "handedness and not the flip acting as augmentation.")
+    p.add_argument("--tta", choices=["none", "flip", "avg", "best"], default="none",
+                   help="test-time augmentation by horizontal mirror. 'flip' "
+                        "replaces the as-rendered pass, 'avg' averages the two "
+                        "per landmark, 'best' keeps whichever scored higher. "
+                        "Canonical frame puts left and right ears at opposite "
+                        "on-screen handedness and the model is worse on the one "
+                        "left ears land in -- detector confidence 0.631 against "
+                        "0.837 -- so a flip is not a neutral augmentation here.")
+    p.add_argument("--tta-side", choices=["both", "left", "right"], default="both",
+                   help="restrict --tta to one side, to separate the handedness "
+                        "gain from the flip acting as plain augmentation.")
     p.add_argument("--snap-sweep", nargs="*", type=float, default=None,
                    metavar="FRAC",
                    help="also score these cliff-snap radii, as a fraction of ear "
@@ -525,9 +555,9 @@ def main():
         try:
             got = audit_ear(name, cfg, pipe, angles, render_dir=rdir,
                             radii=a.snap_sweep,
-                            mirror=a.mirror == "all" or
-                                   a.mirror == ("left" if name.endswith("_left")
-                                                else "right"))
+                            mirror=a.tta if a.tta_side in
+                                   ("both", "left" if name.endswith("_left")
+                                            else "right") else "none")
         except (FileNotFoundError, KeyError, ValueError) as e:
             print(f"[{i + 1}/{len(ears)}] {name}: skipped -- {e}")
             continue
