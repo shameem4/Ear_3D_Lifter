@@ -244,7 +244,7 @@ def audit_ear(name, cfg, pipe, angles, dataset="hutubs", render_dir=None, radii=
         if not res:
             rows.append(dict(ear=name, yaw=yaw, pitch=pitch, j=-1, detected=0))
             continue
-        best = max(res, key=lambda d: float(d["confidence"]))
+        best = pick(res, cfg, depth.shape)
         uv = np.asarray(best["landmarks"], float)
         conf = float(best["confidence"])
 
@@ -288,6 +288,46 @@ def audit_ear(name, cfg, pipe, angles, dataset="hutubs", render_dir=None, radii=
         if render_dir is not None:
             _overlay(render_dir, name, yaw, pitch, img, dm, uv, on_mask, d_snap)
     return rows
+
+
+def pick(res, cfg, hw):
+    """Choose WHICH detection to lift when the detector returns several.
+
+    Score alone is the obvious rule and it is not the best one here, because
+    these frames are built to hold exactly one ear, centred, by construction --
+    a prior the detector knows nothing about. Measured on the 168-render
+    ground-truth set, choosing among the top 10 detections:
+
+        rule                                IoU>=0.3  IoU>=0.5  median IoU
+        argmax (score only)                    97.6%     95.8%       0.711
+        most central                           88.1%     78.0%       0.700
+        largest area                           98.8%     96.4%       0.711
+        score / (1 + 4 * dist from centre)    100.0%     97.6%       0.711
+        oracle (best box available)           100.0%     98.2%       0.711
+
+    Centrality ALONE is much worse than score alone -- the prior is weak and
+    cannot carry the decision by itself. Weighting score by it reaches the
+    oracle at IoU>=0.3. Note the median IoU is identical under every rule: the
+    gain is entirely in the tail, rescuing the handful of frames where the top
+    box is on the cheek, and no rule improves localisation. Selection decides
+    which surviving box you get; it cannot make that box better.
+
+    TWO CAVEATS, both load-bearing. The factor 4 is a first guess fitted on
+    those same 168 renders, so it is provisional. And the rule is only valid
+    because THIS pipeline centres the ear deliberately -- it must not be
+    carried over to photographs, or to any caller that does not.
+
+    bbox is [ymin, xmin, ymax, xmax]; reading it as xyxy silently transposes.
+    """
+    if cfg.get("select") != "central" or len(res) == 1:
+        return max(res, key=lambda d: float(d["confidence"]))
+    h, w = hw
+    def key(d):
+        b = np.asarray(d["bbox"], float)
+        cx, cy = (b[1] + b[3]) / 2.0, (b[0] + b[2]) / 2.0
+        dist = np.hypot(cx - w / 2.0, cy - h / 2.0) / w
+        return float(d["confidence"]) / (1.0 + 4.0 * dist)
+    return max(res, key=key)
 
 
 def on_ear(d_head, d_ear, uv, scale, tol_mm=5.0):
@@ -445,6 +485,11 @@ def main():
                         "construction, so a threshold buys nothing and costs "
                         "recall: on the GT test set, 56.5%% -> 97.6%% at IoU>=0.3 "
                         "with this low and --full-frame on.")
+    p.add_argument("--select", choices=["score", "central"], default="score",
+                   help="which detection to lift when several come back. "
+                        "'central' weights the score by distance from frame "
+                        "centre, which these frames justify and photographs do "
+                        "not -- see pick().")
     p.add_argument("--full-frame", action="store_true",
                    help="run the ear model on the whole frame instead of on "
                         "BlazeFace crops. The face stage exists to make a small "
@@ -460,6 +505,7 @@ def main():
 
     cfg = dict(DEFAULTS)
     cfg["snap"] = not a.no_snap
+    cfg["select"] = a.select
     cfg["interactive"] = False
 
     ears = a.ears
