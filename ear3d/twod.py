@@ -75,17 +75,24 @@ def make_pipeline(cfg, run=None):
     ck = cfg.get("ckpt") or find_best_checkpoint(run or cfg.get("run"))
     # smooth=False: the tracker is for video. On a single still it would smooth
     # a one-frame track against wall-clock time and shift the landmarks.
-    # flip_fusion IS SET EXPLICITLY, NEVER INHERITED. Ear_Landmarker turned it
-    # on by default in their pipeline on 2026-10-14 (FLIP_FUSION_DEFAULT), and
-    # this repo drives fusion itself through escape_audit's --tta, so taking
-    # their default would fuse twice -- the `none` arm of a --tta pair would
-    # silently be a fused arm and every cross-cell comparison would be
-    # meaningless. It would also change under us mid-experiment, which it did:
-    # their commit landed between cells 3 and 4 of a running sun sweep.
-    # cfg["flip_fusion"] can turn it on deliberately.
+    # THE 2D REPO'S DEFAULTS ARE INHERITED, NOT RESTATED. cfg["flip_fusion"]
+    # is None by default and nothing is passed, so the pipeline uses whatever
+    # Ear_Landmarker ships -- currently fusion on, their FLIP_FUSION_DEFAULT.
+    # Behaviour changes belong there, not forked here.
+    #
+    # THE ONE EXCEPTION IS A HARNESS THAT MEASURES FUSION. escape_audit's
+    # --tta drives the mirror itself, so inheriting fusion would fuse twice
+    # and the `none` arm of a --tta pair would silently BE a fused arm. It
+    # passes flip_fusion=False for that reason and says so. A measurement
+    # cannot inherit the default of the thing it is measuring.
+    #
+    # Pinning it matters beyond correctness: their default landed between
+    # cells 3 and 4 of a running sun sweep here, and one subprocess per cell
+    # meant the later cells silently re-imported it.
     kw = {}
-    if "flip_fusion" in signature(EarLandmarkerPipeline.__init__).parameters:
-        kw["flip_fusion"] = bool(cfg.get("flip_fusion", False))
+    if cfg.get("flip_fusion") is not None and \
+            "flip_fusion" in signature(EarLandmarkerPipeline.__init__).parameters:
+        kw["flip_fusion"] = bool(cfg["flip_fusion"])
     pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS, ck,
                                  device=cfg.get("device", "cuda"), smooth=False,
                                  detector_confidence=cfg.get("detector_conf"),

@@ -619,6 +619,11 @@ def main():
                         "on-screen handedness, so a sun stated in the ear frame "
                         "is already in the ANATOMY's frame and means the same "
                         "thing on a left ear as on a right one.")
+    p.add_argument("--inherit-fusion", action="store_true",
+                   help="let the 2D pipeline do its own flip fusion. OFF here "
+                        "because --tta drives the mirror and the two would "
+                        "compound; use it to measure the shipped default "
+                        "end to end, with --tta none.")
     p.add_argument("--ckpt", default=None, metavar="PATH",
                    help="an explicit 2D checkpoint, in place of cfg['run']. "
                         "Use it rather than a run name when the run holds "
@@ -665,6 +670,12 @@ def main():
         cfg["select"] = a.select
     if a.ckpt is not None:
         cfg["ckpt"] = pathlib.Path(a.ckpt)
+    # This harness drives the mirror itself through --tta, so the 2D
+    # pipeline's own fusion is turned OFF here even though the rest of this
+    # repo inherits their defaults. With it on, the `none` arm of a --tta
+    # pair would already be fused and nothing below would mean what it says.
+    # --inherit-fusion measures the shipped behaviour end to end instead.
+    cfg["flip_fusion"] = True if a.inherit_fusion else False
     if a.sun_x is not None:
         d = list(cfg["light_dir"])
         cfg["light_dir"] = (float(a.sun_x), d[1], d[2])
