@@ -101,6 +101,25 @@ DEFAULTS = dict(
     # is worth 5.34% -> 3.24% of landmarks landing more than 10 mm off the ear;
     # render.sun_world() carries the table and the mechanism. The old value was
     # the x-negated one, hard-coded, for every ear.
+    # THE 2D PIPELINE'S OWN TEST-TIME AUGMENTATION. Both are Ear_Landmarker's
+    # to own; None means "take their shipping default" and is the policy.
+    # flip_fusion is left None deliberately -- they default it ON, and at the
+    # new sun their in-pipeline fusion plus the flag below scores 1.290%,
+    # identical to this project's own two-pass frame-level wrapper (p=0.76)
+    # for one extra DETECTOR pass instead of two full pipeline passes. The
+    # wrapper is retired on that.
+    flip_fusion=None,
+    detector_frame_tta=True,  # they ship it OFF; turned on here because the
+                            # detector is presentation-sensitive on renders --
+                            # without the union the chosen box moves a median
+                            # 54 px on the same frame and the same ear
+                            # (scripts/check_detector_symmetry.py). A union
+                            # through NMS is symmetric, so it is in the class
+                            # a single-presentation corpus cannot flatter.
+                            # PROVISIONAL: measured when the gaps were twice
+                            # this size; runs/newsun/nodet tests whether it
+                            # still earns its pass at this sun.
+
     light_dir=(1.2, -0.4, -0.9),   # swept, not guessed: 1.61% past 10 mm
                             # against 3.90% at the old +0.3, better on 39 of
                             # 40 ears, p=2.0e-07. render.sun_world carries the
