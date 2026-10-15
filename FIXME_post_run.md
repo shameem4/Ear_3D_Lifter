@@ -20,7 +20,37 @@ the change, but because `runs/conv/fixed_conv.csv` against
 rate. If it is a regression there, that is a root-repo conversation, not a
 local override.
 
-## 2. Decide where fusion lives — MEASURED, now waiting on them
+## 2. MEASURED AND SETTLED — turn on their flag, retire our wrapper
+
+They declined the full frame-level option, for a reason that does not apply
+to us and that they wrote down as such: the extra pass only lets the ROI
+loop see the mirror, and refinement fires on 0% of their photographs against
+81% of our render views. Their README says consumers whose ROI loop does
+fire should keep a frame-level wrapper, so ours would be a sanctioned
+divergence rather than a fork.
+
+But their shipped `detector_frame_tta` closes most of the practical gap:
+
+    configuration                            escape   off-head
+    shipped 292 + our frame fusion           2.719%     0.717%
+    fixed_conv + our frame fusion            2.896%     0.590%
+    fixed_conv + their fusion                3.303%     0.609%
+    fixed_conv + their fusion + detTTA       3.049%     0.597%
+
+    detector flag recovers 0.254pp of 0.584pp = 43%, p=1.3e-03, 66/112 ears
+    remaining gap to our wrapper: +0.331pp, p=0.058
+
+**The residual is no longer significant**, and their flag is one extra
+detector pass where our wrapper is two full pipeline passes — cheaper and
+statistically indistinguishable. Under the use-their-defaults policy that
+settles it: enable `detector_frame_tta`, drop the wrapper, and the residual
+0.33pp is the ROI route they declined, which is exactly what their reasoning
+predicts should remain.
+
+Recommended, not yet done: it changes every label this repo generates, so it
+is the user's call.
+
+Original note follows.
 
 Adopting their defaults end to end costs **+0.584pp** on the escape rate, and
 the split says it is not the model: implementation +0.407pp p=1.6e-08,
