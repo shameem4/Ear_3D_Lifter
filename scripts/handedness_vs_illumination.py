@@ -8,77 +8,96 @@ them, and cuts the table.
                    EAR'S OWN anatomy rather than to the canonical frame, so
                    both sides get the same treatment in every cell
     handedness     --tta pair, which returns the as-rendered arm, the mirrored
-                   arm and their coordinate fusion from ONE pair of forward
-                   passes on the same render
+                   arm and their COORDINATE fusion from ONE pair of forward
+                   passes on the same render. Coordinate, not heatmap: for a
+                   soft-argmax decoder averaging the probability maps is
+                   algebraically the same operation (77f821c), so the `avg`
+                   row below is the only fusion there is to measure
     side           recorded per row, so it is a stratum rather than a factor
                    that has to be read out of an interaction
 
-MEASURED, 40 HUTUBS ears x 25 views x 55 points per cell, rate past 10 mm:
+TWO INSTRUMENT BUGS WERE FOUND ON 2026-10-14 AND EVERY NUMBER BELOW MOVED.
+Read this section before quoting anything from this file.
 
-    light      arm        all     left    right
-    anatomy    none      3.24%   3.76%   2.72%
-    anatomy    flip      2.05%   2.32%   1.77%
-    anatomy    fused     2.30%   2.56%   2.05%
-    opposite   none      5.68%   7.97%   3.39%
-    opposite   flip      3.00%   3.68%   2.33%
-    opposite   fused     3.37%   4.33%   2.42%
+    THE GATE. `np.mean(d > gate)` is False for NaN, and d_snap_mm is NaN when
+    the predicted pixel is background -- the landmark missed the head entirely.
+    The worst outcome the 2D model can produce was scoring as a SUCCESS. The
+    arms do not miss equally (flip 0.744%, fusion 0.493%, none 0.422%), so this
+    was not a wash: it manufactured the fusion result. Fixed -- see rate().
+
+    THE WINDING. canon2scan's `inverse` has det < 0 for every right ear, and
+    load_ear applied it without reversing the triangle winding, so every
+    right-ear render was shaded with normals pointing INTO the head (+0.720
+    outward on pp1_left, -0.720 on pp1_right). Fixed in escape_audit.load_ear.
+    The depth buffer never used normals, so distances are sound -- but EVERY
+    LEFT-AGAINST-RIGHT NUMBER BELOW WAS MEASURED ON THOSE RENDERS and is
+    confounded. A re-wound run is what settles the side rows.
+
+MEASURED POST-GATE-FIX, PRE-WINDING-FIX. 112 HUTUBS ears (56 subjects) x 25
+views x 55 points, anatomy cell, rate past 10 mm with a miss counted:
+
+    arm      all     left    right   off head
+    none    3.35%   3.80%   2.89%    0.492%
+    flip    2.68%   3.05%   2.32%    0.701%
+    avg     2.65%   2.92%   2.38%    0.503%
 
 WHAT IT SETTLES.
 
-1. Illumination and handedness are BOTH real and INDEPENDENT. Lighting alone is
-   1.75x (3.24 against 5.68). The mirror alone, with lighting already correct,
-   is 1.58x (2.05 against 3.24, better on 37 of 40 ears, Wilcoxon p=3.6e-07).
-   Together 2.8x. Correcting the sun does not shrink the handedness gap, which
-   is what you expect of a property of the 2D model rather than of the render.
+1. ILLUMINATION AND HANDEDNESS ARE BOTH REAL AND INDEPENDENT, but smaller than
+   first reported. On the 40-ear 2x2 with the gate fixed: illumination alone
+   1.68x (was 1.75x), the mirror alone 1.31x (was 1.58x), together 2.21x (was
+   2.78x). At 112 ears the mirror is 1.25x, better on 84 of 112, p=9.8e-10.
+   Correcting the sun does not shrink the mirror's gain.
 
-2. REPLACEMENT STILL BEATS FUSION under corrected lighting: 2.05% against
-   2.30%, replacement better on 33 of 40 ears, p=4.1e-04. Ear_Landmarker
-   predicted the opposite, on the account that fusion loses only where one arm
-   is systematically much better. That account is NOT refuted here -- its
-   premise is. The sibling session's light2x2, a different sun parameterisation
-   on a different process, agrees in both of its cells: sun +0.3 flip 2.32%
-   against avg 2.49% (24/40 ears, p=0.019), sun -0.3 flip 2.72% against avg
-   3.19% (27/40, p=1.7e-04). Four cells, two sun parameterisations, two
-   processes, replacement in every one -- though the same checkout, checkpoint
-   and wrap reference throughout, so this is a replicate of the MEASUREMENT and
-   not of the pipeline. Fixing the sun did not move the arms closer together,
-   because the thing separating them is the handedness bias and lighting does
-   not touch it. The middling-disagreement regime that would test the account
-   is still unvisited. Fusion does beat doing nothing (2.30 against 3.24,
-   39 of 40).
+2. REPLACEMENT AND COORDINATE FUSION ARE TIED under corrected lighting: 2.68%
+   against 2.65%, fusion better on 48 of 112, p=0.89. The earlier claim that
+   replacement wins, on 33 of 40 ears at p=4.1e-04, was the gate bug -- it
+   forgave the flip arm's extra off-head misses. Re-cut across four cells with
+   misses counted, replacement wins clearly only in the WORST-lit cell
+   (sun -0.3, p=0.007), weakly in the next (opposite, p=0.045), and the two
+   best-lit cells are dead heats. That is a gradient in the direction of
+   Ear_Landmarker's magnitude account, which I had reported as refuted.
 
-3. A SIDE RESIDUAL APPEARS IN EVERY CELL BUT IS MARGINAL. At the best
-   lighting and with the mirror, left 2.32% against right 1.77%. Paired within
-   subject, which is the right unit because the two ears of one head share a
-   scan and a subject, it does not reach significance on these 20 subjects:
+   Coordinate fusion, not heatmap: for a soft-argmax decoder, averaging the
+   probability maps is algebraically the same operation (77f821c).
 
-       anatomy/none   +1.04pp   13/20 subjects   p=0.084
-       anatomy/flip   +0.55pp   14/20 subjects   p=0.053
-       anatomy/avg    +0.51pp   14/20 subjects   p=0.083
+3. THE SIDE GAP IS SIGNIFICANT AND CONFOUNDED. Paired within subject over 56
+   subjects, left minus right: none +0.91pp (38/56, p=0.004), flip +0.73pp
+   (41/56, p=0.000), avg +0.54pp (37/56, p=0.011). The 40-ear version read
+   p=0.05-0.08 and I downgraded it on that; counting the off-head misses turns
+   it significant, because that is exactly where the asymmetry lives (left
+   0.662% against right 0.182% in the none arm). But the right ears in this
+   table were rendered inside out, so this does not yet say whether the 2D
+   model prefers a side or my renderer does.
 
-   Consistently signed and consistently 13-14 of 20, so it is suggestive and
-   nothing more. Five mechanisms are excluded: lighting (each side is at its
-   own optimum), presented handedness (identical across sides -- canal-x minus
-   rim-centroid-x is -125.0 px left against -124.9 right), geometric chirality
-   and frame orientation (the sibling session: signed tetra volumes agree in
-   sign, mean ear frames agree to 0.006), and the ground truth itself.
+   Four mechanisms were excluded on the old renders and those exclusions are
+   now suspect too: lighting, presented handedness (ear_frame puts EVERY ear in
+   left form, so presentation is constant by construction), chirality and frame
+   orientation. One exclusion survives untouched, because it never involved a
+   render: the wrap fits themselves are equally good on both sides, over all
+   112 ears paired within subject (fit->scan median 29/56 p=0.97, p95 27/56
+   p=0.49, scan->fit median 30/56 p=0.81, p95 29/56 p=0.71). Its 40-ear subset
+   read right-better by 11-14% at p~0.2 -- right direction, right size -- and
+   at full power the direction REVERSES and the effect vanishes.
 
-   THE GROUND-TRUTH TEST IS A CLEAN NULL, and worth the detail because its
-   40-ear subset was not. Fit-to-scan and scan-to-fit distance over all 112
-   HUTUBS ears, paired within subject: fit->scan median L 0.4909 / R 0.5059
-   (29/56, p=0.97), p95 (27/56, p=0.49), scan->fit median (30/56, p=0.81), p95
-   (29/56, p=0.71). On the same 40 ears as this table it read right-better by
-   11-14% at p~0.2, which looked like the right direction and the right size;
-   at full power the direction reverses and the effect vanishes. The sixth
-   possibility is that there is nothing to explain.
+4. THE MIRROR'S GAIN IS A PRESENTATION EFFECT. Because ear_frame presents every
+   ear in left form, the mirror presents it in right form. The gain is then the
+   same multiplier on both sides and the side gap passes through it unchanged:
+   left 3.800 -> 3.047 and right 2.892 -> 2.319, both 1.247x. Per-ear medians
+   1.204x and 1.285x, Mann-Whitney p=0.27, so read this as "no detectable side
+   difference in the multiplier". Ear_Landmarker measures a right-favoured bias
+   on photographs across nine models, three architectures and both
+   initialisations; this is the same sign in a setup where presentation is
+   controlled rather than stratified. Caveat: mirroring the image mirrors the
+   shading too, and lighting is worth 1.68x, so this does not separate
+   presentation from "the sun now comes from the other side".
 
-ONE-SIDED, NOT ANTISYMMETRIC. c243e8f described the lighting effect as a clean
-swap, from two ears at one view. Over 40 ears at 25 views it is not: the
-per-ear preference for the sun's sign is +4.20 points on left ears (19 of 20
-positive) and -0.67 on right ears (8 of 20), Mann-Whitney p=3.4e-07. The side
-structure is real and highly significant, but left ears care a great deal and
-right ears barely care, which "the sun lights the two sides from opposite
-directions" does not predict.
+ONE-SIDED, NOT ANTISYMMETRIC -- AND NOW SUSPECT. c243e8f described the lighting
+effect as a clean swap, from two ears at one view. Over 40 ears at 25 views the
+per-ear preference for the sun's sign was +4.20 points on left ears (19 of 20)
+and -0.67 on right (8 of 20), Mann-Whitney p=3.4e-07. That is a left-against-
+right comparison on inside-out right-ear renders, so it is pending the re-wound
+run like the rest of section 3.
 
 Usage:
     python scripts/handedness_vs_illumination.py                  # run + table
@@ -126,6 +145,31 @@ def load(path):
     return d
 
 
+def rate(d, gate):
+    """Fraction of landmarks past the gate, COUNTING the ones that missed.
+
+    d_snap_mm is nan when the predicted pixel is background: the ray hit
+    nothing, so there is no 3D point and no distance to the ear. That is the
+    worst thing the 2D model can do, not a missing observation, and at any
+    gate "not within `gate` mm of the ear" is true of it. So it counts.
+
+    `~(d <= gate)` counts it; `d > gate` is False for nan and scores it as a
+    SUCCESS, which is what this script did until f65c713 and what changed the
+    fusion result -- see the docstring. Everything else in the repository drops
+    these rows instead (`escape_audit.summarise`, `escape_report`), which is
+    defensible for a single arm but not for comparing two, because the arms do
+    not miss equally: over the anatomy cell flip misses 0.744% of the time
+    against fusion's 0.493%, so dropping hands the flip arm 138 extra free
+    passes.
+    """
+    return np.mean(~(np.asarray(d, float) <= gate))
+
+
+def off_head(d):
+    """Fraction whose pixel was background, so the lift had nothing to hit."""
+    return np.mean(~np.isfinite(np.asarray(d, float)))
+
+
 def side_test(D, k, gate, lights, arms):
     """The side residual, paired WITHIN SUBJECT.
 
@@ -134,7 +178,7 @@ def side_test(D, k, gate, lights, arms):
     unpaired over ears this reads as a much stronger effect than it is.
     """
     from scipy import stats
-    rate = collections.defaultdict(dict)
+    per = collections.defaultdict(dict)
     for l in lights:
         for arm in arms:
             t = collections.defaultdict(list)
@@ -142,11 +186,11 @@ def side_test(D, k, gate, lights, arms):
                 if x[4] == arm:
                     t[x[0]].append(D[l][x])
             for e, v in t.items():
-                rate[(l, arm)][e] = 100 * np.mean(np.array(v) > gate)
+                per[(l, arm)][e] = 100 * rate(v, gate)
     print("\nside residual, left minus right, paired within subject:")
     for l in lights:
         for arm in arms:
-            r = rate[(l, arm)]
+            r = per[(l, arm)]
             subj = sorted({e.rsplit("_", 1)[0] for e in r})
             pairs = [(r[f"{p}_left"], r[f"{p}_right"]) for p in subj
                      if f"{p}_left" in r and f"{p}_right" in r]
@@ -166,7 +210,8 @@ def table(out_dir, gate=10.0):
     side = lambda x: "left" if x[0].endswith("_left") else "right"
     print(f"\n{len(k) // len(ARMS)} paired landmark-views per arm, "
           f"escape past {gate:.0f} mm\n")
-    print(f"{'light':10s} {'arm':6s} {'all':>8s} {'left':>8s} {'right':>8s}")
+    print(f"{'light':10s} {'arm':6s} {'all':>8s} {'left':>8s} {'right':>8s}"
+          f" {'off head':>9s}")
     cell = {}
     for l in lights:
         for arm in ARMS:
@@ -176,21 +221,22 @@ def table(out_dir, gate=10.0):
                  for w in ("all", "left", "right")}
             cell[(l, arm)] = v
             print(f"{l:10s} {arm:6s} " +
-                  " ".join(f"{100 * np.mean(v[w] > gate):7.2f}%"
-                           for w in ("all", "left", "right")))
+                  " ".join(f"{100 * rate(v[w], gate):7.2f}%"
+                           for w in ("all", "left", "right")) +
+                  f" {100 * off_head(v['all']):8.3f}%")
         print()
 
     a = cell[("anatomy", "none")]["all"]
     f, u = cell[("anatomy", "flip")]["all"], cell[("anatomy", "avg")]["all"]
     if "opposite" in lights:
         o = cell[("opposite", "none")]["all"]
-        print(f"illumination alone   {np.mean(o > gate) / np.mean(a > gate):.2f}x")
-    print(f"handedness alone     {np.mean(a > gate) / np.mean(f > gate):.2f}x  "
+        print(f"illumination alone   {rate(o, gate) / rate(a, gate):.2f}x")
+    print(f"handedness alone     {rate(a, gate) / rate(f, gate):.2f}x  "
           f"(mirror, with the sun already correct)")
     if "opposite" in lights:
-        print(f"both                 {np.mean(o > gate) / np.mean(f > gate):.2f}x")
-    print(f"fusion vs replacement under corrected lighting: "
-          f"{100 * np.mean(u > gate):.2f}% against {100 * np.mean(f > gate):.2f}%")
+        print(f"both                 {rate(o, gate) / rate(f, gate):.2f}x")
+    print(f"coordinate fusion vs replacement under corrected lighting: "
+          f"{100 * rate(u, gate):.2f}% against {100 * rate(f, gate):.2f}%")
 
     side_test(D, k, gate, lights, ARMS)
 
@@ -203,7 +249,7 @@ def table(out_dir, gate=10.0):
                 if x[4] == arm:
                     t[x[0]].append(D[l][x])
             for e, v in t.items():
-                pe[e][(l, arm)] = 100 * np.mean(np.array(v) > gate)
+                pe[e][(l, arm)] = 100 * rate(v, gate)
     ears = sorted(pe)
     print(f"\nper-ear, paired over the {len(ears)} ears:")
     for p, q in ((("anatomy", "none"), ("anatomy", "flip")),

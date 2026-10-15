@@ -158,6 +158,22 @@ def load_ear(name, dataset="hutubs", cfg=None):
     V = np.asarray(head.vertices) * HUTUBS_TO_MM
     V = (np.c_[V, np.ones(len(V))] @ z["inverse"].T)[:, :3]
     head.vertices = o3d.utility.Vector3dVector(V)
+
+    # A REFLECTION NEEDS THE WINDING REVERSED. canon2scan's `inverse` has
+    # det < 0 for every right ear -- that is how is_reflected() tells them
+    # apart -- so applying it mirrors the vertices and leaves every triangle
+    # wound the wrong way round. compute_vertex_normals() then reads that
+    # winding and hands the renderer normals pointing INTO the head: measured
+    # against the direction away from the mesh centroid, +0.72 on a left ear
+    # and -0.72 on the right ear of the same subject, 93% of vertices against
+    # 7%. The depth buffer does not care, so the lift was never affected, but
+    # the IMAGE is shaded from the inside out and every right-ear render in
+    # this project before this line was darker and flatter than the left one
+    # beside it. Any left-against-right comparison made on those renders was
+    # measuring this.
+    if np.linalg.det(z["inverse"][:3, :3]) < 0:
+        head.triangles = o3d.utility.Vector3iVector(
+            np.asarray(head.triangles)[:, ::-1].copy())
     head.compute_vertex_normals()
 
     lm = np.load(WRAP / "templates/lm3d_v7_canonical_mm.npz", allow_pickle=True)
