@@ -69,7 +69,33 @@ WHAT IT SETTLES.
    QUALIFIER IS LOAD-BEARING: 2.72% against 2.95%, fusion better on 69 of 112
    ears, p<0.001. This reverses what this file said twice.
 
-   EXPECT IT TO SHRINK OR REVERSE ON A FIXED CHECKPOINT. Ear_Landmarker ran
+   MEASURED ON A FIXED CHECKPOINT, AND IT HOLDS. Ear_Landmarker's matched
+   A/B scored on this metric -- 112 ears x 25 views, corrected renderer, same
+   seed, same 60 epochs, LEGACY_SUBPIXEL_SHIFT the only difference:
+
+       arm        none     flip      avg     fusion vs replacement
+       legacy   2.974%   3.188%   2.632%   +0.555pp  96/112  p=2.0e-13
+       fixed    3.249%   2.870%   2.753%   +0.118pp  73/112  p=3.5e-03
+
+   Fusion's margin over REPLACEMENT collapses 79%, which is their prediction
+   and their mechanism: removing the anti-equivariant offset is most of what
+   fusion was doing against an arm that merely picks a side. But fusion's
+   gain over DOING NOTHING GROWS, +0.342pp to +0.497pp (73/112, p=1.7e-08,
+   paired p=0.009), and `avg` is the best arm on both checkpoints and on the
+   292-epoch shipping model too. So the second branch of their pre-registered
+   prediction fired: this project's gross-error mechanism is NOT their
+   augmentation offset, and their mean-based result does not govern this
+   gate.
+
+   The fix also moves the arms in opposite directions here, which is what an
+   ANTI-equivariant offset should do once every ear is presented in left
+   form: as-is gets worse (2.974 -> 3.249, p=3.2e-04) and flipped gets better
+   (3.188 -> 2.870, p=3.8e-04), while fusion is unchanged (p=0.078).
+
+   The older note said to expect a shrink or reversal on a fixed checkpoint.
+   The margin over replacement did shrink; the case for fusion did not.
+
+   HISTORICAL: the expectation this replaced. Ear_Landmarker ran
    the deciding test after this was measured: on their matched A/B, fusion is
    worth 2.32% on the legacy model and 0.68% on the fixed one, because most
    of what looked like ensembling was offset-cancellation -- replacement
