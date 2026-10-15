@@ -65,8 +65,21 @@ WHAT IT SETTLES.
    at p~0.2, and at full power the direction REVERSES and the effect
    vanishes, which is the best cautionary example this project has produced.
 
-2. COORDINATE FUSION BEATS REPLACEMENT: 2.72% against 2.95%, fusion better on
-   69 of 112 ears, p<0.001. This reverses what this file said twice. The
+2. COORDINATE FUSION BEATS REPLACEMENT ON THE SHIPPED CHECKPOINT, AND THAT
+   QUALIFIER IS LOAD-BEARING: 2.72% against 2.95%, fusion better on 69 of 112
+   ears, p<0.001. This reverses what this file said twice.
+
+   EXPECT IT TO SHRINK OR REVERSE ON A FIXED CHECKPOINT. Ear_Landmarker ran
+   the deciding test after this was measured: on their matched A/B, fusion is
+   worth 2.32% on the legacy model and 0.68% on the fixed one, because most
+   of what looked like ensembling was offset-cancellation -- replacement
+   picks an arm and that arm still carries the offset, only fusion averages
+   +d against -d. Worse for this project, their DEEP TAIL reverses on the
+   fixed model: gross errors past 0.2 go 0.514% as-is against 0.622% fused.
+   The escape rate here IS a deep-tail metric, so the regime where their
+   fusion stops paying is exactly the one this file measures. Do not make
+   --tta avg a default until it has been re-measured against a fixed
+   checkpoint; EarLandmarker_292_nme=0.0149.ckpt is a legacy one. The
    earlier "replacement wins on 33 of 40 ears at p=4.1e-04" was the gate bug
    forgiving the flip arm's extra off-head misses (1.068% against 0.660%),
    and Ear_Landmarker predicted the reversal from a mechanism: their model
