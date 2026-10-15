@@ -265,13 +265,21 @@ def compare(before, after, gate=10.0):
                   f"{p:9.4f}")
         print()
 
+    # The control only means something when the two runs share a checkpoint
+    # and differ in the RENDERER, which is what it was written for. Comparing
+    # two models changes both sides legitimately, and saying "something other
+    # than the winding moved" there is a false alarm.
     ident = all(abs(per(A, arm, e) - per(B, arm, e)) < 1e-9
                 for arm in arms for e in ears if L(e))
-    print("CONTROL: left-ear rates are "
-          + ("IDENTICAL between the runs, as they must be.\n"
-             if ident else
-             "NOT identical -- something other than the winding moved, and the\n"
-             "         right-ear change below cannot be attributed to the fix.\n"))
+    if ident:
+        print("CONTROL: left-ear rates are IDENTICAL between the runs. The two "
+              "differ\n         only in something that touches reflected "
+              "geometry.\n")
+    else:
+        print("CONTROL: left-ear rates DIFFER. Expected if the two runs use "
+              "different\n         checkpoints or settings; a problem only if "
+              "they were meant to differ\n         in the winding alone, in "
+              "which case nothing below is attributable.\n")
 
     print("side gap, left minus right, paired within subject:")
     for lab, D in (("before", A), ("after", B)):
