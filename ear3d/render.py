@@ -41,10 +41,14 @@ def sun_world(cfg, E):
         +0.3   3.58%   3.76%   3.39%
         per ear side                3.24%  (left 3.76, right 2.72)
 
-    and per ear it is a clean swap -- pp11_left 12.73% -> 0.00% while
-    pp10_right goes 0.00% -> 12.73%. Right ears reach the canonical frame
-    through a reflection, so a world-fixed sun lights the two sides' anatomy
-    from opposite directions and one of them always loses.
+    IT IS NOT A CLEAN SWAP, though an earlier version of this said so on the
+    strength of two ears at one view (pp11_left 12.73% -> 0.00% against
+    pp10_right 0.00% -> 12.73%). Over 40 ears at 25 views the per-ear preference
+    for the sun's sign is +4.20 points on LEFT ears, 19 of 20 positive, and
+    -0.67 on right ears, 8 of 20 -- Mann-Whitney p=3.4e-07. So the side
+    structure is real and strong, but left ears care a great deal and right ears
+    hardly care at all, which "the sun lights the two sides from opposite
+    directions" does not predict. The asymmetry of the effect is unexplained.
 
     What it costs, seen: under the unfavourable sun the helix rim is front-lit
     and runs continuously into the scalp behind it -- no boundary for the 2D
