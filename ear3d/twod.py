@@ -49,6 +49,9 @@ from inference import (                                           # noqa: E402
     find_best_checkpoint,
 )
 
+from inspect import signature  # noqa: E402
+
+
 def make_pipeline(cfg, run=None):
     """The shipped 2D pipeline, configured for RENDERS the way cfg says.
 
@@ -72,9 +75,21 @@ def make_pipeline(cfg, run=None):
     ck = cfg.get("ckpt") or find_best_checkpoint(run or cfg.get("run"))
     # smooth=False: the tracker is for video. On a single still it would smooth
     # a one-frame track against wall-clock time and shift the landmarks.
+    # flip_fusion IS SET EXPLICITLY, NEVER INHERITED. Ear_Landmarker turned it
+    # on by default in their pipeline on 2026-10-14 (FLIP_FUSION_DEFAULT), and
+    # this repo drives fusion itself through escape_audit's --tta, so taking
+    # their default would fuse twice -- the `none` arm of a --tta pair would
+    # silently be a fused arm and every cross-cell comparison would be
+    # meaningless. It would also change under us mid-experiment, which it did:
+    # their commit landed between cells 3 and 4 of a running sun sweep.
+    # cfg["flip_fusion"] can turn it on deliberately.
+    kw = {}
+    if "flip_fusion" in signature(EarLandmarkerPipeline.__init__).parameters:
+        kw["flip_fusion"] = bool(cfg.get("flip_fusion", False))
     pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS, ck,
                                  device=cfg.get("device", "cuda"), smooth=False,
-                                 detector_confidence=cfg.get("detector_conf"))
+                                 detector_confidence=cfg.get("detector_conf"),
+                                 **kw)
     if cfg.get("detector_full_frame"):
         pipe.detector.two_stage = False
     return pipe, ck
