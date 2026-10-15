@@ -82,14 +82,49 @@ part of the pinned-box number was this pipeline and not the model. It does
 not get there: a constant vector still explains only 17.4% against their
 94.9% affine on photographs.
 
+--self-crop IS STILL NOT THE MODEL ALONE. square_roi_crop runs inside the
+pipeline regardless, re-cropping at 1.6x with int(round(cx - side/2)); for an
+odd window that sits half a pixel off centre, so the mirrored arm's input is
+the mirror SHIFTED BY A PIXEL. --raw-predict calls LandmarkPredictor.predict
+directly and removes the last of it. 6 ears, 18 views, no crop code at all:
+
+    ear           n      dx px    dy px      dx/n       dy/n
+    pp10_left    609    +3.943   -0.157   +0.00647   -0.00026
+    pp10_right   839    +4.336   -7.914   +0.00517   -0.00943
+    pp11_left    820    +1.171   -7.687   +0.00143   -0.00937
+    pp11_right   638    +2.818   -1.826   +0.00442   -0.00286
+    pp12_left    642    -0.332   -1.072   -0.00052   -0.00167
+    pp12_right   648    +0.903   -2.837   +0.00139   -0.00438
+    overall      dx +0.00306 widths    dy -0.00466 widths
+
+dx goes UP when the crop code is removed (+0.00131 through square_roi_crop,
++0.00306 without it), so some of the chain's asymmetry was cancelling some of
+the model's. Two wrongs, partly.
+
+THE RESIZE IS NOT THE CULPRIT EITHER. F.interpolate(bilinear,
+align_corners=False) maps dst to (dst+0.5)*scale - 0.5, which is
+mirror-symmetric at any input size. Max |flip(resize) - resize(flip)| over
+random crops at n = 187, 192, 193, 256, 383, 384, 609, 610, 839 is 1e-7 to
+6e-5 with no parity structure, so a mirrored odd-width crop resizes to the
+mirror of the resize.
+
 THE y COMPONENT IS THE PART NO CONVENTION EXPLAINS. Under --self-crop the two
 inputs are exact mirrors and the un-mirror touches x only, so the model's y
 output should be identical between the arms. It is not: dy is -0.0078 crop
-widths, around 1% of the crop and comparable to dx. A half-pixel in an x
-labelling convention cannot produce it, and neither can anything in the crop
-arithmetic, because the crop is shared. Whatever else is true, this model's
-response to a mirrored input differs in a direction the mirror does not act
-in.
+widths, around 1% of the crop and comparable to dx, and -0.00466 with no
+crop code at all. A half-pixel in an x labelling convention cannot produce
+it, the crop arithmetic cannot, and neither can the resize. dy is also immune
+to the un-mirror convention by construction, since only x is transformed.
+This model's response to a mirrored input differs in a direction the mirror
+does not act in.
+
+IT IS A DOMAIN EFFECT, not a contradiction of Ear_Landmarker. Their dy_anti
+on photographs is -0.000234 and sign-inconsistent across subsets, about 20x
+smaller on the SAME checkpoint. Normalisation does not explain it in the
+direction needed: this crop is 1.6x the ear box, so a tighter crop would make
+their figure larger, not smaller. [[head1-is-render-domain]] already has this
+pipeline 5x worse on renders than on photographs, and out of domain is
+exactly where a network's incidental asymmetries stop being suppressed.
 
 WHAT THE LIGHTING CONTROL SETTLED. Under the anatomy sun the two sides had
 OPPOSITE-signed offsets, which read as chirality; symmetric lighting removes
@@ -126,6 +161,10 @@ def main():
     p.add_argument("--out", default=None, metavar="CSV",
                    help="per-point displacements, so the field can be re-cut "
                         "without re-rendering")
+    p.add_argument("--raw-predict", action=argparse.BooleanOptionalAction,
+                   default=False,
+                   help="with --self-crop, call LandmarkPredictor.predict "
+                        "directly so no crop code runs at all")
     p.add_argument("--self-crop", action=argparse.BooleanOptionalAction, default=False,
                    help="cut and mirror an integer square window here, with the "
                         "detector pinned to it and ROI refinement off, so the "
@@ -212,6 +251,20 @@ def main():
                 crop = np.ascontiguousarray(P[py + pad:py + pad + nn,
                                               px + pad:px + pad + nn])
                 if crop.shape[0] != nn or crop.shape[1] != nn:
+                    continue
+                if a.raw_predict:
+                    # THE LANDMARKER ALONE. square_roi_crop runs even in
+                    # --self-crop mode -- the pipeline re-crops at 1.6x with
+                    # int(round(cx - side/2)), and for an odd window that
+                    # window sits half a pixel off centre, so the mirrored
+                    # arm's input is the mirror SHIFTED BY A PIXEL. Calling
+                    # the predictor directly removes the last of it: the model
+                    # sees exactly this crop and exactly its mirror.
+                    la = np.asarray(pipe.landmarker.predict(crop), float)
+                    lb = np.asarray(pipe.landmarker.predict(
+                        np.ascontiguousarray(crop[:, ::-1])), float).copy()
+                    lb[:, 0] = nn - lb[:, 0]
+                    rows.append((la, lb, float(nn), name))
                     continue
                 box = np.array([[0.0, 0.0, float(nn), float(nn), 1.0]], float)
                 keep = pipe.refine_roi
