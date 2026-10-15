@@ -64,7 +64,12 @@ def make_pipeline(cfg, run=None):
     make, not a change to the 2D repository, whose thresholds stay fitted for
     the domain they were fitted on.
     """
-    ck = find_best_checkpoint(run or cfg["run"])
+    # An explicit checkpoint beats a run name, because find_best_checkpoint
+    # picks by the nme in the filename and an A/B probe can tie across epochs
+    # -- ab2_fixed_s42 has three files all at 0.0161, so asking for the run
+    # would silently pick whichever sorted first rather than the epoch the
+    # comparison is about.
+    ck = cfg.get("ckpt") or find_best_checkpoint(run or cfg.get("run"))
     # smooth=False: the tracker is for video. On a single still it would smooth
     # a one-frame track against wall-clock time and shift the landmarks.
     pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS, ck,

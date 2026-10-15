@@ -619,6 +619,10 @@ def main():
                         "on-screen handedness, so a sun stated in the ear frame "
                         "is already in the ANATOMY's frame and means the same "
                         "thing on a left ear as on a right one.")
+    p.add_argument("--ckpt", default=None, metavar="PATH",
+                   help="an explicit 2D checkpoint, in place of cfg['run']. "
+                        "Use it rather than a run name when the run holds "
+                        "several epochs at the same nme, as an A/B probe does.")
     p.add_argument("--light", choices=list(LIGHT_ANCHORS), default="frame",
                    help="where the sun sits. 'frame' never mirrors it and is "
                         "the default BECAUSE THE WINDING FIX CHANGED THE "
@@ -659,6 +663,8 @@ def main():
         cfg["detector_full_frame"] = a.full_frame
     if a.select is not None:
         cfg["select"] = a.select
+    if a.ckpt is not None:
+        cfg["ckpt"] = pathlib.Path(a.ckpt)
     if a.sun_x is not None:
         d = list(cfg["light_dir"])
         cfg["light_dir"] = (float(a.sun_x), d[1], d[2])
