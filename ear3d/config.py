@@ -116,9 +116,16 @@ DEFAULTS = dict(
                             # (scripts/check_detector_symmetry.py). A union
                             # through NMS is symmetric, so it is in the class
                             # a single-presentation corpus cannot flatter.
-                            # PROVISIONAL: measured when the gaps were twice
-                            # this size; runs/newsun/nodet tests whether it
-                            # still earns its pass at this sun.
+                            # CONFIRMED at this sun, which was the open
+                            # question: worth +0.224pp, 64 of 112 ears,
+                            # p=2.4e-05, against +0.254pp at the old one. The
+                            # fusion gains halved when the sun improved and
+                            # this barely moved -- consistent with the routes
+                            # being different things, since better lighting
+                            # fixes a weak occluding edge and not which box
+                            # the detector picks. At this sun the flag is
+                            # worth MORE than the fusion it sits on top of
+                            # (1.710 none, 1.514 fusion, 1.290 both).
 
     light_dir=(1.2, -0.4, -0.9),   # swept, not guessed: 1.61% past 10 mm
                             # against 3.90% at the old +0.3, better on 39 of

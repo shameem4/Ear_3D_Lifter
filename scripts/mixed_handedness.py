@@ -128,10 +128,20 @@ def main():
     if conf:
         cs = np.array([conf.get((k[:3], "flip"), np.nan) >
                        conf.get((k[:3], "none"), np.nan) for k in keys])
-        print(f"  by DETECTION CONFIDENCE {100*rate(np.where(cs, f, n), a.gate):6.3f}%"
-              f"  -- the obvious selector, and it is WORSE than fusion and worse"
-              f"\n     than always-mirror. It picks the mirrored arm on "
-              f"{100*cs.mean():.0f}% of points and is not measuring arm quality.")
+        # Do NOT hardcode the verdict here. At the sun this was written under
+        # it was worse than both fusion and always-mirror; at a better-lit one
+        # it is level with fusion. A sentence that states a conclusion the
+        # numbers beside it no longer support is the stale-record failure this
+        # project keeps having, so the comparison is computed.
+        cr = 100 * rate(np.where(cs, f, n), a.gate)
+        fr, mr = 100 * rate(g, a.gate), 100 * rate(f, a.gate)
+        vs = lambda r, nm: ("worse than" if cr > r else
+                            "level with" if abs(cr - r) < 0.02 else "better than") + " " + nm
+        print(f"  by DETECTION CONFIDENCE {cr:6.3f}%  -- the obvious selector: "
+              f"{vs(fr, 'fusion')}, {vs(mr, 'always-mirror')}.")
+        print(f"     It picks the mirrored arm on {100*cs.mean():.0f}% of points, "
+              f"and reaches none of the {fr - 100*rate(ov, a.gate):.3f}pp "
+              f"a per-view rule has available.")
 
     # Paired over EARS at one assignment, which is the unit that generalises.
     mirrored = set(rng.choice(uv, size=len(uv) // 2, replace=False).tolist())

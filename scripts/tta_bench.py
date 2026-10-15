@@ -1,4 +1,22 @@
-"""Every test-time augmentation the pose literature documents, measured here.
+"""
+
+EVERY NUMBER THIS SCRIPT HAS PRODUCED IS STALE, AND IT IS LEFT STALE ON
+PURPOSE. The table was measured at sun x = -0.3, two sun changes ago, with
+the NaN gate scoring off-head landmarks as successes and with reflected
+heads rendered inside out. Three separate reasons, each worth more than the
+differences between most of the arms.
+
+The RANKING is not in danger -- rotation, scale and heatmap averaging lost
+by margins far larger than any of those effects, and cost 2 to 6 forward
+passes to do it -- and nothing since would revive them. It also no longer
+decides anything: what this pipeline runs is settled by ear3d/config.py,
+which takes Ear_Landmarker's in-pipeline flip fusion and adds their
+detector_frame_tta, measured at the current sun on 112 ears.
+
+So re-running nine arms to restate a ranking that already holds and drives
+nothing was judged not worth the renders. If you need a number from here,
+re-run it; do not quote the docstring.
+Every test-time augmentation the pose literature documents, measured here.
 
 The 2D model is the whole problem -- scripts/oracle_2d_lift.py shows the lift
 reproduces ground truth to 0.36 mm when handed the right pixels, and never
