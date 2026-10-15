@@ -202,6 +202,63 @@ def side_test(D, k, gate, lights, arms):
                   f"p={stats.wilcoxon(x, y).pvalue:.3f}")
 
 
+def compare(before, after, gate=10.0):
+    """Two runs of the same cell, paired per ear. For the winding fix.
+
+    THE LEFT EARS ARE THE CONTROL. Only reflected geometry was re-wound, so
+    every left-ear render is byte-identical between the two runs and their
+    rates must agree. If they do not, something other than the winding moved
+    and nothing below can be read as the fix's doing.
+    """
+    from scipy import stats
+    A, B = load(before), load(after)
+    k = sorted(set(A) & set(B))
+    if not k:
+        sys.exit("no shared landmark-views between the two runs")
+    arms = sorted({x[4] for x in k})
+    ears = sorted({x[0] for x in k})
+    L = lambda e: e.endswith("_left")
+    per = lambda D, arm, e: 100 * rate(
+        [D[x] for x in k if x[4] == arm and x[0] == e], gate)
+
+    print(f"\n{len(k) // max(len(arms), 1)} shared landmark-views per arm, "
+          f"{len(ears)} ears\n")
+    print(f"{'arm':6s} {'side':6s} {'before':>8s} {'after':>8s} {'change':>9s} "
+          f"{'worse on':>10s} {'p':>9s}")
+    for arm in arms:
+        for lab, sel in (("left", L), ("right", lambda e: not L(e))):
+            es = [e for e in ears if sel(e)]
+            x = np.array([per(A, arm, e) for e in es])
+            y = np.array([per(B, arm, e) for e in es])
+            p = stats.wilcoxon(x, y).pvalue if np.any(x != y) else float("nan")
+            print(f"{arm:6s} {lab:6s} {x.mean():7.3f}% {y.mean():7.3f}% "
+                  f"{y.mean() - x.mean():+8.3f}pp {int((y > x).sum()):6d}/{len(es)} "
+                  f"{p:9.4f}")
+        print()
+
+    ident = all(abs(per(A, arm, e) - per(B, arm, e)) < 1e-9
+                for arm in arms for e in ears if L(e))
+    print("CONTROL: left-ear rates are "
+          + ("IDENTICAL between the runs, as they must be.\n"
+             if ident else
+             "NOT identical -- something other than the winding moved, and the\n"
+             "         right-ear change below cannot be attributed to the fix.\n"))
+
+    print("side gap, left minus right, paired within subject:")
+    for lab, D in (("before", A), ("after", B)):
+        for arm in arms:
+            r = {e: per(D, arm, e) for e in ears}
+            subj = sorted({e.rsplit("_", 1)[0] for e in ears})
+            pr = [(r[f"{t}_left"], r[f"{t}_right"]) for t in subj
+                  if f"{t}_left" in r and f"{t}_right" in r]
+            if len(pr) < 3:
+                continue
+            x, y = np.array(pr).T
+            print(f"  {lab:7s} {arm:5s} {np.mean(x - y):+6.2f}pp   left worse on "
+                  f"{sum(u > v for u, v in pr)}/{len(pr)} subjects   "
+                  f"p={stats.wilcoxon(x, y).pvalue:.4f}")
+
+
 def table(out_dir, gate=10.0):
     D = {l: load(out_dir / f"{l}.csv") for l in LIGHTS
          if (out_dir / f"{l}.csv").exists()}
@@ -271,7 +328,13 @@ def main():
     p.add_argument("--grid-step", type=float, default=15.0)
     p.add_argument("--table-only", metavar="DIR", default=None)
     p.add_argument("--gate", type=float, default=10.0)
+    p.add_argument("--compare", nargs=2, metavar=("BEFORE", "AFTER"), default=None,
+                   help="two CSVs of the same cell, paired per ear; for the "
+                        "winding fix, where left ears are the control")
     a = p.parse_args()
+    if a.compare:
+        compare(pathlib.Path(a.compare[0]), pathlib.Path(a.compare[1]), a.gate)
+        return
     out = pathlib.Path(a.table_only or a.out)
     if a.table_only is None:
         ears = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("pp*.npz"))[:a.ears]
