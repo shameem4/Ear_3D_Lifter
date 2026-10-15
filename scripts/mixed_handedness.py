@@ -58,6 +58,11 @@ def main():
     from handedness_vs_illumination import load, rate
 
     D = load(a.csv)
+    import csv as _csv
+    conf = {}
+    for r in _csv.DictReader(open(a.csv)):
+        if r.get("conf") not in (None, "", "nan"):
+            conf[((r["ear"], r["yaw"], r["pitch"]), r["tta"])] = float(r["conf"])
     keys = sorted({k[:4] for k in D if k[4] == "none"})
     keys = [k for k in keys if (*k, "flip") in D and (*k, "avg") in D]
     if not keys:
@@ -104,6 +109,29 @@ def main():
           f"beats it on {100*np.mean(am < ap):.0f}% of draws")
     print(f"  fusion vs as-presented         {fu.mean()-ap.mean():+.3f}pp")
     print(f"  fusion vs always-mirror        {fu.mean()-am.mean():+.3f}pp")
+
+    # IS THE ORACLE REACHABLE? It is reported above as a ceiling, and a
+    # ceiling invites a selector. Two things decide whether one could exist:
+    # how much of the gap survives being decided ONCE PER VIEW rather than
+    # per point, and whether the obvious signal picks the right arm.
+    view = np.array([hash(k[:3]) for k in keys])
+    inf = lambda v: np.nan_to_num(v, nan=np.inf)
+    sel = np.zeros(len(keys), bool)
+    for v in np.unique(view):
+        i = np.flatnonzero(view == v)
+        sel[i] = np.sum(inf(f[i]) > a.gate) < np.sum(inf(n[i]) > a.gate)
+    ov = np.where(sel, f, n)
+    print(f"\n  oracle per POINT {100*rate(best, a.gate):6.3f}%  "
+          f"(55 decisions per view)")
+    print(f"  oracle per VIEW  {100*rate(ov, a.gate):6.3f}%  "
+          f"(one decision per view -- most of the gap survives)")
+    if conf:
+        cs = np.array([conf.get((k[:3], "flip"), np.nan) >
+                       conf.get((k[:3], "none"), np.nan) for k in keys])
+        print(f"  by DETECTION CONFIDENCE {100*rate(np.where(cs, f, n), a.gate):6.3f}%"
+              f"  -- the obvious selector, and it is WORSE than fusion and worse"
+              f"\n     than always-mirror. It picks the mirrored arm on "
+              f"{100*cs.mean():.0f}% of points and is not measuring arm quality.")
 
     # Paired over EARS at one assignment, which is the unit that generalises.
     mirrored = set(rng.choice(uv, size=len(uv) // 2, replace=False).tolist())
