@@ -144,19 +144,37 @@ def load_ear(name, dataset="hutubs", cfg=None):
         raise FileNotFoundError(f"no fitted ear for {name}")
     ear.compute_vertex_normals()
 
-    subj = name.split("_")[0]
-    if subj not in _SKIN_CACHE:
-        h = o3d.io.read_triangle_mesh(str(RAW / "3D head meshes" / f"{subj}_3DheadMesh.ply"))
+    # THE SCAN COMES FROM canon2scan, NOT FROM A DATASET-SHAPED PATH. The
+    # npz already records which file its transform was built against, so the
+    # same code serves HUTUBS, whose scan is a whole head in METRES, and
+    # SONICOM, whose scan is a graded head-sized mesh already in mm. The
+    # SONICOM entries point at sonicom_graded and not at
+    # sonicom_raw_headtorso: the two are in DIFFERENT FRAMES, 347 mm apart
+    # and not by a translation, and only the graded one is what the wrap was
+    # fitted against. Rendering the head+torso instead would put every
+    # landmark on nothing.
+    scan = pathlib.Path(str(z["scan"]))
+    if not scan.exists():
+        raise FileNotFoundError(f"{name}: scan {scan} not found")
+    key = str(scan)
+    if key not in _SKIN_CACHE:
+        h = o3d.io.read_triangle_mesh(key)
         if len(h.vertices) == 0:
-            raise FileNotFoundError(f"no head mesh for {subj}")
+            raise FileNotFoundError(f"no scan mesh for {name} at {scan}")
         h.compute_vertex_normals()
         if cfg.get("skin"):
             from skin import apply_skin
             apply_skin(h, seed=cfg["skin_seed"], tone=cfg["tone"],
                        ao_strength=cfg["ao_strength"], n_rays=cfg["ao_rays"])
-        _SKIN_CACHE[subj] = h
-    head = o3d.geometry.TriangleMesh(_SKIN_CACHE[subj])
-    V = np.asarray(head.vertices) * HUTUBS_TO_MM
+        _SKIN_CACHE[key] = h
+    head = o3d.geometry.TriangleMesh(_SKIN_CACHE[key])
+    # Units by extent, the convention gt_landmark_check already uses: a head
+    # measured in metres spans under 10, one in millimetres spans hundreds.
+    # HUTUBS files are metres, SONICOM's are mm, and canon2scan's `units`
+    # field describes the CANONICAL frame rather than the file, so it cannot
+    # be used for this.
+    V = np.asarray(head.vertices)
+    V = V * (HUTUBS_TO_MM if float(np.ptp(V, axis=0).max()) < 10.0 else 1.0)
     V = (np.c_[V, np.ones(len(V))] @ z["inverse"].T)[:, :3]
     head.vertices = o3d.utility.Vector3dVector(V)
 
@@ -571,7 +589,14 @@ def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--ears", nargs="*", default=["pp10_right"])
-    p.add_argument("--all", action="store_true", help="every hutubs ear in canon2scan")
+    p.add_argument("--dataset", default="hutubs", choices=["hutubs", "sonicom"],
+                   help="which corpus. SONICOM's scan is the GRADED mesh, which "
+                        "is head-sized and is what the wrap was fitted to -- not "
+                        "sonicom_raw_headtorso, which is a different frame 347 mm "
+                        "away. load_ear reads the path from canon2scan, so both "
+                        "work without a dataset-shaped path here.")
+    p.add_argument("--all", action="store_true",
+                   help="every ear of --dataset in canon2scan")
     p.add_argument("--views", type=int, default=9, help="views in a cone")
     p.add_argument("--cone", type=float, default=45.0, help="cone half-angle, degrees")
     p.add_argument("--grid", type=float, default=None, metavar="LIMIT",
@@ -665,7 +690,9 @@ def main():
 
     ears = a.ears
     if a.all:
-        ears = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("pp*.npz"))
+        ears = sorted(
+            f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz")
+            if str(np.load(f, allow_pickle=True)["dataset"]) == a.dataset)
 
     from ear3d.twod import make_pipeline                                   # noqa
     # The flags OVERRIDE config.py so this harness can still measure the old
@@ -709,7 +736,8 @@ def main():
     rows = []
     for i, name in enumerate(ears):
         try:
-            got = audit_ear(name, cfg, pipe, angles, render_dir=rdir,
+            got = audit_ear(name, cfg, pipe, angles, dataset=a.dataset,
+                            render_dir=rdir,
                             radii=a.snap_sweep, light=a.light,
                             mirror=a.tta if a.tta_side in
                                    ("both", "left" if name.endswith("_left")
