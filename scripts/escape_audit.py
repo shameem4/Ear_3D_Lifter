@@ -90,6 +90,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from ear3d import DEFAULTS, Camera                                 # noqa: E402
 from ear3d.backproject import backproject, backproject_snapped     # noqa: E402
 from ear3d.camera import camera_ke, cone_angles, orbit_extrinsic   # noqa: E402
+from ear3d.escape import escape_rate, off_head                     # noqa: E402
 from ear3d.frames import frame_from, in_frame, plane_normal      # noqa: E402
 from ear3d.label import pick                                       # noqa: E402
 from ear3d.render import MATERIAL, light_scene, render              # noqa: E402
