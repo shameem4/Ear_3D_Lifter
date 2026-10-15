@@ -20,7 +20,7 @@ the change, but because `runs/conv/fixed_conv.csv` against
 rate. If it is a regression there, that is a root-repo conversation, not a
 local override.
 
-## 2. MEASURED AND SETTLED — turn on their flag, retire our wrapper
+## 2. DONE (58d0079, 3ee25aa) — flag on, wrapper retired
 
 They declined the full frame-level option, for a reason that does not apply
 to us and that they wrote down as such: the extra pass only lets the ROI
@@ -47,8 +47,20 @@ settles it: enable `detector_frame_tta`, drop the wrapper, and the residual
 0.33pp is the ROI route they declined, which is exactly what their reasoning
 predicts should remain.
 
-Recommended, not yet done: it changes every label this repo generates, so it
-is the user's call.
+APPLIED, and the numbers that justified it were re-measured at the new sun
+rather than assumed to carry over:
+
+    no TTA at all                   1.710%
+    their fusion, flag OFF          1.514%
+    their fusion, flag ON           1.290%
+    our retired two-pass wrapper    1.290%   +0.000pp against the flag, p=0.76
+
+The wrapper is retired on evidence: identical to three decimals, for one
+extra detector pass against two full pipeline passes. The flag is worth
++0.224pp (64/112, p=2.4e-05), barely compressed from +0.254pp at the old
+sun where the FUSION gains halved -- better lighting repairs a weak
+occluding edge, which is what mirroring the image was compensating for, and
+does nothing about which box the detector picks.
 
 Original note follows.
 
@@ -169,6 +181,19 @@ Original note:
 whose raw data no longer exists. Either re-run it on corrected renders or mark
 those rows as unreproducible. Run outputs go to `runs/` from now on, and
 long jobs launch under `setsid` — a `nohup` alone died with the session.
+
+## Added after the list was written, and closed
+
+**The sun.** Swept and moved from +0.3 to +1.2 (b622683): 3.736% -> 1.710%
+at 112 ears, better on 107 of 112, p=3.5e-18. Larger than every other effect
+in this file combined. Not +1.8, which scores 0.069pp lower at p=0.97 and is
+the edge of the sweep, with the concha falling into shadow in the render.
+
+**tta_bench, left stale on purpose** (3ee25aa, and the user's call). Its
+table predates two sun changes and both instrument bugs, so the numbers are
+void -- but the ranking holds, nothing would revive the arms it rejected,
+and config.py now decides what runs. Marked in its own docstring rather than
+only here.
 
 ## Not on this list, on purpose
 
