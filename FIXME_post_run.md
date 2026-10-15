@@ -20,7 +20,21 @@ the change, but because `runs/conv/fixed_conv.csv` against
 rate. If it is a regression there, that is a root-repo conversation, not a
 local override.
 
-## 2. Decide where fusion lives, then retire the loser
+## 2. Decide where fusion lives — MEASURED, now waiting on them
+
+Adopting their defaults end to end costs **+0.584pp** on the escape rate, and
+the split says it is not the model: implementation +0.407pp p=1.6e-08,
+checkpoint +0.177pp p=0.43. Their fusion mirrors the crop tensor inside
+LandmarkPredictor, so the detector and the ROI loop run once on the
+un-mirrored frame; ours mirrors the whole frame. Our SINGLE mirrored pass
+(2.823%) beats their TWO-arm fusion (3.303%), which rules out averaging model
+outputs as the effect.
+
+Asked them for a frame-level option rather than overriding locally, per the
+use-their-defaults policy. **If they decline, this becomes a deliberate
+divergence to decide with the user** — not a silent local pin.
+
+Original note follows.
 
 If we adopt their checkpoint we inherit `flip_fusion=True`, which mirrors the
 normalised tensor after the resize inside one batch-2 forward. Ours re-runs
