@@ -39,7 +39,11 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 WRAP = ROOT.parent / "wrap_work"
-XS = (-0.6, -0.3, 0.0, 0.3, 0.6)
+# THE FIRST SWEEP RAN -0.6..+0.6 AND CAME OUT MONOTONE WITH THE BEST AT THE
+# EDGE, so the optimum is outside it and the range had to grow. Past about
+# +1.5 the sun is nearly side-on and the ear loses its fill, so a turning
+# point is expected in here somewhere.
+XS = (-0.6, -0.3, 0.0, 0.3, 0.6, 0.9, 1.2, 1.8)
 
 
 def tag(x):
@@ -63,10 +67,11 @@ def table(out_dir, gate=10.0, arm="none"):
     from scipy import stats
     from handedness_vs_illumination import load, rate, off_head
     cells = {}
-    for x in XS:
-        p = out_dir / f"{tag(x)}.csv"
-        if p.exists() and p.stat().st_size:
-            cells[x] = load(p)
+    for p in sorted(out_dir.glob("sun*.csv")):
+        if not p.stat().st_size:
+            continue
+        x = float(p.stem.replace("sun", "").replace("p", "."))
+        cells[x] = load(p)
     if not cells:
         sys.exit(f"no cells in {out_dir}")
     xs = sorted(cells)
@@ -122,12 +127,14 @@ def main():
     p.add_argument("--grid-step", type=float, default=15.0)
     p.add_argument("--gate", type=float, default=10.0)
     p.add_argument("--arm", default="none")
+    p.add_argument("--xs", type=float, nargs="*", default=None, metavar="X",
+                   help="sun x values to run; default is the full sweep")
     p.add_argument("--table-only", metavar="DIR", default=None)
     a = p.parse_args()
     out = pathlib.Path(a.table_only or a.out)
     if a.table_only is None:
         ears = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("pp*.npz"))[:a.ears]
-        run_cells(out, ears, a.grid, a.grid_step, XS)
+        run_cells(out, ears, a.grid, a.grid_step, a.xs or XS)
     table(out, a.gate, a.arm)
 
 
