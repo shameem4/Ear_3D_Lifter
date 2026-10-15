@@ -1,4 +1,12 @@
-"""Is the gross-error problem the LANDMARKER or the LIFTER?
+"""
+
+THE det_snap ROW BELOW IS STALE, the conclusion is not. It was measured
+before the NaN gate was fixed and before the winding was, so it both
+forgave landmarks thrown clean off the head and used inside-out right-ear
+renders. Both push det_snap in the SAME direction -- it is worse than
+reported -- and the conclusion here is that the detector dominates the
+lift, which only strengthens. Re-run before quoting the numbers.
+Is the gross-error problem the LANDMARKER or the LIFTER?
 
 MEASURED, 40 ears x 25 views x 55 points, paired error to the GT landmark:
 

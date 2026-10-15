@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""How much gross error does a change in CONTOUR-PERPENDICULAR 2D error buy?
+"""
+
+PRE-2026-10-14 RESULTS FROM THIS SCRIPT ARE VOID. It renders through
+escape_audit.load_ear, which until 856652b applied canon2scan's transform
+to the head without reversing the triangle winding, so every right-ear
+render was shaded with its normals pointing inward. The script is correct
+from that commit on; anything measured with it before then mixed correct
+left ears with inside-out right ones. Re-run before quoting.
+How much gross error does a change in CONTOUR-PERPENDICULAR 2D error buy?
 
 THE QUESTION THIS ANSWERS. Ear_Landmarker measured a handedness bias of +8.53%
 of nme_normal -- normal-direction, contour-perpendicular placement error --

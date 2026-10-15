@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Estimate the IMAGE-PLANE light direction from the shading on the helix rim.
+"""
+
+PRE-2026-10-14 RESULTS FROM THIS SCRIPT ARE VOID. It renders through
+escape_audit.load_ear, which until 856652b applied canon2scan's transform
+to the head without reversing the triangle winding, so every right-ear
+render was shaded with its normals pointing inward. The script is correct
+from that commit on; anything measured with it before then mixed correct
+left ears with inside-out right ones. Re-run before quoting.
+Estimate the IMAGE-PLANE light direction from the shading on the helix rim.
 
 WHY THIS IS POSSIBLE AT ALL. At an occluding contour the surface normal is
 perpendicular to the line of sight, so it lies IN the image plane and points
