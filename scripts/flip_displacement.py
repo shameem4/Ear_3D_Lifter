@@ -206,14 +206,16 @@ def main():
             head, ear, lm = load_ear(name, "hutubs", cfg)
         except (FileNotFoundError, KeyError, ValueError) as e:
             print(f"  {name}: skipped -- {e}"); continue
-        Rm, C, s = ear_frame(head, lm, cfg)
+        Rm, C, s_ = ear_frame(head, lm, cfg)
         h = o3d.geometry.TriangleMesh(head)
         h.vertices = o3d.utility.Vector3dVector(
-            (np.asarray(head.vertices) - C) @ Rm.T / s)
+            (np.asarray(head.vertices) - C) @ Rm.T / s_)
         h.compute_vertex_normals()
         c = dict(cfg, light_mirror=light_mirror_for(name, a.light))
+        lmf = (lm - C) @ Rm.T / s_
         for yaw, pitch in angles:
             img, depth, cam = R3.render(h, dict(c, yaw=float(yaw), pitch=float(pitch)))
+            gt_full = cam.project(lmf)
             hw = img.shape[:2]
             A0 = pick(pipe(img, timestamp=0.0), c, hw)
             if A0 is None:
@@ -264,7 +266,9 @@ def main():
                     lb = np.asarray(pipe.landmarker.predict(
                         np.ascontiguousarray(crop[:, ::-1])), float).copy()
                     lb[:, 0] = nn - lb[:, 0]
-                    rows.append((la, lb, float(nn), name))
+                    gt = gt_full - np.array([px, py], float)
+                    e = float(np.linalg.norm(la - gt, axis=1).mean() / nn)
+                    rows.append((la, lb, float(nn), name, e))
                     continue
                 box = np.array([[0.0, 0.0, float(nn), float(nn), 1.0]], float)
                 keep = pipe.refine_roi
@@ -279,8 +283,11 @@ def main():
                     pipe.refine_roi = keep
                 if A is None or B is None:
                     continue
+                gt = gt_full - np.array([px, py], float)
+                e = float(np.linalg.norm(
+                    np.asarray(A["landmarks"], float) - gt, axis=1).mean() / nn)
                 rows.append((np.asarray(A["landmarks"], float),
-                             np.asarray(B["landmarks"], float), float(nn), name))
+                             np.asarray(B["landmarks"], float), float(nn), name, e))
                 continue
             if a.int_box:
                 # THE CROP'S OWN HALF-PIXEL. The detector returns a float box.
@@ -330,12 +337,14 @@ def main():
             W = 0.5 * (wa + wb)
             if not np.isfinite(W) or W <= 1:
                 continue
-            rows.append((ua, ub, W, name))
+            gt = gt_full
+            e = float(np.linalg.norm(ua - gt, axis=1).mean() / W)
+            rows.append((ua, ub, W, name, e))
         print(f"[{n+1}/{len(names)}] {name}: {len(rows)} views so far", flush=True)
 
     if not rows:
         sys.exit("no paired views")
-    D = np.stack([(u - v) / w for u, v, w, _ in rows])          # (N, 55, 2), crop widths
+    D = np.stack([(u - v) / w for u, v, w, _, _ in rows])          # (N, 55, 2), crop widths
     print(f"\n{len(rows)} paired views, {D.shape[1]} points, "
           f"displacement in NORMALISED CROP WIDTHS\n")
     print(f"  mean dx {D[..., 0].mean():+.5f}   mean dy {D[..., 1].mean():+.5f}")
@@ -369,7 +378,7 @@ def main():
           f"{100 * (1 - res_t / tot):.1f}% of the field")
     # affine: fit per view  u_b ~ M u_a + t, residual against the raw difference
     ra, rt = 0.0, 0.0
-    for ua, ub, w, _ in rows:
+    for ua, ub, w, _, _ in rows:
         X = np.c_[ua, np.ones(len(ua))]
         M, *_ = np.linalg.lstsq(X, ub, rcond=None)
         ra += np.sum(((ub - X @ M) / w) ** 2); rt += np.sum(((ub - ua) / w) ** 2)
@@ -390,11 +399,26 @@ def main():
         with open(p, "w", newline="") as fh:
             w = _csv.writer(fh)
             w.writerow(["ear", "crop_px", "j", "dx_px", "dy_px"])
-            for (ua, ub, cw, nm) in rows:
+            for (ua, ub, cw, nm, _e) in rows:
                 for j in range(len(ua)):
                     w.writerow([nm, f"{cw:.1f}", j,
                                 f"{ua[j,0]-ub[j,0]:.4f}", f"{ua[j,1]-ub[j,1]:.4f}"])
         print(f"\n  wrote {p}")
+
+    E = np.array([r[4] for r in rows])
+    q = np.quantile(E, [0.25, 0.5, 0.75])
+    print(f"\n  BY DIFFICULTY -- Ear_Landmarker's cut. Their bug-driven dx sat")
+    print(f"  on the EASIEST samples and the fix cleared it there; what survived")
+    print(f"  their fix lived in the hardest quartile. NME is this arm's own")
+    print(f"  error against the projected ground truth, in crop widths.")
+    print(f"    {'quartile':12s} {'n':>5s} {'NME':>8s} {'dx':>10s} {'dy':>10s}")
+    for i, nm in enumerate(("Q1 easiest", "Q2", "Q3", "Q4 hardest")):
+        m = ((E >= ([-np.inf] + list(q))[i]) &
+             (E < (list(q) + [np.inf])[i]))
+        if m.sum() < 3:
+            continue
+        print(f"    {nm:12s} {m.sum():5d} {E[m].mean():8.4f} "
+              f"{D[m][..., 0].mean():+10.5f} {D[m][..., 1].mean():+10.5f}")
 
     print(f"\n  {'strip':16s} {'dx':>9s} {'dy':>9s}")
     for nm, idx in zip(("outer_helix", "inner_helix", "concha_border",
