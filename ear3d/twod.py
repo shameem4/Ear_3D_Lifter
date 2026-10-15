@@ -89,10 +89,17 @@ def make_pipeline(cfg, run=None):
     # Pinning it matters beyond correctness: their default landed between
     # cells 3 and 4 of a running sun sweep here, and one subprocess per cell
     # meant the later cells silently re-imported it.
+    # Same rule for detector_frame_tta, which they shipped off by default: it
+    # runs the DETECTOR on the mirrored frame too and merges both
+    # presentations' boxes through NMS. A union is symmetric, so it is in the
+    # class of rules that survive a mixed corpus; see scripts/mixed_handedness.
+    # It does NOT mirror the ROI loop, which is the other half that matters on
+    # renders.
+    sig = signature(EarLandmarkerPipeline.__init__).parameters
     kw = {}
-    if cfg.get("flip_fusion") is not None and \
-            "flip_fusion" in signature(EarLandmarkerPipeline.__init__).parameters:
-        kw["flip_fusion"] = bool(cfg["flip_fusion"])
+    for key in ("flip_fusion", "detector_frame_tta"):
+        if cfg.get(key) is not None and key in sig:
+            kw[key] = bool(cfg[key])
     pipe = EarLandmarkerPipeline(BLAZEEAR_DIR / DETECTOR_WEIGHTS, ck,
                                  device=cfg.get("device", "cuda"), smooth=False,
                                  detector_confidence=cfg.get("detector_conf"),

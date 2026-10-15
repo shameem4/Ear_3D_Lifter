@@ -619,6 +619,11 @@ def main():
                         "on-screen handedness, so a sun stated in the ear frame "
                         "is already in the ANATOMY's frame and means the same "
                         "thing on a left ear as on a right one.")
+    p.add_argument("--detector-frame-tta", action="store_true",
+                   help="run the 2D detector on the mirrored frame too and "
+                        "merge both presentations' boxes. Ear_Landmarker ships "
+                        "this off by default; it reaches the detector half of "
+                        "the frame-mirror gain but not the ROI loop.")
     p.add_argument("--inherit-fusion", action="store_true",
                    help="let the 2D pipeline do its own flip fusion. OFF here "
                         "because --tta drives the mirror and the two would "
@@ -676,6 +681,8 @@ def main():
     # pair would already be fused and nothing below would mean what it says.
     # --inherit-fusion measures the shipped behaviour end to end instead.
     cfg["flip_fusion"] = True if a.inherit_fusion else False
+    if a.detector_frame_tta:
+        cfg["detector_frame_tta"] = True
     if a.sun_x is not None:
         d = list(cfg["light_dir"])
         cfg["light_dir"] = (float(a.sun_x), d[1], d[2])
