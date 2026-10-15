@@ -35,19 +35,42 @@ WHAT IT SETTLES.
    2.30%, replacement better on 33 of 40 ears, p=4.1e-04. Ear_Landmarker
    predicted the opposite, on the account that fusion loses only where one arm
    is systematically much better. That account is NOT refuted here -- its
-   premise is. Fixing the sun did not move the arms closer together, because
-   the thing separating them is the handedness bias and lighting does not touch
-   it. The middling-disagreement regime that would test the account is still
-   unvisited. Fusion does beat doing nothing (2.30 against 3.24, 39 of 40).
+   premise is. The sibling session's light2x2, a different sun parameterisation
+   on a different process, agrees in both of its cells: sun +0.3 flip 2.32%
+   against avg 2.49% (24/40 ears, p=0.019), sun -0.3 flip 2.72% against avg
+   3.19% (27/40, p=1.7e-04). Four cells, two sun parameterisations, two
+   processes, replacement in every one -- though the same checkout, checkpoint
+   and wrap reference throughout, so this is a replicate of the MEASUREMENT and
+   not of the pipeline. Fixing the sun did not move the arms closer together,
+   because the thing separating them is the handedness bias and lighting does
+   not touch it. The middling-disagreement regime that would test the account
+   is still unvisited. Fusion does beat doing nothing (2.30 against 3.24,
+   39 of 40).
 
-3. A SIDE RESIDUAL SURVIVES EVERY CELL. At the best lighting and with the
-   mirror, left 2.32% against right 1.77%. It is not lighting (each side is at
-   its own optimum), not presented handedness (identical across sides: canal-x
-   minus rim-centroid-x is -125.0 px left against -124.9 px right), and not
-   geometric chirality or frame orientation (measured by the sibling session:
-   signed tetra volumes agree in sign across sides, and the mean ear frames
-   agree to 0.006). The candidate I have not excluded is the ground truth
-   itself -- right ears' wrap fits were made on mirrored geometry.
+3. A SIDE RESIDUAL APPEARS IN EVERY CELL BUT IS MARGINAL. At the best
+   lighting and with the mirror, left 2.32% against right 1.77%. Paired within
+   subject, which is the right unit because the two ears of one head share a
+   scan and a subject, it does not reach significance on these 20 subjects:
+
+       anatomy/none   +1.04pp   13/20 subjects   p=0.084
+       anatomy/flip   +0.55pp   14/20 subjects   p=0.053
+       anatomy/avg    +0.51pp   14/20 subjects   p=0.083
+
+   Consistently signed and consistently 13-14 of 20, so it is suggestive and
+   nothing more. Five mechanisms are excluded: lighting (each side is at its
+   own optimum), presented handedness (identical across sides -- canal-x minus
+   rim-centroid-x is -125.0 px left against -124.9 right), geometric chirality
+   and frame orientation (the sibling session: signed tetra volumes agree in
+   sign, mean ear frames agree to 0.006), and the ground truth itself.
+
+   THE GROUND-TRUTH TEST IS A CLEAN NULL, and worth the detail because its
+   40-ear subset was not. Fit-to-scan and scan-to-fit distance over all 112
+   HUTUBS ears, paired within subject: fit->scan median L 0.4909 / R 0.5059
+   (29/56, p=0.97), p95 (27/56, p=0.49), scan->fit median (30/56, p=0.81), p95
+   (29/56, p=0.71). On the same 40 ears as this table it read right-better by
+   11-14% at p~0.2, which looked like the right direction and the right size;
+   at full power the direction reverses and the effect vanishes. The sixth
+   possibility is that there is nothing to explain.
 
 ONE-SIDED, NOT ANTISYMMETRIC. c243e8f described the lighting effect as a clean
 swap, from two ears at one view. Over 40 ears at 25 views it is not: the
@@ -103,15 +126,49 @@ def load(path):
     return d
 
 
+def side_test(D, k, gate, lights, arms):
+    """The side residual, paired WITHIN SUBJECT.
+
+    The two ears of one head share a scan, a wrap fit and a subject, so the
+    subject is the independent unit and 112 ears are 56 of them, not 112. Run
+    unpaired over ears this reads as a much stronger effect than it is.
+    """
+    from scipy import stats
+    rate = collections.defaultdict(dict)
+    for l in lights:
+        for arm in arms:
+            t = collections.defaultdict(list)
+            for x in k:
+                if x[4] == arm:
+                    t[x[0]].append(D[l][x])
+            for e, v in t.items():
+                rate[(l, arm)][e] = 100 * np.mean(np.array(v) > gate)
+    print("\nside residual, left minus right, paired within subject:")
+    for l in lights:
+        for arm in arms:
+            r = rate[(l, arm)]
+            subj = sorted({e.rsplit("_", 1)[0] for e in r})
+            pairs = [(r[f"{p}_left"], r[f"{p}_right"]) for p in subj
+                     if f"{p}_left" in r and f"{p}_right" in r]
+            if len(pairs) < 3:
+                continue
+            x, y = np.array(pairs).T
+            print(f"  {l:9s} {arm:5s} {np.mean(x - y):+6.2f}pp   left worse on "
+                  f"{sum(a > b for a, b in pairs)}/{len(pairs)} subjects   "
+                  f"p={stats.wilcoxon(x, y).pvalue:.3f}")
+
+
 def table(out_dir, gate=10.0):
-    D = {l: load(out_dir / f"{l}.csv") for l in LIGHTS}
+    D = {l: load(out_dir / f"{l}.csv") for l in LIGHTS
+         if (out_dir / f"{l}.csv").exists()}
+    lights = [l for l in LIGHTS if l in D]
     k = sorted(set.intersection(*[set(v) for v in D.values()]))
     side = lambda x: "left" if x[0].endswith("_left") else "right"
     print(f"\n{len(k) // len(ARMS)} paired landmark-views per arm, "
           f"escape past {gate:.0f} mm\n")
     print(f"{'light':10s} {'arm':6s} {'all':>8s} {'left':>8s} {'right':>8s}")
     cell = {}
-    for l in LIGHTS:
+    for l in lights:
         for arm in ARMS:
             kk = [x for x in k if x[4] == arm]
             v = {w: np.array([D[l][x] for x in kk
@@ -123,18 +180,23 @@ def table(out_dir, gate=10.0):
                            for w in ("all", "left", "right")))
         print()
 
-    a, o = cell[("anatomy", "none")]["all"], cell[("opposite", "none")]["all"]
+    a = cell[("anatomy", "none")]["all"]
     f, u = cell[("anatomy", "flip")]["all"], cell[("anatomy", "avg")]["all"]
-    print(f"illumination alone   {np.mean(o > gate) / np.mean(a > gate):.2f}x")
+    if "opposite" in lights:
+        o = cell[("opposite", "none")]["all"]
+        print(f"illumination alone   {np.mean(o > gate) / np.mean(a > gate):.2f}x")
     print(f"handedness alone     {np.mean(a > gate) / np.mean(f > gate):.2f}x  "
           f"(mirror, with the sun already correct)")
-    print(f"both                 {np.mean(o > gate) / np.mean(f > gate):.2f}x")
+    if "opposite" in lights:
+        print(f"both                 {np.mean(o > gate) / np.mean(f > gate):.2f}x")
     print(f"fusion vs replacement under corrected lighting: "
           f"{100 * np.mean(u > gate):.2f}% against {100 * np.mean(f > gate):.2f}%")
 
+    side_test(D, k, gate, lights, ARMS)
+
     from scipy import stats
     pe = collections.defaultdict(dict)
-    for l in LIGHTS:
+    for l in lights:
         for arm in ARMS:
             t = collections.defaultdict(list)
             for x in k:
@@ -143,7 +205,7 @@ def table(out_dir, gate=10.0):
             for e, v in t.items():
                 pe[e][(l, arm)] = 100 * np.mean(np.array(v) > gate)
     ears = sorted(pe)
-    print("\nper-ear, paired over the 40 ears:")
+    print(f"\nper-ear, paired over the {len(ears)} ears:")
     for p, q in ((("anatomy", "none"), ("anatomy", "flip")),
                  (("anatomy", "none"), ("anatomy", "avg")),
                  (("anatomy", "flip"), ("anatomy", "avg"))):
