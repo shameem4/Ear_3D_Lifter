@@ -57,9 +57,27 @@ def sun_world(cfg, E):
     reflection, which restores the light's relationship to the anatomy rather
     than to the coordinate frame.
 
-    This is NOT evidence that the 2D model is handedness-biased; it was tested
-    on its own 861-photo held-out split and is flip-symmetric there to within
-    0.55% of mean NME, unsigned. The bug was always here.
+    That 5.34 -> 3.24 is lighting and is fixed here. It is NOT the whole of the
+    side asymmetry, and an earlier version of this docstring said the 2D model
+    was not handedness-biased on the strength of a 0.55% pooled bound measured
+    over its own held-out photographs. THAT BOUND WAS WORTHLESS. It pools over a
+    side-balanced corpus, where a bias of +d on one presented handedness appears
+    as -d on the other and the pooled delta goes to zero however large the bias
+    is -- and it scores plain NME, which is mostly tangential annotation noise.
+    Stratified by side on the balanced source and scored on the normal
+    component, Ear_Landmarker measures the bias at +8.53% (p=1.7e-17),
+    antisymmetric across sides and absent from the tangential component. Its
+    review is in Ear_Landmarker/runs/flip_equivariance/REVIEW.md. Re-cutting
+    this repository's own per-sample file by side reproduces the plain-NME
+    figure, 1.38%, which is what the pooled number was hiding.
+
+    So the model does carry a handedness bias, the lighting bug here was real
+    and separate, and which of the two owns the residual that survives this fix
+    -- 3.24% -> 2.06% under an image mirror, and left still 3.76% against right
+    2.72% when each side already has its best sun -- is NOT settled. Right ears
+    reach the canonical frame through a reflection, so a chirality effect in the
+    lift or the wrap fit would also produce a side-dependent residual that an
+    image mirror happens to move. Do not attribute it until that is separated.
     """
     d = np.asarray(cfg.get("light_dir", SUN_VIEW), float)
     if cfg.get("light_mirror"):
