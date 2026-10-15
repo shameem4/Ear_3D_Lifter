@@ -21,6 +21,41 @@ applied to the whole frame changes the box as well as the points. Patching
 predict leaves detection alone and isolates the landmarker, and the refinement
 loop then runs on TTA'd landmarks like it would in production.
 
+"hm_avg" IS LOGIT-SPACE, AND THAT IS NOT A DETAIL. `heatmaps()` returns
+`to_heatmap(_decode(x))`, the raw conv output, and `soft_argmax` applies its own
+softmax -- so averaging those tensors is a normalised GEOMETRIC mean of the two
+distributions, which sharpens: a mode only one arm supports is suppressed rather
+than averaged in.
+
+The literature's prescription, taken literally -- average the probability maps
+-- is a NO-OP here. soft_argmax returns the expectation of the spatial softmax,
+expectation is linear, so decoding each map and averaging the coordinates gives
+exactly the same answer as averaging the maps and decoding once. Ear_Landmarker
+measured both on 861 photographs: 0.015139 and 0.015139, identical to every
+digit printed. So "heatmap averaging beats coordinate averaging" cannot be true
+for this decoder in the sense the sources mean it; only the logit-space variant
+is a different operation at all.
+
+Whether that variant is BETTER depends on which end of the error distribution
+you are paid to care about. Paired over the same 55,000 renders, logit against
+coordinate fusion:
+
+    2D off-mask     26.23% vs 26.62%   -0.39pp   McNemar p=6.3e-15
+    3D  >5mm         5.42% vs  5.45%             p=0.25
+    3D >10mm         3.97% vs  3.95%             p=0.64
+    3D >20mm         2.26% vs  2.20%             p=0.006   <- logit WORSE
+
+Logit fusion puts significantly more landmarks on ear pixels and none of that
+reaches gross 3D error; at the deepest tail it reverses. A mechanism that would
+produce exactly this, and which Ear_Landmarker's corpus also shows the mean half
+of: sharpening COMMITS to one mode where the two arms disagree about where the
+rim ends, instead of landing between them. Committing wins a pixel-level on-ear
+test and loses by the full inter-mode distance when it commits wrong.
+
+So: logit fusion for a mean metric, coordinate averaging for a tail metric,
+which is what this repository has. Measured under the stock sun, the regime
+where the arms disagree most, so it needs re-measuring post-c243e8f.
+
 THE ONE-PIXEL SHIFT IS NOT NEEDED HERE, and that is derivable rather than
 measurable. This decoder is a soft-argmax over pixel CENTRES,
 xs = (i + 0.5) / W, so flipping index i -> W-1-i sends the coordinate to
