@@ -101,7 +101,13 @@ DEFAULTS = dict(
     # is worth 5.34% -> 3.24% of landmarks landing more than 10 mm off the ear;
     # render.sun_world() carries the table and the mechanism. The old value was
     # the x-negated one, hard-coded, for every ear.
-    light_dir=(0.3, -0.4, -0.9),
+    light_dir=(1.2, -0.4, -0.9),   # swept, not guessed: 1.61% past 10 mm
+                            # against 3.90% at the old +0.3, better on 39 of
+                            # 40 ears, p=2.0e-07. render.sun_world carries the
+                            # curve. +1.8 scores 1.54% but the last step is
+                            # p=0.97 and the render goes dark, so the default
+                            # sits on the plateau rather than at the edge of
+                            # the sweep.
     light_frame="world",    # "view" rotates the sun with the camera instead.
                             # Measured on the same grid: 3.45% against 3.24%,
                             # so world wins -- but only in the orbited views,

@@ -31,24 +31,38 @@ SUN_LUX = 95000
 def sun_world(cfg, E):
     """The sun as a world direction, for a render whose extrinsic is E.
 
-    THIS IS NOT COSMETIC. Measured over 40 ears x 25 views x 55 points, moving
-    only the sun's x component moves the rate of landmarks that land more than
-    10 mm off the ear:
+    THIS IS NOT COSMETIC, AND IT IS THE LARGEST EFFECT IN THE PIPELINE.
+    Measured over 40 ears x 25 views x 55 points on CORRECTED renders
+    (scripts/sun_sweep.py), moving only the sun's x component moves the rate of
+    landmarks that land more than 10 mm off the ear:
 
-        sun x   all     left    right
-        -0.3   5.34%   7.97%   2.72%      the hard-coded value this replaces
-         0.0   4.28%   5.87%   2.69%
-        +0.3   3.58%   3.76%   3.39%
-        per ear side                3.24%  (left 3.76, right 2.72)
+        sun x    all     left    right
+        -0.6    8.98%   9.34%   8.61%
+        -0.3    8.32%   8.72%   7.93%
+         0.0    6.38%   6.67%   6.09%
+        +0.3    3.90%   4.43%   3.37%     the value shipped until 2026-10-15
+        +0.6    2.37%   2.60%   2.14%
+        +0.9    1.77%   1.91%   1.63%
+        +1.2    1.61%   1.73%   1.48%     the default now
+        +1.8    1.54%   1.62%   1.45%
 
-    IT IS NOT A CLEAN SWAP, though an earlier version of this said so on the
-    strength of two ears at one view (pp11_left 12.73% -> 0.00% against
-    pp10_right 0.00% -> 12.73%). Over 40 ears at 25 views the per-ear preference
-    for the sun's sign is +4.20 points on LEFT ears, 19 of 20 positive, and
-    -0.67 on right ears, 8 of 20 -- Mann-Whitney p=3.4e-07. So the side
-    structure is real and strong, but left ears care a great deal and right ears
-    hardly care at all, which "the sun lights the two sides from opposite
-    directions" does not predict. The asymmetry of the effect is unexplained.
+    5.84x worst to best, better on 40 of 40 ears. +1.2 against the old +0.3 is
+    -2.29pp on 39 of 40, p=2.0e-07.
+
+    WHY +1.2 AND NOT +1.8, which scores marginally lower. The last step is
+    -0.069pp, better on 18 of 40 ears at p=0.97 -- the curve has plateaued, so
+    +1.8 buys nothing measurable. It is also the edge of the sweep, where an
+    optimum is a boundary rather than a turning point, and the render is visibly
+    darker: the concha falls into shadow and skin texture washes out, which
+    other consumers of these renders depend on. +1.2 is interior, on the
+    plateau, and keeps the texture.
+
+    THE SIDES MOVE TOGETHER at every sun, Mann-Whitney p=0.19 to 0.68. An
+    earlier version of this docstring reported a large side asymmetry (+4.20
+    points on left ears against -0.67 on right, p=3.4e-07) and a per-side sun
+    rule built on it. Both were artefacts of reflected heads being rendered
+    with inverted normals -- see escape_audit.load_ear. Nothing handed survives
+    the winding fix, and `light_mirror` must stay False for every ear.
 
     What it costs, seen: under the unfavourable sun the helix rim is front-lit
     and runs continuously into the scalp behind it -- no boundary for the 2D
