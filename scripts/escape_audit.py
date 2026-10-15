@@ -255,7 +255,8 @@ def landmark_view(img, cfg, pipe, mode, hw):
         flip  the mirrored image alone, mirrored back
         avg   the mean of the two arms, per landmark
         best  whichever arm's chosen detection scored higher
-        pair  BOTH arms, kept apart, as [("none", a), ("flip", b)]
+        pair  BOTH arms AND their mean, as [("none", a), ("flip", b),
+              ("avg", fused)] -- three levels for the price of two passes
 
     'avg', 'best' and 'pair' cost a second forward pass and no extra render.
     'pair' exists because the as-is and flipped arms are the two levels of a
@@ -271,7 +272,23 @@ def landmark_view(img, cfg, pipe, mode, hw):
         b = pick(_unmirror(pipe(np.ascontiguousarray(img[:, ::-1]), timestamp=0.0),
                            img.shape[1]), cfg, hw)
     if mode == "pair":
-        return [("none", a), ("flip", b)]
+        # The two arms AND their fusion, all from the one pair of forward
+        # passes. Fusion is in here because replacement and fusion were only
+        # ever compared under the stock sun -- the high-asymmetry regime, where
+        # one arm is simply better and averaging drags it down. Once the
+        # lighting is corrected the two arms are closer in quality, which is
+        # exactly the regime where averaging is supposed to win, so the earlier
+        # result cannot be carried over and has to be re-measured here.
+        fused = None
+        if a is not None and b is not None:
+            ua = np.asarray(a["landmarks"], float)
+            ub = np.asarray(b["landmarks"], float)
+            fused = dict(a, landmarks=((ua + ub) / 2.0).tolist(),
+                         confidence=(float(a["confidence"])
+                                     + float(b["confidence"])) / 2.0)
+        else:
+            fused = a or b
+        return [("none", a), ("flip", b), ("avg", fused)]
     if mode == "none":
         return a
     if mode == "flip":
