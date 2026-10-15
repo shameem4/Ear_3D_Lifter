@@ -52,6 +52,45 @@ thing to suspect is this pipeline's own crop/resize/uncrop chain carrying a
 half-pixel in a fixed direction, which would sit on top of theirs and could
 outweigh it -- in which case the magnitude agreement is partly luck.
 
+THE CROP CHAIN IS NOT REMOVED BY PINNING THE DETECTOR, which is what --pin
+alone does and why --self-crop exists. Two things in the pipeline sit between
+the pinned box and the model:
+
+    refine_roi DEFAULTS TO TRUE, and it re-derives the ROI from the MODEL'S
+    OWN LANDMARKS for up to ROI_MAX_REFINE passes. Any asymmetry feeds back,
+    so the two arms can settle on different crops entirely. Pinning the
+    detector box does nothing about it.
+
+    square_roi_crop places the window at int(round(cx - side/2)). The as-is
+    arm rounds cx - s/2 and the mirrored arm rounds W - cx - s/2, and those
+    agree only when the fractional parts cooperate. For an odd-sized window
+    the centre lands half a pixel off the image centre, and the mirror does
+    not cancel it.
+
+--self-crop cuts an integer square window here, mirrors it here, pins the
+detector to the whole window and turns refinement off, so the two inputs are
+exact mirrors by construction.
+
+    measured, 12 ears x 25 views    pinned box    --self-crop
+    mean dx                          +0.00532      +0.00131
+    per-view scatter                 +/-0.00750    +/-0.00356
+    constant vector                    3.1%         17.4%
+    full affine                       66.1%         71.5%
+
+Taking the chain out moves everything toward a translation, which says a good
+part of the pinned-box number was this pipeline and not the model. It does
+not get there: a constant vector still explains only 17.4% against their
+94.9% affine on photographs.
+
+THE y COMPONENT IS THE PART NO CONVENTION EXPLAINS. Under --self-crop the two
+inputs are exact mirrors and the un-mirror touches x only, so the model's y
+output should be identical between the arms. It is not: dy is -0.0078 crop
+widths, around 1% of the crop and comparable to dx. A half-pixel in an x
+labelling convention cannot produce it, and neither can anything in the crop
+arithmetic, because the crop is shared. Whatever else is true, this model's
+response to a mirrored input differs in a direction the mirror does not act
+in.
+
 WHAT THE LIGHTING CONTROL SETTLED. Under the anatomy sun the two sides had
 OPPOSITE-signed offsets, which read as chirality; symmetric lighting removes
 the reversal and leaves both positive. That reading was the renderer. A smaller
@@ -68,6 +107,8 @@ import sys
 
 import numpy as np
 
+ROI_EXPAND_HERE = 1.6          # the pipeline's own ROI_EXPAND, for --self-crop
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -82,6 +123,17 @@ def main():
     p.add_argument("--light", default="anatomy")
     p.add_argument("--same-crop", action=argparse.BooleanOptionalAction, default=True,
                    help="pin the mirrored arm to the mirror of the as-is arm's box")
+    p.add_argument("--out", default=None, metavar="CSV",
+                   help="per-point displacements, so the field can be re-cut "
+                        "without re-rendering")
+    p.add_argument("--self-crop", action=argparse.BooleanOptionalAction, default=False,
+                   help="cut and mirror an integer square window here, with the "
+                        "detector pinned to it and ROI refinement off, so the "
+                        "two inputs are exact mirrors and only the model differs")
+    p.add_argument("--int-box", action=argparse.BooleanOptionalAction, default=False,
+                   help="round the pinned box to integers so the crop and its "
+                        "mirror are exact; isolates the crop chain's own "
+                        "sub-pixel from the model's")
     p.add_argument("--sun-x", type=float, default=None,
                    help="override the sun's x. 0.0 makes the lighting symmetric "
                         "about the image's vertical axis, so mirroring the image "
@@ -124,9 +176,80 @@ def main():
         for yaw, pitch in angles:
             img, depth, cam = R3.render(h, dict(c, yaw=float(yaw), pitch=float(pitch)))
             hw = img.shape[:2]
-            A = pick(pipe(img, timestamp=0.0), c, hw)
-            if A is None:
+            A0 = pick(pipe(img, timestamp=0.0), c, hw)
+            if A0 is None:
                 continue
+            if a.self_crop:
+                # EVERY ROUNDING TAKEN OUT OF THE LOOP. The pipeline crops with
+                # x1 = int(round(cx - side/2)), so the as-is arm rounds
+                # cx - s/2 and the mirrored arm rounds W - cx - s/2; those are
+                # equal only when the fractional parts of the centre and the
+                # side happen to cooperate, so the two crops are mirrors to
+                # within a pixel rather than exactly. Worse, refine_roi
+                # re-derives the ROI from the model's OWN landmarks for up to
+                # ROI_MAX_REFINE passes, so an asymmetry feeds back and the two
+                # arms can settle on different crops entirely.
+                #
+                # So: cut an integer square window here, mirror it here, pin
+                # the detector to the whole window and turn refinement off.
+                # The two inputs are then exact mirrors by construction and
+                # nothing but the model can tell them apart.
+                y0, x0, y1, x1 = (float(v) for v in A0["bbox"])
+                side = max(x1 - x0, y1 - y0) * ROI_EXPAND_HERE
+                nn = int(round(side))
+                px = int(round((x0 + x1) / 2 - side / 2))
+                py = int(round((y0 + y1) / 2 - side / 2))
+                if nn < 32:
+                    continue
+                # Pad rather than skip: at these framings the 1.6x window runs
+                # off a 600 px render on most views, and dropping them would
+                # keep only the ears that happen to sit small in frame. Grey
+                # 128 is what the pipeline's own square_roi_crop pads with.
+                pad = max(0, -px, -py, px + nn - img.shape[1], py + nn - img.shape[0])
+                P = np.full((img.shape[0] + 2 * pad, img.shape[1] + 2 * pad, 3),
+                            128, np.uint8)
+                P[pad:pad + img.shape[0], pad:pad + img.shape[1]] = img
+                crop = np.ascontiguousarray(P[py + pad:py + pad + nn,
+                                              px + pad:px + pad + nn])
+                if crop.shape[0] != nn or crop.shape[1] != nn:
+                    continue
+                box = np.array([[0.0, 0.0, float(nn), float(nn), 1.0]], float)
+                keep = pipe.refine_roi
+                pipe.refine_roi = False
+                pipe.detector.detect = lambda _f, _b=box: _b
+                try:
+                    A = pick(pipe(crop, timestamp=0.0), c, (nn, nn))
+                    B = pick(_unmirror(pipe(np.ascontiguousarray(crop[:, ::-1]),
+                                            timestamp=0.0), nn), c, (nn, nn))
+                finally:
+                    pipe.detector.detect = _orig_detect
+                    pipe.refine_roi = keep
+                if A is None or B is None:
+                    continue
+                rows.append((np.asarray(A["landmarks"], float),
+                             np.asarray(B["landmarks"], float), float(nn), name))
+                continue
+            if a.int_box:
+                # THE CROP'S OWN HALF-PIXEL. The detector returns a float box.
+                # Arm A crops at x0 and arm B at W - x1, and if anything in the
+                # crop chain truncates, those two round in opposite directions
+                # and leave a sub-pixel asymmetry that no amount of pinning
+                # removes -- the same shape of defect Ear_Landmarker found in
+                # their translation augmentation. Rounding the box to integers
+                # first makes the crop and its mirror exact, so a difference
+                # that survives this is the model's and not the chain's.
+                W = img.shape[1]
+                y0, x0, y1, x1 = (float(np.round(v)) for v in A0["bbox"])
+                pipe.detector.detect = lambda _f, _b=np.array(
+                    [[y0, x0, y1, x1, 1.0]], float): _b
+                try:
+                    A = pick(pipe(img, timestamp=0.0), c, hw)
+                finally:
+                    pipe.detector.detect = _orig_detect
+                if A is None:
+                    continue
+            else:
+                A = A0
             if a.same_crop:
                 # THE DETECTOR IS THE NUISANCE. Each arm runs its own detection,
                 # so the two arms are cropped differently and that difference
@@ -136,6 +259,8 @@ def main():
                 # the only thing left between them is the model.
                 W = img.shape[1]
                 y0, x0, y1, x1 = A["bbox"]
+                if a.int_box:
+                    y0, x0, y1, x1 = (float(np.round(v)) for v in (y0, x0, y1, x1))
                 box = np.array([[y0, W - x1, y1, W - x0, 1.0]], float)
                 pipe.detector.detect = lambda _f, _b=box: _b
             try:
@@ -161,6 +286,22 @@ def main():
     print(f"\n{len(rows)} paired views, {D.shape[1]} points, "
           f"displacement in NORMALISED CROP WIDTHS\n")
     print(f"  mean dx {D[..., 0].mean():+.5f}   mean dy {D[..., 1].mean():+.5f}")
+
+    # THE DISCRIMINATOR. A property of the MODEL lives in its own input space,
+    # so it is constant in NORMALISED units and shrinks in pixels as the crop
+    # grows. Arithmetic in the crop/resize chain lives in frame pixels, so it
+    # is constant in PIXELS and shrinks in normalised units. Report both and
+    # see which one holds still.
+    Wv = np.array([r[2] for r in rows])
+    pxd = D[..., 0].mean(1) * Wv
+    nmd = D[..., 0].mean(1)
+    cv = lambda v: float(np.std(v) / abs(np.mean(v))) if np.mean(v) else float("nan")
+    print(f"  in crop PIXELS      {pxd.mean():+.3f} px   "
+          f"spread/mean {cv(pxd):.3f}")
+    print(f"  in CROP WIDTHS      {nmd.mean():+.5f}      "
+          f"spread/mean {cv(nmd):.3f}   (crop widths {Wv.min():.0f}-{Wv.max():.0f} px)")
+    print(f"  -> {'the crop chain' if cv(pxd) < cv(nmd) else 'the model'} "
+          f"is the steadier home for it")
     print(f"  predicted 1/W from a half-pixel label convention: {1/256:+.5f} "
           f"(their dx_anti x 2 = -0.00460)")
     print(f"  per-view mean dx: {D[..., 0].mean(1).mean():+.5f} "
@@ -189,6 +330,18 @@ def main():
         v = D[m][..., 0].mean(1)
         print(f"    {nm:11s} dx {v.mean():+.5f} +/- {v.std():.5f}   "
               f"negative on {100*np.mean(v < 0):3.0f}% of {m.sum()} views")
+
+    if a.out:
+        import csv as _csv
+        p = pathlib.Path(a.out); p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "w", newline="") as fh:
+            w = _csv.writer(fh)
+            w.writerow(["ear", "crop_px", "j", "dx_px", "dy_px"])
+            for (ua, ub, cw, nm) in rows:
+                for j in range(len(ua)):
+                    w.writerow([nm, f"{cw:.1f}", j,
+                                f"{ua[j,0]-ub[j,0]:.4f}", f"{ua[j,1]-ub[j,1]:.4f}"])
+        print(f"\n  wrote {p}")
 
     print(f"\n  {'strip':16s} {'dx':>9s} {'dy':>9s}")
     for nm, idx in zip(("outer_helix", "inner_helix", "concha_border",
