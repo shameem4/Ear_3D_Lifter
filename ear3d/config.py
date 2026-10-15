@@ -25,7 +25,14 @@ DEFAULTS = dict(
     ear=0,                  # which detected ear: 0 = highest confidence, 1 = other side
 
     # --- model --------------------------------------------------------------
-    run="manual_occ_s42",   # checkpoint under runs/checkpoints/<run>/
+    run=None,               # None FOLLOWS Ear_Landmarker's SHIPPED_RUN, which
+                            # is the policy: take their defaults, send changes
+                            # upstream. Naming a run here pins us to a model
+                            # they may have superseded -- theirs moved from
+                            # manual_occ_s42 to fixed_conv_s42 on 2026-10-14
+                            # and this would not have noticed. Set it to a run
+                            # name, or cfg["ckpt"] to a path, when a
+                            # measurement needs one model held still.
     device="cuda",
 
     # --- the 2D detector, on RENDERS ----------------------------------------

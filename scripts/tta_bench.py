@@ -80,7 +80,8 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from escape_audit import WRAP, audit_ear, summarise                  # noqa: E402
-from ear3d.config import DEFAULTS                                    # noqa: E402
+from ear3d.config import DEFAULTS
+from ear3d.escape import escape_rate, off_head                                    # noqa: E402
 from ear3d.twod import BLAZEEAR_DIR, make_pipeline                   # noqa: E402
 
 SIZE = 192                      # LANDMARKER_INPUT_SIZE
@@ -321,9 +322,14 @@ def main():
         out[arm] = rows
         d = np.array([float(r["d_snap_mm"]) for r in rows
                       if r.get("detected") and r.get("j", -1) >= 0])
-        print(f"  {arm:14s} n={len(d):6d}  >5mm {100 * (d > 5).mean():5.2f}%  "
-              f">10mm {100 * (d > 10).mean():5.2f}%  >20mm {100 * (d > 20).mean():5.2f}%",
-              flush=True)
+        # An off-head miss is an escape at every gate, not a missing row --
+        # ear3d.escape has the argument. The arms do not miss equally, so the
+        # old `d > t` here flattered whichever arm threw the most landmarks
+        # clean off the head.
+        print(f"  {arm:14s} n={len(d):6d}  >5mm {100 * escape_rate(d, 5):5.2f}%  "
+              f">10mm {100 * escape_rate(d, 10):5.2f}%  "
+              f">20mm {100 * escape_rate(d, 20):5.2f}%  "
+              f"off-head {100 * off_head(d):4.2f}%", flush=True)
         if a.out:
             import csv
             od = pathlib.Path(a.out); od.mkdir(parents=True, exist_ok=True)

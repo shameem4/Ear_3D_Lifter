@@ -72,7 +72,12 @@ def make_pipeline(cfg, run=None):
     # -- ab2_fixed_s42 has three files all at 0.0161, so asking for the run
     # would silently pick whichever sorted first rather than the epoch the
     # comparison is about.
-    ck = cfg.get("ckpt") or find_best_checkpoint(run or cfg.get("run"))
+    # find_best_checkpoint() with NO argument uses their SHIPPED_RUN; passing
+    # None explicitly makes it search every run, whose scores are not
+    # comparable. So the no-run case has to call it with nothing at all.
+    name = run or cfg.get("run")
+    ck = cfg.get("ckpt") or (find_best_checkpoint(name) if name
+                             else find_best_checkpoint())
     # smooth=False: the tracker is for video. On a single still it would smooth
     # a one-frame track against wall-clock time and shift the landmarks.
     # THE 2D REPO'S DEFAULTS ARE INHERITED, NOT RESTATED. cfg["flip_fusion"]

@@ -20,6 +20,7 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from ear3d.escape import escape_rate, off_head
 from ear3d.scheme import GROUP_NAMES                              # noqa: E402
 
 GATE = 10.0        # millimetres; the pinna stands 15-20 mm off the skull
@@ -64,11 +65,13 @@ def main():
     print(f"  p99                {np.percentile(d[ok], 99):8.2f} mm")
     print(f"  max                {d[ok].max():8.2f} mm")
     print()
-    print("ESCAPE RATE -- landmarks this far from the fitted ear")
+    print("ESCAPE RATE -- landmarks this far from the fitted ear.")
+    print(f"  a landmark whose pixel was BACKGROUND counts at every gate: "
+          f"{100 * off_head(d):.2f}% of these")
     print(f"  {'gate':>8}  {'raw lift':>9}  {'+cliff snap':>12}")
     for t in (2.0, 5.0, 10.0, 20.0, 30.0):
-        print(f"  {t:6.0f}mm  {100 * (draw[np.isfinite(draw)] > t).mean():8.2f}%"
-              f"  {100 * (d[ok] > t).mean():11.2f}%")
+        print(f"  {t:6.0f}mm  {100 * escape_rate(draw, t):8.2f}%"
+              f"  {100 * escape_rate(d, t):11.2f}%")
     print()
 
     far = ok & (d > gate)

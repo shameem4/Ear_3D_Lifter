@@ -517,10 +517,14 @@ def summarise(rows):
            f"landmark on a pixel showing something other than the ear: "
            f"{100 * (1 - om.mean()):.1f}%"]
     out.append("")
-    out.append("escape rate, distance from the fitted ear (snapped lift):")
+    out.append("escape rate, distance from the fitted ear (snapped lift).")
+    out.append("A landmark whose pixel was BACKGROUND counts as an escape at "
+               "every gate;")
+    out.append(f"that is {100 * off_head(d):.2f}% of these, and see ear3d.escape "
+               "for why.")
     for t in THRESHOLDS_MM:
-        out.append(f"  > {t:5.1f} mm   {100 * (d[ok] > t).mean():6.2f}%"
-                   f"   (raw lift {100 * (dr[np.isfinite(dr)] > t).mean():6.2f}%)")
+        out.append(f"  > {t:5.1f} mm   {100 * escape_rate(d, t):6.2f}%"
+                   f"   (raw lift {100 * escape_rate(dr, t):6.2f}%)")
     out.append(f"  median {np.median(d[ok]):.2f} mm   p90 {np.percentile(d[ok], 90):.2f}"
                f"   p99 {np.percentile(d[ok], 99):.2f}   max {d[ok].max():.2f}")
 

@@ -174,29 +174,24 @@ def load(path):
     return d
 
 
+from ear3d.escape import escape_rate as _er, off_head as _oh  # noqa: E402
+
+
 def rate(d, gate):
-    """Fraction of landmarks past the gate, COUNTING the ones that missed.
+    """Fraction past the gate, COUNTING the ones that missed. See ear3d.escape.
 
-    d_snap_mm is nan when the predicted pixel is background: the ray hit
-    nothing, so there is no 3D point and no distance to the ear. That is the
-    worst thing the 2D model can do, not a missing observation, and at any
-    gate "not within `gate` mm of the ear" is true of it. So it counts.
-
-    `~(d <= gate)` counts it; `d > gate` is False for nan and scores it as a
-    SUCCESS, which is what this script did until f65c713 and what changed the
-    fusion result -- see the docstring. Everything else in the repository drops
-    these rows instead (`escape_audit.summarise`, `escape_report`), which is
-    defensible for a single arm but not for comparing two, because the arms do
-    not miss equally: over the anatomy cell flip misses 0.744% of the time
-    against fusion's 0.493%, so dropping hands the flip arm 138 extra free
-    passes.
+    `~(d <= gate)` counts a NaN; `d > gate` is False for it and scores the
+    landmark as a SUCCESS, which is what this script did until f65c713 and
+    what changed the fusion result. The arms do not miss equally -- over the
+    anatomy cell flip misses 0.744% of the time against fusion's 0.493% -- so
+    dropping or forgiving them is not a wash.
     """
-    return np.mean(~(np.asarray(d, float) <= gate))
+    return _er(d, gate)
 
 
 def off_head(d):
     """Fraction whose pixel was background, so the lift had nothing to hit."""
-    return np.mean(~np.isfinite(np.asarray(d, float)))
+    return _oh(d)
 
 
 def side_test(D, k, gate, lights, arms):
