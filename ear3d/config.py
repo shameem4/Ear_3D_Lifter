@@ -99,15 +99,20 @@ DEFAULTS = dict(
                             # Measured on the same grid: 3.45% against 3.24%,
                             # so world wins -- but only in the orbited views,
                             # since the two are identical face-on.
-    light_mirror=False,     # flips the sun's x. True for geometry that arrived
-                            # through a REFLECTION, which keeps the sun's
-                            # relationship to the ANATOMY rather than to the
-                            # coordinate frame. escape_audit sets it from
-                            # det(canon2scan) < 0; the head-mesh path in
-                            # label.py has the same problem by a different
-                            # route -- its camera looks from opposite sides for
-                            # the two ears -- and is NOT measured, so it is
-                            # left at False rather than guessed at.
+    light_mirror=False,     # flips the sun's x. LEAVE IT FALSE FOR EVERY EAR.
+                            # c243e8f set it True for geometry that arrived
+                            # through a reflection, to keep the sun's relation
+                            # to the ANATOMY rather than to the frame, and
+                            # measured a gain. That gain was compensation for a
+                            # renderer bug: reflected heads were being shaded
+                            # with their normals pointing inward (see
+                            # escape_audit.load_ear), which is close to negating
+                            # the light, so mirroring the sun cancelled it.
+                            # With the winding fixed the mirror double-counts.
+                            # Measured over 112 ears x 25 views, right ears,
+                            # rate past 10 mm: mirrored 6.79%, not mirrored
+                            # 3.17%, worse on 55 of 56 subjects. Left ears are
+                            # not reflected and are untouched by the choice.
     ao_rays=24,             # rays per vertex. The cost of apply_skin is all here.
 
     # --- camera / framing (these mirror the training pipeline) --------------

@@ -619,14 +619,17 @@ def main():
                         "on-screen handedness, so a sun stated in the ear frame "
                         "is already in the ANATOMY's frame and means the same "
                         "thing on a left ear as on a right one.")
-    p.add_argument("--light", choices=list(LIGHT_ANCHORS), default="anatomy",
-                   help="where the sun sits relative to the ear's ANATOMY, which "
-                        "is independent of the on-screen handedness and is the "
-                        "other half of the 2x2 that separates a lighting effect "
-                        "from a handedness one. 'anatomy' grazes the occluding "
-                        "contour on every ear, 'opposite' front-lights it on "
-                        "every ear, 'frame' is the old sun fixed in the "
-                        "canonical frame, which does one to each side.")
+    p.add_argument("--light", choices=list(LIGHT_ANCHORS), default="frame",
+                   help="where the sun sits. 'frame' never mirrors it and is "
+                        "the default BECAUSE THE WINDING FIX CHANGED THE "
+                        "ANSWER: 'anatomy' was measured to graze the occluding "
+                        "contour on every ear, but that was on renders whose "
+                        "reflected heads had inward normals, and mirroring the "
+                        "sun was cancelling that rather than fixing lighting. "
+                        "On corrected renders 'anatomy' front-lights every "
+                        "right ear -- 6.79% against 3.17% past 10 mm, worse on "
+                        "55 of 56 subjects. 'anatomy' and 'opposite' are kept "
+                        "because they are still the two halves of the 2x2.")
     p.add_argument("--tta-side", choices=["both", "left", "right"], default="both",
                    help="restrict --tta to one side, to separate the handedness "
                         "gain from the flip acting as plain augmentation.")

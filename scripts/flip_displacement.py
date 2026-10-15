@@ -183,6 +183,7 @@ def main():
     import importlib
     from escape_audit import (WRAP, DEFAULTS, load_ear, ear_frame, pick,
                               _unmirror, light_mirror_for)
+    from ear3d.camera import orbit_extrinsic
     from ear3d.twod import make_pipeline
     from ear3d.scheme import STRIPS
     R3 = importlib.import_module("ear3d.render")
@@ -214,7 +215,16 @@ def main():
         c = dict(cfg, light_mirror=light_mirror_for(name, a.light))
         lmf = (lm - C) @ Rm.T / s_
         for yaw, pitch in angles:
-            img, depth, cam = R3.render(h, dict(c, yaw=float(yaw), pitch=float(pitch)))
+            # THE VIEW IS AN EXTRINSIC, NOT A CFG KEY. render() ignores
+            # cfg["yaw"]/["pitch"] entirely -- audit_ear sets the view with
+            # orbit_extrinsic and passes E. Putting the angles in the cfg
+            # rendered the FACE-ON view every time, so a 25-view grid was one
+            # view repeated 25 times and every per-view statistic in this
+            # script was inflated 25-fold. Found 2026-10-14 by noticing that
+            # all 25 views of an ear returned a byte-identical displacement
+            # and an identical crop width.
+            E = orbit_extrinsic(float(yaw), float(pitch), c)
+            img, depth, cam = R3.render(h, c, E=E)
             gt_full = cam.project(lmf)
             hw = img.shape[:2]
             A0 = pick(pipe(img, timestamp=0.0), c, hw)
