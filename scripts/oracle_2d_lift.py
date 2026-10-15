@@ -23,6 +23,13 @@ to lose to -- only occlusion and sampling across a discontinuity.
 Note the snap trades small errors for the tail: it costs 3.56% -> 4.21% past
 5 mm and buys 0.23% -> 0.00% past 20 mm.
 
+THE TWO det_* ROWS PREDATE the lighting fix in config.py and will now read
+better; the two oracle_* rows do not use the 2D model at all and are unchanged
+by it. The conclusion is unaffected -- the gap was two orders of magnitude and
+the fix closes well under one.
+
+This script takes ~40 minutes and has no argparse; it runs on import.
+
 The standard decomposition: run the lift on ORACLE 2D -- the ground-truth 3D
 landmarks projected into the same image -- so the 2D model is out of the loop
 entirely. Whatever error survives is the lifter's own: self-occlusion, grazing

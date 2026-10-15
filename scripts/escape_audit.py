@@ -255,14 +255,23 @@ def landmark_view(img, cfg, pipe, mode, hw):
         flip  the mirrored image alone, mirrored back
         avg   the mean of the two arms, per landmark
         best  whichever arm's chosen detection scored higher
+        pair  BOTH arms, kept apart, as [("none", a), ("flip", b)]
 
-    'avg' and 'best' cost a second forward pass and no extra render.
+    'avg', 'best' and 'pair' cost a second forward pass and no extra render.
+    'pair' exists because the as-is and flipped arms are the two levels of a
+    factor, and running them as two whole passes would re-render every view to
+    get an image the first pass already had. The mirror is an exact pixel
+    permutation and the depth buffer, the camera and the lift never see it, so
+    the two arms differ ONLY in what the model was shown -- which is what makes
+    them a clean contrast rather than two separate experiments.
     """
     a = pick(pipe(img, timestamp=0.0), cfg, hw) if mode != "flip" else None
     b = None
     if mode != "none":
         b = pick(_unmirror(pipe(np.ascontiguousarray(img[:, ::-1]), timestamp=0.0),
                            img.shape[1]), cfg, hw)
+    if mode == "pair":
+        return [("none", a), ("flip", b)]
     if mode == "none":
         return a
     if mode == "flip":
@@ -276,9 +285,49 @@ def landmark_view(img, cfg, pipe, mode, hw):
                 confidence=(float(a["confidence"]) + float(b["confidence"])) / 2.0)
 
 
+def is_reflected(name, dataset="hutubs"):
+    """Did this ear reach the canonical frame through a REFLECTION?
+
+    Right ears mirror about Z to get there, so their surface is handed the
+    opposite way round to a left ear's in the same frame. A world-fixed sun
+    then lights the two sides' anatomy from opposite directions, which costs
+    a factor of two in gross errors -- see ear3d.render.sun_world. Read from
+    the stored matrix rather than the "_right" suffix, because the determinant
+    is the invariant and the naming is a convention.
+    """
+    z = np.load(WRAP / "corpus/canon2scan" / f"{name}.npz", allow_pickle=True)
+    return bool(np.linalg.det(np.asarray(z["inverse"], float)[:3, :3]) < 0)
+
+
+# Where the sun sits relative to the EAR'S ANATOMY, independently of which way
+# round the geometry is handed. is_reflected() says whether this ear reached the
+# canonical frame through a reflection, so mirroring the sun for exactly those
+# ears is what keeps the sun in the ANATOMY's frame rather than the coordinate
+# frame. The three settings are the whole lighting axis:
+#
+#   anatomy   sun grazes the occluding contour on every ear      (the fix)
+#   opposite  sun front-lights the occluding contour on every ear (the worst case)
+#   frame     sun fixed in the canonical frame, so it grazes one
+#             side's anatomy and front-lights the other          (the old bug)
+#
+# "frame" is not a third lighting condition so much as the AVERAGE of the other
+# two taken one ear-side at a time, which is why it reads as a middling number
+# while hiding a factor of two between the sides.
+LIGHT_ANCHORS = ("anatomy", "opposite", "frame")
+
+
+def light_mirror_for(name, anchor, dataset="hutubs"):
+    """Should this ear's sun have its x flipped, under this anchor?"""
+    if anchor == "frame":
+        return False
+    refl = is_reflected(name, dataset)
+    return refl if anchor == "anatomy" else (not refl)
+
+
 def audit_ear(name, cfg, pipe, angles, dataset="hutubs", render_dir=None, radii=None,
-              mirror="none"):
+              mirror="none", light="anatomy"):
     """One row per (view, landmark). Returns (rows, note)."""
+    cfg = dict(cfg, light_mirror=light_mirror_for(name, light, dataset))
     head, ear, lm = load_ear(name, dataset, cfg)
     R, C, scale = ear_frame(head, lm, cfg)
     g_head = in_frame(head, R, C, scale)
@@ -292,52 +341,60 @@ def audit_ear(name, cfg, pipe, angles, dataset="hutubs", render_dir=None, radii=
     for yaw, pitch in angles:
         E = orbit_extrinsic(yaw, pitch, cfg)
         img, depth, cam = render(g_head, cfg, E=E)
-        best = landmark_view(img, cfg, pipe, mirror, depth.shape)
-        if best is None:
-            rows.append(dict(ear=name, yaw=yaw, pitch=pitch, j=-1, detected=0))
-            continue
-        uv = np.asarray(best["landmarks"], float)
-        conf = float(best["confidence"])
+        got = landmark_view(img, cfg, pipe, mirror, depth.shape)
+        arms = got if mirror == "pair" else [(mirror, got)]
 
-        # Both lifts, from the same pixels and the same buffer, so the cliff
-        # snap is measured against the thing it is meant to fix.
-        P_raw, hit_raw = backproject(depth, uv, cam)
-        P_snap, hit_snap, moved = backproject_snapped(depth, uv, cam, cfg)
-
-        # Extra snap radii, if asked. The radius only changes how an EXISTING
-        # depth buffer is post-processed, so sweeping it costs no renders --
-        # which is the whole reason it is swept here rather than by re-running.
-        sweep = {}
-        for rr in (radii or ()):
-            Pr, _, mr = backproject_snapped(depth, uv, cam, dict(cfg, snap_radius=rr))
-            # Paired error too, because surface distance is BLIND to a point
-            # sliding along the contour -- a wider snap could cut the distance
-            # while making the correspondence worse, and this project has been
-            # caught by exactly that blindness before.
-            sweep[rr] = (_surface_mm(scene, Pr, scale), mr,
-                         np.linalg.norm(Pr - lm_f, axis=1) * scale)
-
+        # The ear's own silhouette does not depend on what the MODEL was shown,
+        # so it is rendered once per view and shared across the arms.
         dm = mask_depth(g_ear, cfg, E, cfg["size"])
-        on_mask = on_ear(depth, dm, uv, scale)
 
-        d_raw = _surface_mm(scene, P_raw, scale)
-        d_snap = _surface_mm(scene, P_snap, scale)
-        paired = np.linalg.norm(P_snap - lm_f, axis=1) * scale
+        for tta_name, best in arms:
+            if best is None:
+                rows.append(dict(ear=name, yaw=yaw, pitch=pitch, j=-1, detected=0,
+                                 tta=tta_name))
+                continue
+            uv = np.asarray(best["landmarks"], float)
+            conf = float(best["confidence"])
 
-        for j in range(55):
-            rows.append(dict(
-                ear=name, yaw=yaw, pitch=pitch, j=j, detected=1, conf=conf,
-                group=group_of(j),
-                on_mask=int(on_mask[j]),
-                hit_raw=int(hit_raw[j]), hit_snap=int(hit_snap[j]),
-                snapped=int(moved[j]),
-                d_raw_mm=d_raw[j], d_snap_mm=d_snap[j], paired_mm=paired[j],
-                **{f"d_r{rr:g}_mm": sweep[rr][0][j] for rr in sweep},
-                **{f"moved_r{rr:g}": int(sweep[rr][1][j]) for rr in sweep},
-                **{f"paired_r{rr:g}_mm": sweep[rr][2][j] for rr in sweep}))
+            # Both lifts, from the same pixels and the same buffer, so the cliff
+            # snap is measured against the thing it is meant to fix.
+            P_raw, hit_raw = backproject(depth, uv, cam)
+            P_snap, hit_snap, moved = backproject_snapped(depth, uv, cam, cfg)
 
-        if render_dir is not None:
-            _overlay(render_dir, name, yaw, pitch, img, dm, uv, on_mask, d_snap)
+            # Extra snap radii, if asked. The radius only changes how an EXISTING
+            # depth buffer is post-processed, so sweeping it costs no renders --
+            # which is the whole reason it is swept here rather than by re-running.
+            sweep = {}
+            for rr in (radii or ()):
+                Pr, _, mr = backproject_snapped(depth, uv, cam, dict(cfg, snap_radius=rr))
+                # Paired error too, because surface distance is BLIND to a point
+                # sliding along the contour -- a wider snap could cut the distance
+                # while making the correspondence worse, and this project has been
+                # caught by exactly that blindness before.
+                sweep[rr] = (_surface_mm(scene, Pr, scale), mr,
+                             np.linalg.norm(Pr - lm_f, axis=1) * scale)
+
+            on_mask = on_ear(depth, dm, uv, scale)
+
+            d_raw = _surface_mm(scene, P_raw, scale)
+            d_snap = _surface_mm(scene, P_snap, scale)
+            paired = np.linalg.norm(P_snap - lm_f, axis=1) * scale
+
+            for j in range(55):
+                rows.append(dict(
+                    ear=name, yaw=yaw, pitch=pitch, j=j, detected=1, conf=conf,
+                    tta=tta_name, group=group_of(j),
+                    on_mask=int(on_mask[j]),
+                    hit_raw=int(hit_raw[j]), hit_snap=int(hit_snap[j]),
+                    snapped=int(moved[j]),
+                    d_raw_mm=d_raw[j], d_snap_mm=d_snap[j], paired_mm=paired[j],
+                    **{f"d_r{rr:g}_mm": sweep[rr][0][j] for rr in sweep},
+                    **{f"moved_r{rr:g}": int(sweep[rr][1][j]) for rr in sweep},
+                    **{f"paired_r{rr:g}_mm": sweep[rr][2][j] for rr in sweep}))
+
+            if render_dir is not None:
+                _overlay(render_dir, f"{name}_{tta_name}", yaw, pitch, img, dm,
+                         uv, on_mask, d_snap)
     return rows
 
 
@@ -509,14 +566,34 @@ def main():
                         "needs no help, and measured on the GT test set "
                         "full-frame beats two-stage 97.6%% to 89.3%%. "
                         "--no-full-frame measures the two-stage path.")
-    p.add_argument("--tta", choices=["none", "flip", "avg", "best"], default="none",
+    p.add_argument("--tta", choices=["none", "flip", "avg", "best", "pair"],
+                   default="none",
                    help="test-time augmentation by horizontal mirror. 'flip' "
                         "replaces the as-rendered pass, 'avg' averages the two "
                         "per landmark, 'best' keeps whichever scored higher. "
                         "Canonical frame puts left and right ears at opposite "
                         "on-screen handedness and the model is worse on the one "
                         "left ears land in -- detector confidence 0.631 against "
-                        "0.837 -- so a flip is not a neutral augmentation here.")
+                        "0.837 -- so a flip is not a neutral augmentation here. "
+                        "'pair' keeps the as-is and flipped arms APART in a "
+                        "'tta' column, both from the same render, which is how "
+                        "the mirror is crossed with another factor without "
+                        "paying for the renders twice.")
+    p.add_argument("--sun-x", type=float, default=None, metavar="X",
+                   help="set the sun's x component directly, in the EAR frame, "
+                        "and pin --light to 'frame'. This is the unambiguous "
+                        "lever: the canonical frame plus ear_frame() normalise "
+                        "on-screen handedness, so a sun stated in the ear frame "
+                        "is already in the ANATOMY's frame and means the same "
+                        "thing on a left ear as on a right one.")
+    p.add_argument("--light", choices=list(LIGHT_ANCHORS), default="anatomy",
+                   help="where the sun sits relative to the ear's ANATOMY, which "
+                        "is independent of the on-screen handedness and is the "
+                        "other half of the 2x2 that separates a lighting effect "
+                        "from a handedness one. 'anatomy' grazes the occluding "
+                        "contour on every ear, 'opposite' front-lights it on "
+                        "every ear, 'frame' is the old sun fixed in the "
+                        "canonical frame, which does one to each side.")
     p.add_argument("--tta-side", choices=["both", "left", "right"], default="both",
                    help="restrict --tta to one side, to separate the handedness "
                         "gain from the flip acting as plain augmentation.")
@@ -546,9 +623,15 @@ def main():
         cfg["detector_full_frame"] = a.full_frame
     if a.select is not None:
         cfg["select"] = a.select
+    if a.sun_x is not None:
+        d = list(cfg["light_dir"])
+        cfg["light_dir"] = (float(a.sun_x), d[1], d[2])
+        a.light = "frame"
     pipe, ck = make_pipeline(cfg)
     print(f"landmarker {ck.name}  (conf {cfg['detector_conf']}, "
           f"full_frame {cfg['detector_full_frame']}, select {cfg['select']})")
+    print(f"sun {tuple(cfg['light_dir'])} frame={cfg['light_frame']} "
+          f"anchor={a.light}  tta={a.tta} ({a.tta_side})")
 
     if a.grid is not None:
         ax = np.arange(-a.grid, a.grid + 1e-6, a.grid_step)
@@ -562,7 +645,7 @@ def main():
     for i, name in enumerate(ears):
         try:
             got = audit_ear(name, cfg, pipe, angles, render_dir=rdir,
-                            radii=a.snap_sweep,
+                            radii=a.snap_sweep, light=a.light,
                             mirror=a.tta if a.tta_side in
                                    ("both", "left" if name.endswith("_left")
                                             else "right") else "none")
@@ -575,7 +658,14 @@ def main():
         print(f"[{i + 1}/{len(ears)}] {name}: {len(got)} rows, {n_far} past 10 mm")
 
     print()
-    print(summarise(rows))
+    arms = sorted({x.get("tta") for x in rows if x.get("tta")})
+    if len(arms) > 1:
+        for t in arms:
+            print(f"----- tta = {t} " + "-" * 40)
+            print(summarise([x for x in rows if x.get("tta") == t]))
+            print()
+    else:
+        print(summarise(rows))
 
     if a.out:
         keys = sorted({k for x in rows for k in x})

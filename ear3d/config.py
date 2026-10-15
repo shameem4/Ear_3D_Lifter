@@ -88,6 +88,26 @@ DEFAULTS = dict(
                             # training images with a realistic tone instead.
     skin_seed=0,            # also drives the blotching and grain
     ao_strength=0.75,       # how hard ambient occlusion darkens cavities
+
+    # --- the sun ---
+    # Direction the light TRAVELS. Only the x sign was ever in question and it
+    # is worth 5.34% -> 3.24% of landmarks landing more than 10 mm off the ear;
+    # render.sun_world() carries the table and the mechanism. The old value was
+    # the x-negated one, hard-coded, for every ear.
+    light_dir=(0.3, -0.4, -0.9),
+    light_frame="world",    # "view" rotates the sun with the camera instead.
+                            # Measured on the same grid: 3.45% against 3.24%,
+                            # so world wins -- but only in the orbited views,
+                            # since the two are identical face-on.
+    light_mirror=False,     # flips the sun's x. True for geometry that arrived
+                            # through a REFLECTION, which keeps the sun's
+                            # relationship to the ANATOMY rather than to the
+                            # coordinate frame. escape_audit sets it from
+                            # det(canon2scan) < 0; the head-mesh path in
+                            # label.py has the same problem by a different
+                            # route -- its camera looks from opposite sides for
+                            # the two ears -- and is NOT measured, so it is
+                            # left at False rather than guessed at.
     ao_rays=24,             # rays per vertex. The cost of apply_skin is all here.
 
     # --- camera / framing (these mirror the training pipeline) --------------

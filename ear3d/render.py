@@ -20,10 +20,66 @@ LINE_MATERIAL.shader = "unlitLine"
 LINE_MATERIAL.line_width = 2.0
 
 
-def light_scene(scene, background):
-    """The one lighting setup, shared by the snapshot and the 3D window."""
+# The sun, as a direction the light TRAVELS, in the render's view frame: x right,
+# y down, z into the scene, the same convention camera_ke() builds E in. Stated
+# in VIEW space rather than world space so the ear's occluding contour keeps its
+# shadow whatever the geometry's handedness -- which is the whole point, below.
+SUN_VIEW = (0.3, 0.4, 0.9)
+SUN_LUX = 95000
+
+
+def sun_world(cfg, E):
+    """The sun as a world direction, for a render whose extrinsic is E.
+
+    THIS IS NOT COSMETIC. Measured over 40 ears x 25 views x 55 points, moving
+    only the sun's x component moves the rate of landmarks that land more than
+    10 mm off the ear:
+
+        sun x   all     left    right
+        -0.3   5.34%   7.97%   2.72%      the hard-coded value this replaces
+         0.0   4.28%   5.87%   2.69%
+        +0.3   3.58%   3.76%   3.39%
+        per ear side                3.24%  (left 3.76, right 2.72)
+
+    and per ear it is a clean swap -- pp11_left 12.73% -> 0.00% while
+    pp10_right goes 0.00% -> 12.73%. Right ears reach the canonical frame
+    through a reflection, so a world-fixed sun lights the two sides' anatomy
+    from opposite directions and one of them always loses.
+
+    What it costs, seen: under the unfavourable sun the helix rim is front-lit
+    and runs continuously into the scalp behind it -- no boundary for the 2D
+    model to find, and the outer landmark strip drifts onto the scalp. Under the
+    favourable one the rim is grazed and throws a dark crease along the
+    occluding contour, and the same model puts the same strip on the silhouette.
+
+    So the sun is specified in the VIEW frame and rotated into the world per
+    render. `light_mirror` flips its x for geometry that arrived through a
+    reflection, which restores the light's relationship to the anatomy rather
+    than to the coordinate frame.
+
+    This is NOT evidence that the 2D model is handedness-biased; it was tested
+    on its own 861-photo held-out split and is flip-symmetric there to within
+    0.55% of mean NME, unsigned. The bug was always here.
+    """
+    d = np.asarray(cfg.get("light_dir", SUN_VIEW), float)
+    if cfg.get("light_mirror"):
+        d = d * [-1.0, 1.0, 1.0]
+    if cfg.get("light_frame", "view") == "world":
+        return d
+    return np.asarray(E, float)[:3, :3].T @ d          # view -> world
+
+
+def light_scene(scene, background, direction=None):
+    """The one lighting setup, shared by the snapshot and the 3D window.
+
+    `direction` is a WORLD direction; callers that have a cfg and an extrinsic
+    should pass sun_world(cfg, E). The default keeps the pre-2026-10-14
+    world-fixed sun, so the viewers and the audit renderers that have no
+    extrinsic to hand are unchanged.
+    """
     scene.set_background([*background, 1.0])
-    scene.scene.set_sun_light([-0.3, -0.4, -0.9], [1.0, 1.0, 1.0], 95000)
+    d = (-0.3, -0.4, -0.9) if direction is None else tuple(float(x) for x in direction)
+    scene.scene.set_sun_light(list(d), [1.0, 1.0, 1.0], SUN_LUX)
     scene.scene.enable_sun_light(True)
 
 
@@ -37,8 +93,8 @@ def render(mesh, cfg, size=None, background=(0.5, 0.5, 0.5), E=None):
     size = size or cfg["size"]
     r = o3d.visualization.rendering.OffscreenRenderer(size, size)
     r.scene.add_geometry("m", mesh, MATERIAL)
-    light_scene(r.scene, background)
     K, E = camera_ke(size, cfg, E)
+    light_scene(r.scene, background, sun_world(cfg, E))
     r.setup_camera(K, E, size, size)
     img = np.asarray(r.render_to_image())[:, :, :3]
     depth = np.asarray(r.render_to_depth_image(z_in_view_space=True))
