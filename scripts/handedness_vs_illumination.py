@@ -16,88 +16,78 @@ them, and cuts the table.
     side           recorded per row, so it is a stratum rather than a factor
                    that has to be read out of an interaction
 
-TWO INSTRUMENT BUGS WERE FOUND ON 2026-10-14 AND EVERY NUMBER BELOW MOVED.
-Read this section before quoting anything from this file.
+SETTLED 2026-10-14: THERE IS NO SIDE RESIDUAL TO EXPLAIN. It was two bugs of
+this project's own, and the second of them had been flattering the very ears
+the first made look worse.
 
     THE GATE. `np.mean(d > gate)` is False for NaN, and d_snap_mm is NaN when
-    the predicted pixel is background -- the landmark missed the head entirely.
-    The worst outcome the 2D model can produce was scoring as a SUCCESS. The
-    arms do not miss equally (flip 0.744%, fusion 0.493%, none 0.422%), so this
-    was not a wash: it manufactured the fusion result. Fixed -- see rate().
+    the predicted pixel is background -- the landmark missed the head
+    entirely. The worst outcome the 2D model can produce was scoring as a
+    SUCCESS, and the arms do not miss equally, so it was not a wash. Fixed:
+    see rate().
 
-    THE WINDING. canon2scan's `inverse` has det < 0 for every right ear, and
+    THE WINDING. canon2scan's `inverse` has det < 0 for every right ear and
     load_ear applied it without reversing the triangle winding, so every
-    right-ear render was shaded with normals pointing INTO the head (+0.720
-    outward on pp1_left, -0.720 on pp1_right). Fixed in escape_audit.load_ear.
-    The depth buffer never used normals, so distances are sound -- but EVERY
-    LEFT-AGAINST-RIGHT NUMBER BELOW WAS MEASURED ON THOSE RENDERS and is
-    confounded. A re-wound run is what settles the side rows.
+    right-ear render was shaded with normals pointing INTO the head. Fixed in
+    escape_audit.load_ear. Re-running the same 112 ears with the winding as
+    the only difference: left ears byte-identical, depth buffers and
+    silhouettes bit-identical (so the lift was never affected), right ears
+    2.89% -> 6.79% past 10 mm on 54 of 56 subjects, and the side gap REVERSED
+    from left-worse +0.91pp to left-better -2.99pp.
 
-MEASURED POST-GATE-FIX, PRE-WINDING-FIX. 112 HUTUBS ears (56 subjects) x 25
-views x 55 points, anatomy cell, rate past 10 mm with a miss counted:
+    THE SUN RULE WAS CANCELLING THE WINDING. Inverting normals is close to
+    negating the light, and c243e8f mirrors the sun for reflected geometry, so
+    the two cancelled. With the winding right the mirror double-counts and
+    front-lights every right ear. Turning it off takes right ears 6.79% ->
+    3.17%, worse on 1 of 56. `--light frame` is now the default.
+
+CORRECTED BASELINE. 112 HUTUBS ears (56 subjects) x 25 views x 55 points,
+winding fixed, sun never mirrored, an off-head miss counted as an escape:
 
     arm      all     left    right   off head
-    none    3.35%   3.80%   2.89%    0.492%
-    flip    2.68%   3.05%   2.32%    0.701%
-    avg     2.65%   2.92%   2.38%    0.503%
+    none    3.48%   3.80%   3.17%    0.660%
+    flip    2.95%   3.05%   2.86%    1.068%
+    avg     2.72%   2.92%   2.52%    0.717%
+
+    side gap, paired within subject:  none +0.63pp (38/56, p=0.018)
+                                      flip +0.19pp (33/56, p=0.118)
+                                      avg  +0.40pp (40/56, p=0.009)
 
 WHAT IT SETTLES.
 
-1. ILLUMINATION AND HANDEDNESS ARE BOTH REAL AND INDEPENDENT, but smaller than
-   first reported. On the 40-ear 2x2 with the gate fixed: illumination alone
-   1.68x (was 1.75x), the mirror alone 1.31x (was 1.58x), together 2.21x (was
-   2.78x). At 112 ears the mirror is 1.25x, better on 84 of 112, p=9.8e-10.
-   Correcting the sun does not shrink the mirror's gain.
+1. THE SIDE GAP IS SMALL AND MARGINAL, and the flip arm's does not reach
+   significance at 56 subjects. Every mechanism once proposed for it is now
+   moot: it was the renderer. The one exclusion that still means something is
+   the ground truth, because it never involved a render -- the wrap fits are
+   equally good on both sides over all 112 ears paired within subject
+   (fit->scan median 29/56 p=0.97, p95 27/56 p=0.49, scan->fit median 30/56
+   p=0.81, p95 29/56 p=0.71). Its 40-ear subset read right-better by 11-14%
+   at p~0.2, and at full power the direction REVERSES and the effect
+   vanishes, which is the best cautionary example this project has produced.
 
-2. REPLACEMENT AND COORDINATE FUSION ARE TIED under corrected lighting: 2.68%
-   against 2.65%, fusion better on 48 of 112, p=0.89. The earlier claim that
-   replacement wins, on 33 of 40 ears at p=4.1e-04, was the gate bug -- it
-   forgave the flip arm's extra off-head misses. Re-cut across four cells with
-   misses counted, replacement wins clearly only in the WORST-lit cell
-   (sun -0.3, p=0.007), weakly in the next (opposite, p=0.045), and the two
-   best-lit cells are dead heats. That is a gradient in the direction of
-   Ear_Landmarker's magnitude account, which I had reported as refuted.
+2. COORDINATE FUSION BEATS REPLACEMENT: 2.72% against 2.95%, fusion better on
+   69 of 112 ears, p<0.001. This reverses what this file said twice. The
+   earlier "replacement wins on 33 of 40 ears at p=4.1e-04" was the gate bug
+   forgiving the flip arm's extra off-head misses (1.068% against 0.660%),
+   and Ear_Landmarker predicted the reversal from a mechanism: their model
+   carries an ANTI-EQUIVARIANT x offset from a sub-pixel defect in its
+   flip/translation augmentation, which a coordinate average cancels exactly
+   and a replacement only moves to the other sign. Their matched A/B
+   collapses it and leaves accuracy unchanged in either direction.
 
-   Coordinate fusion, not heatmap: for a soft-argmax decoder, averaging the
-   probability maps is algebraically the same operation (77f821c).
+   Coordinate fusion, not heatmap: for a soft-argmax decoder the expectation
+   is linear, so probability-space fusion is algebraically the same operation
+   (77f821c). Only logit-space differs, and it sharpens.
 
-3. THE SIDE GAP IS SIGNIFICANT AND CONFOUNDED. Paired within subject over 56
-   subjects, left minus right: none +0.91pp (38/56, p=0.004), flip +0.73pp
-   (41/56, p=0.000), avg +0.54pp (37/56, p=0.011). The 40-ear version read
-   p=0.05-0.08 and I downgraded it on that; counting the off-head misses turns
-   it significant, because that is exactly where the asymmetry lives (left
-   0.662% against right 0.182% in the none arm). But the right ears in this
-   table were rendered inside out, so this does not yet say whether the 2D
-   model prefers a side or my renderer does.
+3. THE MIRROR IS WORTH 1.18x, not the 1.58x first reported. Each correction
+   took a bite: 1.58 -> 1.31 (gate) -> 1.25 (56 subjects) -> 1.18 (winding).
 
-   Four mechanisms were excluded on the old renders and those exclusions are
-   now suspect too: lighting, presented handedness (ear_frame puts EVERY ear in
-   left form, so presentation is constant by construction), chirality and frame
-   orientation. One exclusion survives untouched, because it never involved a
-   render: the wrap fits themselves are equally good on both sides, over all
-   112 ears paired within subject (fit->scan median 29/56 p=0.97, p95 27/56
-   p=0.49, scan->fit median 30/56 p=0.81, p95 29/56 p=0.71). Its 40-ear subset
-   read right-better by 11-14% at p~0.2 -- right direction, right size -- and
-   at full power the direction REVERSES and the effect vanishes.
-
-4. THE MIRROR'S GAIN IS A PRESENTATION EFFECT. Because ear_frame presents every
-   ear in left form, the mirror presents it in right form. The gain is then the
-   same multiplier on both sides and the side gap passes through it unchanged:
-   left 3.800 -> 3.047 and right 2.892 -> 2.319, both 1.247x. Per-ear medians
-   1.204x and 1.285x, Mann-Whitney p=0.27, so read this as "no detectable side
-   difference in the multiplier". Ear_Landmarker measures a right-favoured bias
-   on photographs across nine models, three architectures and both
-   initialisations; this is the same sign in a setup where presentation is
-   controlled rather than stratified. Caveat: mirroring the image mirrors the
-   shading too, and lighting is worth 1.68x, so this does not separate
-   presentation from "the sun now comes from the other side".
-
-ONE-SIDED, NOT ANTISYMMETRIC -- AND NOW SUSPECT. c243e8f described the lighting
-effect as a clean swap, from two ears at one view. Over 40 ears at 25 views the
-per-ear preference for the sun's sign was +4.20 points on left ears (19 of 20)
-and -0.67 on right (8 of 20), Mann-Whitney p=3.4e-07. That is a left-against-
-right comparison on inside-out right-ear renders, so it is pending the re-wound
-run like the rest of section 3.
+NOT RE-DERIVED, AND SO NOT TO BE QUOTED. The illumination factor (1.75x, then
+1.68x), the 1.247x presentation multiplier, the one-sided per-ear sun result
+(+4.20pp left against -0.67 right) and everything in the light2x2 cells were
+all measured with half the corpus shaded inside out. The mechanism behind
+them survives -- a front-lit occluding contour has no edge, and that is
+visible in a render -- but the numbers do not.
 
 Usage:
     python scripts/handedness_vs_illumination.py                  # run + table
