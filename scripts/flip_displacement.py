@@ -27,110 +27,51 @@ anatomical pattern. So this reports the field, not a rate:
 A near-pure x translation of the predicted size is a third confirmation from a
 third domain. Anything else is not.
 
-MEASURED, 12 ears x 25 views, both arms pinned to exactly mirrored crops:
+MEASURED PROPERLY 2026-10-14, after a bug in THIS script was fixed: it passed
+the view angles in the cfg dict, and render() ignores cfg["yaw"]/["pitch"] --
+the view is an extrinsic, set by orbit_extrinsic. Every 25-view grid was the
+face-on view 25 times, so every per-view figure this file used to print was
+one measurement repeated. Caught by asking why 25 different pictures returned
+a byte-identical displacement.
 
-                        anatomy sun     symmetric sun (--sun-x 0)
-    mean dx             +0.00518        +0.00532
-    consistent sign     42% of views    83% of views
-    left ears           -0.00514        +0.00241
-    right ears          +0.01550        +0.00824
-    constant vector       1.0%            3.1%
-    full affine          52.9%           66.1%     (theirs 94.9%)
+20 ears x 25 real views, model only (--self-crop --raw-predict, so no
+detector, no square_roi_crop, no refinement), symmetric sun (--sun-x 0, so
+mirroring the image is an exact symmetry of the shading):
 
-PIN THE CROP OR MEASURE NOTHING. Free-running, each arm detects its own box and
-that scatter swamps the effect -- per-view dx scatter exceeded its own mean and
-dy read +0.0048, which collapsed to +0.0002 once the crops were pinned.
+    mean dx +1.142 px   mean dy -1.906 px   crop widths 89-998 px
+    one constant in PIXELS removes  1.0% of the dx field,  6.5% of dy
+    one constant in CROP WIDTHS    -0.2%                   8.1%
+    a full affine map              79.9%   (theirs: 94.9% on photographs)
 
-PARTIAL CONFIRMATION, AND THE PART THAT FAILS MATTERS. Under symmetric lighting
-there is a consistently signed offset of +0.00532 against 0.0039-0.0046
-predicted, which is close for a prediction made from a half-pixel in another
-repository's preprocessing. But the SIGN IS OPPOSITE to theirs (-0.0046) with
-the same un-mirror convention, and the field is not a translation: 3.1% from a
-constant vector against their 94.9% affine, with structure that survives the
-lighting control (superior_crus +0.0111, concha_border -0.0028). The first
-thing to suspect is this pipeline's own crop/resize/uncrop chain carrying a
-half-pixel in a fixed direction, which would sit on top of theirs and could
-outweigh it -- in which case the magnitude agreement is partly luck.
+THE FIELD IS MOSTLY NOISE HERE, WHICH IS THE HEADLINE. A single constant
+absorbs about one percent of dx. On Ear_Landmarker's photographs the same
+statistic is essentially a rigid shift. So whatever systematic component
+exists on renders sits under scatter that their domain does not have, and the
+earlier "35.8% from a constant vector" came from the repeated-view bug.
 
-THE CROP CHAIN IS NOT REMOVED BY PINNING THE DETECTOR, which is what --pin
-alone does and why --self-crop exists. Two things in the pipeline sit between
-the pinned box and the model:
+THE DIFFICULTY CUT, which was pre-registered with its falsifier:
 
-    refine_roi DEFAULTS TO TRUE, and it re-derives the ROI from the MODEL'S
-    OWN LANDMARKS for up to ROI_MAX_REFINE passes. Any asymmetry feeds back,
-    so the two arms can settle on different crops entirely. Pinning the
-    detector box does nothing about it.
+    quartile      NME      dx          dy
+    Q1 easiest   0.0274   -0.00097   -0.00351
+    Q2           0.0367   +0.00082   -0.00386
+    Q3           0.0458   +0.00153   -0.00270
+    Q4 hardest   0.1810   +0.01158   +0.00006
 
-    square_roi_crop places the window at int(round(cx - side/2)). The as-is
-    arm rounds cx - s/2 and the mirrored arm rounds W - cx - s/2, and those
-    agree only when the fractional parts cooperate. For an odd-sized window
-    the centre lands half a pixel off the image centre, and the mirror does
-    not cancel it.
+THE FALSIFIER FIRED. The stated test was "if dy is flat across quartiles the
+domain reading is wrong and I will say so". dy is flat across Q1-Q3 and
+vanishes in Q4, so "dy is incidental non-equivariance on inputs the model
+handles badly" is REFUTED. dy is largest where the model does best, which is
+the signature of a systematic offset rather than difficulty-driven noise.
 
---self-crop cuts an integer square window here, mirrors it here, pins the
-detector to the whole window and turns refinement off, so the two inputs are
-exact mirrors by construction.
+dx does rise with difficulty, steeply, but Q4's NME is 0.18 of a crop width
+-- the model has simply lost the ear there -- so that is disagreement
+amplitude, not a systematic effect worth a mechanism.
 
-    measured, 12 ears x 25 views    pinned box    --self-crop
-    mean dx                          +0.00532      +0.00131
-    per-view scatter                 +/-0.00750    +/-0.00356
-    constant vector                    3.1%         17.4%
-    full affine                       66.1%         71.5%
-
-Taking the chain out moves everything toward a translation, which says a good
-part of the pinned-box number was this pipeline and not the model. It does
-not get there: a constant vector still explains only 17.4% against their
-94.9% affine on photographs.
-
---self-crop IS STILL NOT THE MODEL ALONE. square_roi_crop runs inside the
-pipeline regardless, re-cropping at 1.6x with int(round(cx - side/2)); for an
-odd window that sits half a pixel off centre, so the mirrored arm's input is
-the mirror SHIFTED BY A PIXEL. --raw-predict calls LandmarkPredictor.predict
-directly and removes the last of it. 6 ears, 18 views, no crop code at all:
-
-    ear           n      dx px    dy px      dx/n       dy/n
-    pp10_left    609    +3.943   -0.157   +0.00647   -0.00026
-    pp10_right   839    +4.336   -7.914   +0.00517   -0.00943
-    pp11_left    820    +1.171   -7.687   +0.00143   -0.00937
-    pp11_right   638    +2.818   -1.826   +0.00442   -0.00286
-    pp12_left    642    -0.332   -1.072   -0.00052   -0.00167
-    pp12_right   648    +0.903   -2.837   +0.00139   -0.00438
-    overall      dx +0.00306 widths    dy -0.00466 widths
-
-dx goes UP when the crop code is removed (+0.00131 through square_roi_crop,
-+0.00306 without it), so some of the chain's asymmetry was cancelling some of
-the model's. Two wrongs, partly.
-
-THE RESIZE IS NOT THE CULPRIT EITHER. F.interpolate(bilinear,
-align_corners=False) maps dst to (dst+0.5)*scale - 0.5, which is
-mirror-symmetric at any input size. Max |flip(resize) - resize(flip)| over
-random crops at n = 187, 192, 193, 256, 383, 384, 609, 610, 839 is 1e-7 to
-6e-5 with no parity structure, so a mirrored odd-width crop resizes to the
-mirror of the resize.
-
-THE y COMPONENT IS THE PART NO CONVENTION EXPLAINS. Under --self-crop the two
-inputs are exact mirrors and the un-mirror touches x only, so the model's y
-output should be identical between the arms. It is not: dy is -0.0078 crop
-widths, around 1% of the crop and comparable to dx, and -0.00466 with no
-crop code at all. A half-pixel in an x labelling convention cannot produce
-it, the crop arithmetic cannot, and neither can the resize. dy is also immune
-to the un-mirror convention by construction, since only x is transformed.
-This model's response to a mirrored input differs in a direction the mirror
-does not act in.
-
-IT IS A DOMAIN EFFECT, not a contradiction of Ear_Landmarker. Their dy_anti
-on photographs is -0.000234 and sign-inconsistent across subsets, about 20x
-smaller on the SAME checkpoint. Normalisation does not explain it in the
-direction needed: this crop is 1.6x the ear box, so a tighter crop would make
-their figure larger, not smaller. [[head1-is-render-domain]] already has this
-pipeline 5x worse on renders than on photographs, and out of domain is
-exactly where a network's incidental asymmetries stop being suppressed.
-
-WHAT THE LIGHTING CONTROL SETTLED. Under the anatomy sun the two sides had
-OPPOSITE-signed offsets, which read as chirality; symmetric lighting removes
-the reversal and leaves both positive. That reading was the renderer. A smaller
-side difference does survive (+0.0024 against +0.0082) with both ears presented
-in left form, and is unexplained.
+AND THE WITHIN-EAR CLAIM WAS BACKWARDS. Reported earlier as dx being constant
+within an ear and varying between ears, which was the repeated-view bug.
+With real views the variation is mostly WITHIN an ear: dx within-ear sd
+0.01336 against between-ear 0.00309, dy 0.00674 against 0.00217. Views, not
+ears, carry it.
 
 Usage:
     python scripts/flip_displacement.py --ears 10 --grid 30 --grid-step 15
