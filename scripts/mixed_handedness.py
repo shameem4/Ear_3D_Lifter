@@ -135,10 +135,19 @@ def main():
         # project keeps having, so the comparison is computed.
         cr = 100 * rate(np.where(cs, f, n), a.gate)
         fr, mr = 100 * rate(g, a.gate), 100 * rate(f, a.gate)
-        vs = lambda r, nm: ("worse than" if cr > r else
-                            "level with" if abs(cr - r) < 0.02 else "better than") + " " + nm
+        # TOLERANCE FIRST. Testing `cr > r` first made the "level with" branch
+        # unreachable on the worse side, so a 0.002pp gap to fusion printed as
+        # "worse than" -- and I then paraphrased that as worse than the arms
+        # the selector chooses BETWEEN, which it is not: it beats as-presented.
+        vs = lambda r, nm: ("level with" if abs(cr - r) < 0.02 else
+                            "worse than" if cr > r else "better than") + " " + nm
+        # Name the arms a selector actually picks between, so the printed line
+        # cannot be read as a claim about `none`/`flip` when it is not.
         print(f"  by DETECTION CONFIDENCE {cr:6.3f}%  -- the obvious selector: "
               f"{vs(fr, 'fusion')}, {vs(mr, 'always-mirror')}.")
+        print(f"     The arms it chooses between are as-presented "
+              f"{100*rate(n, a.gate):.3f}% and mirrored {mr:.3f}%, so it beats "
+              f"doing nothing and does not beat the fixed rule.")
         print(f"     It picks the mirrored arm on {100*cs.mean():.0f}% of points, "
               f"and reaches none of the {fr - 100*rate(ov, a.gate):.3f}pp "
               f"a per-view rule has available.")
