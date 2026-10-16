@@ -132,7 +132,15 @@ def head_pose(mesh, cfg):
             R = frame_from(front, up, front=front)
             if R is None:
                 continue
-            g = in_frame(mesh, R, C0, 1.0)
+            # SCALE BY THE MESH, NOT 1.0. The camera is set up for a mesh
+            # spanning ~2 units; a head in millimetres spans ~300, so a unit
+            # scale showed MediaPipe an extreme close-up of skin and it found
+            # a face on 0 of 6 views. This worked while heads were
+            # HUTUBS-normalised and broke silently when the corpus moved to
+            # mm -- the measurements in this docstring predate that. With the
+            # mesh framed, faces are found on 2 of 6 views again.
+            sc = float(np.abs((np.asarray(mesh.vertices) - C0) @ R.T).max())
+            g = in_frame(mesh, R, C0, sc)
             img, depth, cam = render(g, cfg)
             res = fl.detect(mp.Image(image_format=mp.ImageFormat.SRGB,
                                      data=np.ascontiguousarray(img)))
@@ -149,7 +157,7 @@ def head_pose(mesh, cfg):
             # The landmarks come back in THIS frame's coordinates; everything
             # downstream works in the mesh's own, so convert before using them.
             # Skipping this put the ear view 62-70 deg off instead of 10-24.
-            P = (P @ R) + C0
+            P = (P * sc @ R) + C0
             # THE EAR DIRECTION IS 90 DEG FROM THE NOSE: the normal of the
             # sagittal plane, from the head's own up and forward axes.
             #
