@@ -22,16 +22,16 @@
 # user), so 4 jobs already occupy ~29 of 32 cores and 8 measured SLOWER
 # (0.09 vs 0.12 fits/s). There is no GPU path.
 #
-# Everything heavy runs under tools/guard_run.sh: a systemd scope with a
-# hard MemoryMax. A units bug once put 21.9 GB per worker into a proximity
-# query and took the machine down; RLIMIT_AS cannot catch it, because
-# imports alone reserve ~16 GB of virtual address space.
+# Everything heavy runs under $CODE_UTILITIES/guard_run.sh: a systemd scope
+# with a hard MemoryMax. A units bug once put 21.9 GB per worker into a
+# proximity query and took the machine down; RLIMIT_AS cannot catch it,
+# because imports alone reserve ~16 GB of virtual address space.
 set -euo pipefail
 P=/home/shameem/.conda/envs/mocap/bin/python
 R=/mnt/14BE47C2BE479ADE/Code/ear_stuff/Ear_Landmarker
 W=/mnt/14BE47C2BE479ADE/Code/ear_stuff/wrap_work
 C=$W/corpus
-G=$R/scripts/guard_run.sh
+G=${CODE_UTILITIES:?CODE_UTILITIES is unset -- export it (see Code/utilities)}/guard_run.sh
 T=$W/templates
 N=$C/nocp_v1                    # pass 1: no control points, default rung
 LAD=$C/ladder92                 # pass 2: ladder, only on the ears that fold

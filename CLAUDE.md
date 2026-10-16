@@ -21,7 +21,7 @@ running this repository's code — `ear3d/__init__` imports open3d.
 
 Run anything heavy under the cgroup guard, which caps memory and wall time:
 
-    scripts/guard_run.sh <mem> <secs> <log> <cmd...>
+    "$CODE_UTILITIES/guard_run.sh" <mem> <secs> <log> <cmd...>
 
 Prefer GPU, and parallelise on CPU where the GPU is idle.
 
