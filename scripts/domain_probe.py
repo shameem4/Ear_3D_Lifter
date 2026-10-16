@@ -128,7 +128,18 @@ def main():
                 # ungated tail -- reads from a different stream position than
                 # in an arm where it fired. The arms were never paired; they
                 # were misaligned in a way that looked like pairing.
-                rng = np.random.default_rng((a.seed, rep))
+                # SEEDED ON THE EAR AND VIEW TOO, not just the rep. Seeding
+                # on (seed, rep) alone made every stage gate decide once per
+                # rep and then replicate across all 250 views: with 3 reps the
+                # occluder either fires everywhere or nowhere. The first run
+                # that way returned "occlude only" identical to the tail-only
+                # control to four digits over 41250 samples, which is the
+                # signature of replication, not of a weak stage. It also
+                # inflates n without adding independence, so the table looked
+                # far more precise than it was.
+                rng = np.random.default_rng(
+                    (a.seed, rep, i, int(yaw * 10) + 3600,
+                     int(pitch * 10) + 3600))   # offset: seeds must be >= 0
                 im = base if raw else photo_realism(base, rng, **kw)
                 stash.pop("conf", None)
                 best = pick(pipe(np.asarray(im), timestamp=0.0), c, img.shape[:2])
