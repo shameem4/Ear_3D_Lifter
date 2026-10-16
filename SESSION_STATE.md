@@ -78,7 +78,8 @@ Why not the alternatives:
 
 ## Closed since: heatmap confidence
 
-Tested and refuted, and the reason is ARCHITECTURAL rather than domain --
+Tested and refuted. The reason is ARCHITECTURAL **and** domain, not one
+or the other -- 82ffa76 corrected an earlier false dichotomy here --
 see `scripts/cache_conf.py`. Within-landmark Spearman -0.018 over 27,500
 landmark-views, with the degenerate-signal explanation ruled out.
 `heatmap_confidence` measures softmax CONCENTRATION; Deep-MVLM filters on
@@ -94,6 +95,19 @@ error on PHOTOGRAPHS? If it fails there too, the architectural account is
 complete; if it works there, domain matters after all.
 
 ## Open, in the order I would take them
+
+0. **Nothing in view selection, and that is now measured.** Soft weighting by
+   the table loses (3% of the median for 21x the gross-error rate: the hard
+   top-K cut IS the gross-error protection). And best-8 has ALREADY reached
+   the oracle on gross errors -- 0.032% for both at conf 0.05. The "0.75 mm
+   oracle gap" cited above is oracle-**3**, a ceiling measured at a different
+   K, and oracle-3 is worse than best-8 on gross errors (0.455%). So the
+   remaining oracle gap is MEDIAN-ONLY and item 1's premise ("aims straight
+   at the oracle gap") no longer holds for escapes. See 83b947c.
+
+   Also measured: detector gate 0.70 against 0.05 costs 4x on the vote's
+   gross-error rate (0.130% against 0.032%), because 11.4% of landmark-views
+   stop detecting and the vote runs on fewer rays. 0.05 stays.
 
 1. **~~Per-point heatmap confidence as a view filter.~~ CLOSED, see above.** Deep-MVLM
    (RasmusRPaulsen/Deep-MVLM, arXiv 1910.06007) filters views by the
