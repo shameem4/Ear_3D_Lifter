@@ -36,6 +36,11 @@ def main():
     p.add_argument("--grid", type=float, default=30.0)
     p.add_argument("--grid-step", type=float, default=15.0)
     p.add_argument("--out", default="runs/raycache")
+    p.add_argument("--conf", type=float, default=None,
+                   help="detector confidence. Default: whatever config says "
+                        "(0.05). A higher gate yields fewer rays per point, "
+                        "so the question it answers is the VOTE's gross-error "
+                        "rate, never the per-view yield.")
     a = p.parse_args()
 
     from escape_audit import (DEFAULTS, WRAP, load_ear, ear_frame,
@@ -45,6 +50,8 @@ def main():
     from ear3d.twod import make_pipeline
 
     cfg = dict(DEFAULTS)
+    if a.conf is not None:
+        cfg["detector_conf"] = float(a.conf)
     pipe, ck = make_pipeline(cfg)
     g = a.grid
     angles = [(float(y), float(q))
@@ -53,7 +60,8 @@ def main():
     names = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz")
                    if str(np.load(f, allow_pickle=True)["dataset"]) == a.dataset)[:a.ears]
     out = pathlib.Path(a.out); out.mkdir(parents=True, exist_ok=True)
-    print(f"{ck.parent.name}/{ck.name}  {len(names)} ears x {len(angles)} views")
+    print(f"{ck.parent.name}/{ck.name}  {len(names)} ears x {len(angles)} views"
+          f"  detector_conf={cfg['detector_conf']}")
 
     for i, nm in enumerate(names):
         dst = out / f"{nm}.npz"

@@ -53,6 +53,47 @@ def fit(o, d, use, method, thresh):
     return lsq_point(O, D)
 
 
+def soft_point(o, d, w, irls=3):
+    """Weighted fit over ALL views, then robustify on the residuals.
+
+    best-K spends the table twice over as a hard include/exclude: it drops
+    view K+1 even when it is barely worse than view K, and then treats views 1
+    and K as equals. Weighting by 1/table^2 keeps every view and lets the
+    table say how much each is worth.
+
+    The reason that needs IRLS rather than a plain weighted solve: the table
+    is a PRIOR, learned over other subjects, and it cannot know that on THIS
+    ear a good view happens to have been occluded by hair or that the detector
+    put the point on the scalp. A gross 2D error in a high-weight view would
+    otherwise dominate the fit, which is the robustness RANSAC was providing.
+    Tukey biweight on the ray residuals, so the prior decides who to trust and
+    the data can still overrule it.
+    """
+    from ear3d.triangulate import lsq_point, ray_distance
+    w = np.asarray(w, float)
+    ok = np.isfinite(o).all(1) & np.isfinite(d).all(1) & np.isfinite(w) & (w > 0)
+    if ok.sum() < 2:
+        return None
+    O, D_, W = o[ok], d[ok], w[ok]
+    q = lsq_point(O, D_, W)
+    if q is None or not irls:
+        return q
+    for _ in range(irls):
+        r = np.asarray(ray_distance(q, O, D_), float)
+        sig = np.median(r) / 0.6745
+        if not np.isfinite(sig) or sig <= 0:
+            break
+        u = r / (4.685 * sig)
+        rw = np.where(u < 1.0, (1.0 - u ** 2) ** 2, 0.0)
+        if (W * rw > 0).sum() < 2:
+            break
+        q2 = lsq_point(O, D_, W * rw)
+        if q2 is None:
+            break
+        q = q2
+    return q
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -60,6 +101,9 @@ def main():
     p.add_argument("--thresh", type=float, default=0.03)
     p.add_argument("--ks", type=int, nargs="*", default=[3, 5, 8, 12, 25])
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--irls", type=int, default=3,
+                   help="IRLS iterations for the soft arms (0 = plain "
+                        "weighted least squares, no robustness)")
     a = p.parse_args()
 
     files = sorted(pathlib.Path(a.cache).glob("*.npz"))
@@ -110,6 +154,31 @@ def main():
     allv = lambda j, K, g: np.arange(V)
     orac = lambda j, K, g: np.argsort(np.nan_to_num(g[:, j], nan=np.inf))[:K]
 
+    # 1/err^2, with a never-detected (landmark, view) treated as worthless
+    # rather than as NaN, which would poison the whole weight vector.
+    tw = 1.0 / (np.nan_to_num(table, nan=1e6) ** 2 + 1e-6)
+
+    def run_soft(K, irls):
+        out = []
+        for k in TE:
+            z = D[k]
+            o, d, lm_f, s = z["o"], z["d"], z["lm_f"], float(z["scale"])
+            for j in range(55):
+                w = tw[:, j].copy()
+                if K < V:
+                    m = np.zeros(V)
+                    m[order[:K, j]] = 1.0
+                    w = w * m
+                q = soft_point(o[:, j], d[:, j], w, irls)
+                out.append(np.linalg.norm(q - lm_f[j]) * s if q is not None else np.nan)
+        return np.array(out)
+
+    def show(nm, K, x):
+        f = x[np.isfinite(x)]
+        print(f"  {nm:16s} {K:3d} {np.percentile(f,50):7.2f} "
+              f"{np.percentile(f,90):7.2f} {100*np.mean(f>5):7.2f}% "
+              f"{100*np.mean(f>10):7.3f}% {100*np.mean(~np.isfinite(x)):5.1f}%")
+
     print(f"\npaired error on {len(TE)} HELD-OUT ears, mm")
     print(f"  {'rule':16s} {'K':>3s} {'p50':>7s} {'p90':>7s} {'>5mm':>8s} {'>10mm':>8s} {'nan':>6s}")
     for method in ("ransac",):
@@ -119,11 +188,15 @@ def main():
                     continue
                 if K >= V:
                     nm, fn = "all views", allv
-                x = run(fn, method, K)
-                f = x[np.isfinite(x)]
-                print(f"  {nm:16s} {K:3d} {np.percentile(f,50):7.2f} "
-                      f"{np.percentile(f,90):7.2f} {100*np.mean(f>5):7.2f}% "
-                      f"{100*np.mean(f>10):7.3f}% {100*np.mean(~np.isfinite(x)):5.1f}%")
+                show(nm, K, run(fn, method, K))
+
+    # THE SOFT ARMS. Same split, same table, same metric, so the only thing
+    # that differs from best-K is how the table is spent.
+    print(f"\n  soft weighting, w = 1/table^2 (irls={a.irls})")
+    for K in a.ks:
+        show("soft-K+irls" if a.irls else "soft-K", K, run_soft(K, a.irls))
+    show("soft-all+irls" if a.irls else "soft-all", V, run_soft(V, a.irls))
+    show("soft-all no irls", V, run_soft(V, 0))
 
 
 if __name__ == "__main__":

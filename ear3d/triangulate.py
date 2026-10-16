@@ -25,21 +25,28 @@ from __future__ import annotations
 import numpy as np
 
 
-def lsq_point(origins, dirs):
+def lsq_point(origins, dirs, w=None):
     """Point minimising the summed squared distance to a set of rays.
 
     Each ray contributes (I - n n^T), the projector onto the plane perpendicular
     to it; the normal equations are then a 3x3 solve. Returns None when the rays
     are degenerate -- near-parallel rays leave the system ill-conditioned, which
     is exactly the case with a narrow baseline.
+
+    `w` optionally weights each ray. It exists because a per-(landmark, view)
+    accuracy table says some rays are better than others, and a hard top-K cut
+    can only express that as include-or-exclude: it discards view K+1 even when
+    it is barely worse than view K, and then treats views 1 and K as equals.
+    Unweighted behaviour is unchanged when w is None.
     """
     o = np.asarray(origins, float)
     n = np.asarray(dirs, float)
     n = n / np.linalg.norm(n, axis=1, keepdims=True)
+    ww = np.ones(len(o)) if w is None else np.asarray(w, float)
     A = np.zeros((3, 3))
     b = np.zeros(3)
-    for oi, ni in zip(o, n):
-        P = np.eye(3) - np.outer(ni, ni)
+    for oi, ni, wi in zip(o, n, ww):
+        P = (np.eye(3) - np.outer(ni, ni)) * wi
         A += P
         b += P @ oi
     if np.linalg.cond(A) > 1e8:
