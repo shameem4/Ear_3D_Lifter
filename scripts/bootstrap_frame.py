@@ -182,6 +182,19 @@ def main():
                         "(default). --no-up-from-face for the old behaviour.")
     p.add_argument("--no-up-from-face", dest="up_from_face",
                    action="store_false")
+    p.add_argument("--table", default=None,
+                   help="ray cache to learn the per-(landmark, view) accuracy "
+                        "table from, e.g. runs/raycache. The refinement lift "
+                        "currently feeds EVERY view into RANSAC, which is the "
+                        "'all views' arm the table was built to beat (2.70 "
+                        "against 2.24 mm).")
+    p.add_argument("--table-k", type=int, default=8,
+                   help="views per landmark when a table is given")
+    p.add_argument("--table-from", type=int, default=2,
+                   help="first refinement pass that uses the table. The table "
+                        "was learned in the GT frame, so it is misapplied "
+                        "exactly while the frame is still wrong -- ~20 deg at "
+                        "pass 1. Default 2; set 1 to test that reasoning.")
     p.add_argument("--passes", type=int, default=2,
                    help="frame refinements after the chop. Pass 1 is chop+PCA; "
                         "each further pass lifts the landmarks in the current "
@@ -213,7 +226,31 @@ def main():
     from ear3d.camera import orbit_extrinsic
     from ear3d.triangulate import ransac_point
 
-    def lift_in_frame(mesh, front, up, centre, cfg, pipe, half, pts=None):
+    def build_table(cache, exclude):
+        """table[v, j] = median 2D error in px, over cached ears.
+
+        Built here rather than imported from view_table.py because that
+        script computes it inline inside main(). Subjects in `exclude` are
+        dropped: the bootstrap is evaluated on ears whose subjects are in
+        the cache, and scoring a frame with a table trained on those same
+        subjects would be leakage.
+        """
+        files = [f for f in sorted(pathlib.Path(cache).glob("*.npz"))
+                 if f.stem.rsplit("_", 1)[0] not in exclude]
+        if len(files) < 10:
+            sys.exit(f"only {len(files)} ears left in {cache} after exclusion")
+        err, ang = [], None
+        for f in files:
+            z = np.load(f, allow_pickle=True)
+            err.append(np.linalg.norm(z["uv"] - z["gt_uv"], axis=2))
+            ang = z["angles"]
+        t = np.nanmedian(np.stack(err), axis=0)          # (V, 55)
+        print(f"view table from {len(files)} ears ({len(exclude)} subjects "
+              f"held out), {t.shape[0]} views")
+        return t, np.argsort(np.nan_to_num(t, nan=1e9), axis=0), ang
+
+    def lift_in_frame(mesh, front, up, centre, cfg, pipe, half, pts=None,
+                      order=None, K=8, grid=None):
         """Triangulate the 55 landmarks from a small grid in this frame."""
         R = frame_from(front, up, front=front)
         if R is None:
@@ -222,7 +259,11 @@ def main():
         ref = V if pts is None else np.asarray(pts)
         sc = float(np.abs((ref - centre) @ R.T).max())
         g = in_frame(mesh, R, centre, sc)
-        angles = [(y, q) for y in (-half, 0.0, half) for q in (-half, 0.0, half)]
+        # When a table is in play the grid must be the grid it was LEARNED
+        # on, or the view indices mean different angles.
+        angles = ([(float(y), float(q)) for y, q in grid] if grid is not None
+                  else [(y, q) for y in (-half, 0.0, half)
+                        for q in (-half, 0.0, half)])
         O = np.full((len(angles), 55, 3), np.nan)
         Dd = np.full((len(angles), 55, 3), np.nan)
         for v, (yy, qq) in enumerate(angles):
@@ -239,6 +280,11 @@ def main():
         P = np.full((55, 3), np.nan)
         for j in range(55):
             m = np.isfinite(O[:, j]).all(1) & np.isfinite(Dd[:, j]).all(1)
+            if order is not None:
+                keep = np.zeros(len(angles), bool)
+                keep[order[:K, j]] = True
+                if (m & keep).sum() >= 2:        # fall back if too few survive
+                    m = m & keep
             if m.sum() < 2:
                 continue
             q = ransac_point(O[m, j], Dd[m, j], 0.03)
@@ -251,6 +297,13 @@ def main():
     cfg = dict(DEFAULTS)
     pipe, ck = make_pipeline(cfg)
     print(f"{ck.parent.name}/{ck.name}")
+
+    TBL = None
+    if a.table:
+        names_eval = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz")
+                            if str(np.load(f, allow_pickle=True)["dataset"])
+                            == a.dataset)[:a.ears]
+        TBL = build_table(a.table, {n.rsplit("_", 1)[0] for n in names_eval})
 
     if a.render_dir:
         pathlib.Path(a.render_dir).mkdir(parents=True, exist_ok=True)
@@ -358,8 +411,12 @@ def main():
         traj = []
         for it in range(max(0, a.passes - 1)):
             try:
+                use_tbl = TBL is not None and (it + 2) >= a.table_from
                 P3 = lift_in_frame(head, front_i, up_i, cc, cfg, pipe,
-                                   a.refine_grid, Pw)
+                                   a.refine_grid, Pw,
+                                   order=TBL[1] if use_tbl else None,
+                                   K=a.table_k,
+                                   grid=TBL[2] if use_tbl else None)
             except Exception as e:                      # noqa: BLE001
                 traj.append(("lift failed", str(e)[:40])); break
             if P3 is None or np.isfinite(P3).all(1).sum() < 20:
