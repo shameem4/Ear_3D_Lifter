@@ -76,9 +76,26 @@ Why not the alternatives:
   (4.61 against 2.41), because it drops the rim points that define the
   plane. It would plausibly help on hairy scans; HUTUBS cannot say.
 
+## Closed since: heatmap confidence
+
+Tested and refuted, and the reason is ARCHITECTURAL rather than domain --
+see `scripts/cache_conf.py`. Within-landmark Spearman -0.018 over 27,500
+landmark-views, with the degenerate-signal explanation ruled out.
+`heatmap_confidence` measures softmax CONCENTRATION; Deep-MVLM filters on
+heatmap AMPLITUDE, which under a coordinate loss is unidentifiable
+(softmax(x+c) == softmax(x)) and therefore absent from this model. A softmax
+can say "unsure where" but never "nothing here".
+
+TO RELAY TO Ear_Landmarker when a session exists (theirs did not survive the
+restart): a usable per-point confidence needs an auxiliary amplitude term
+(MSE or BCE on the heatmap against a Gaussian) beside the coordinate loss.
+And a question only they can answer cheaply -- does concentration predict
+error on PHOTOGRAPHS? If it fails there too, the architectural account is
+complete; if it works there, domain matters after all.
+
 ## Open, in the order I would take them
 
-1. **Per-point heatmap confidence as a view filter.** Deep-MVLM
+1. **~~Per-point heatmap confidence as a view filter.~~ CLOSED, see above.** Deep-MVLM
    (RasmusRPaulsen/Deep-MVLM, arXiv 1910.06007) filters views by the
    per-landmark HEATMAP PEAK before its RANSAC. We tested *detection
    confidence* and found it worthless (r=-0.010) -- a different quantity.

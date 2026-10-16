@@ -34,15 +34,41 @@ views for one landmark (CV 0.590) than between landmarks (CV 0.237) -- so
 it moves along exactly the axis selection would use. It simply does not
 know which view placed the point well.
 
-So the lead from Deep-MVLM is closed for this model. Note what that does
-and does not say: an earlier test here measured DETECTION confidence
-(-0.010) and concluded "confidence does not work", which was unsupported
-because it was the wrong quantity. This is the right quantity and it also
-fails, so the conclusion is now earned. It is also specific to this setup --
-Deep-MVLM trains its network ON renders, where its heatmaps are in-domain,
-while this pipeline runs a photograph model out of domain
-([[head1-is-render-domain]]), which is the standing explanation for
-confident-but-wrong heatmaps here.
+THE REASON IS ARCHITECTURAL, NOT DOMAIN. An earlier version of this
+docstring blamed render-domain miscalibration. That was plausible and
+wrong; reading the model settles it.
+
+`heatmap_confidence` measures the spatial CONCENTRATION of a softmax.
+Deep-MVLM reads the AMPLITUDE of an hourglass heatmap trained with MSE
+against Gaussian targets. Only one of those can report absence:
+
+  - softmax(x + c) == softmax(x), so under a coordinate loss through
+    soft_argmax the absolute amplitude is UNIDENTIFIABLE. Ear_Landmarker
+    trains with WingLoss on coordinates, so nothing constrains it.
+  - a softmax must put its mass somewhere, so it can say "unsure WHERE"
+    and never "nothing is HERE" -- and "nothing is here" is the case view
+    selection needs flagged.
+  - MSE on Gaussian targets pins the amplitude, so a flat near-zero map is
+    a trained way to report absence. That is the channel Deep-MVLM filters
+    on and this architecture does not have.
+
+So the spread of the logits is the only information present, and
+heatmap_confidence already extracts it. There is no second channel that
+was missed. Their docstring says as much -- "heuristic scale, not a
+calibrated probability", written for temporal smoothing -- and it does what
+it claims; this test asked it for something it never offered.
+
+For Ear_Landmarker, if a usable per-point confidence is ever wanted it
+needs an auxiliary term constraining amplitude (MSE or BCE on the heatmap
+against a Gaussian) alongside the coordinate loss. Not proposed here, just
+noted: the current one cannot be fixed by reading it better, because the
+quantity is not in the model.
+
+STILL AN OPEN QUESTION, and cheap for them: does concentration predict
+error on PHOTOGRAPHS? This is 20 ears of renders with a photograph-trained
+model, so it bounds out-of-domain behaviour only. If it fails there too the
+architectural account is the whole story; if it works there, domain matters
+after all and this explanation is incomplete.
 
 The cache is kept: conf is stored per (view, landmark) alongside the rays,
 so any later idea that wants it needs no re-render.
