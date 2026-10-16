@@ -12,6 +12,23 @@ and the thing rays are supposed to fix: a 2D detection asserts a RAY, and
 what that ray later hits is a separate question, so the depth-sampling
 failure that puts a landmark on the scalp cannot occur.
 
+THE BASELINE MATTERS MORE THAN THE METHOD, and the first version of this
+docstring got it wrong. Comparing against the per-view rate pools 25 answers
+per landmark and scores each -- a DIAGNOSTIC, not a product. Nobody ships
+that. Against the fair alternative, one good view used alone:
+
+    paired mm                        p50     p90    >5mm    >10mm
+    best single view (-15,-15)      2.78    5.40   13.06%   1.039%
+    face-on alone                   2.83    5.55   13.20%   0.860%
+    all 25 pooled (the diagnostic)  3.31    6.92   24.13%   3.679%
+    RANSAC over 25 views            2.71    4.99    9.97%   0.162%
+
+So triangulation is worth 2.5% on the median and 6.4x on gross errors.
+It buys ROBUSTNESS, NOT ACCURACY -- which is what RANSAC is for, and the
+conclusion still stands because gross errors are what this project exists to
+fix. But the "26x" quoted earlier compared a product against a diagnostic
+and is withdrawn.
+
 WHAT THE REDUNDANCY IS WORTH, from the per-view audit of the same grid.
 Over 6160 (ear, landmark) pairs at 25 views, 89.06% are clean in EVERY view
 and only 0.130% fail in a majority. So a combine that survives a minority of
