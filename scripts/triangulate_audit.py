@@ -23,8 +23,52 @@ This script asks whether lsq and ransac reach it. Same ears, same grid, same
 renderer and the shipped 2D configuration, scored the same way: distance from
 the fused point to the wrap-fitted ear, in millimetres, rate past 10 mm.
 
+RE-SEATING, AND A TRAP IN SCORING IT. A triangulated point is a free ray
+intersection with nothing holding it to a surface, so unlike a depth lift it
+can float: 19.0% of raw points sit more than 2 mm off the ear. Projecting
+each point onto the nearest surface fixes that, and the fix is real -- paired
+distance to the ground-truth landmark, which no snap consults, improves from
+2.89 to 2.57 mm median and gross paired halves, 0.182% to 0.091%.
+
+BUT THE SURFACE METRIC AFTER SNAPPING IS LARGELY TAUTOLOGICAL. Snapping to a
+surface guarantees distance to that surface is zero, and makes distance to a
+nearby one small. A landmark that the 2D model put 10 mm from truth gets
+pulled onto the scalp BESIDE the ear and its surface score improves while it
+stays 10 mm from truth -- pp11_right's j=19 did exactly that, reading 4.32 mm
+from the fit and 9.90 mm from its own ground-truth point. Score a re-seat on
+PAIRED distance only, and keep the surface distance as a PRE-snap diagnostic.
+
+WHICH SURFACE, measured on paired distance over 20 ears:
+
+    snap to    p50    p75    p90    p99    >5mm     >10mm
+    raw       2.89   4.08   5.40   8.33   14.09%   0.182%
+    head      2.57   3.79   5.21   8.33   11.18%   0.091%
+    fit       2.68   3.86   5.12   7.98   10.82%   0.091%
+
+Neither dominates. The head wins in the body, because for a typical point the
+nearest head surface IS the ear and the fit carries its own ~0.6 mm residual;
+the fit wins in the tail, because the head offers scalp as a landing site and
+the fit does not. Both halve the gross rate and then stop, which is the honest
+headline: snapping cannot fix a landmark the 2D model placed wrongly, only
+move it to a nearby surface.
+
+GATE IT. The points a snap harms are the ones that were already seated -- raw
+surface median 0.64 mm for the harmed against 1.14 mm for the helped. Only
+moving points beyond a threshold keeps the gain and cuts the disturbance:
+
+    T (mm)  moved   paired p50   paired>10mm   harmed
+    0.0     100%        2.57        0.091%      26.7%
+    0.5      71%        2.60        0.091%      15.1%
+    2.0      19%        2.75        0.091%       3.4%
+    never     0%        2.89        0.182%       0.0%
+
+The whole gross benefit survives down to T=5, where under 1% of points move.
+"Harmed" counts any worsening however small, so it overstates the damage;
+the aggregate that matters is paired p50, which prefers T=0 by 0.03 mm.
+
 Usage:
     python scripts/triangulate_audit.py --ears 20
+    python scripts/triangulate_audit.py --ears 20 --reseat head --reseat-gate 0.5
 """
 
 import argparse
@@ -47,6 +91,14 @@ def main():
     p.add_argument("--grid-step", type=float, default=15.0)
     p.add_argument("--gate", type=float, default=10.0)
     p.add_argument("--thresh", type=float, default=0.03)
+    p.add_argument("--reseat", choices=["none", "head", "fit"], default="none",
+                   help="project each fused point onto a surface. Scored on "
+                        "PAIRED distance only -- the surface score after a "
+                        "snap is tautological.")
+    p.add_argument("--reseat-gate", type=float, default=0.5, metavar="MM",
+                   help="only re-seat points further than this from the ear, "
+                        "because the ones a snap harms are those already "
+                        "seated (0 re-seats everything)")
     p.add_argument("--out", default="runs/triangulate.csv")
     a = p.parse_args()
 
@@ -84,10 +136,23 @@ def main():
         scene.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(g_ear))
         lm_f = ((lm - C) @ R.T) / scale
 
+        if a.reseat != "none":
+            tgt = o3d.t.geometry.RaycastingScene()
+            tgt.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(
+                g_head if a.reseat == "head" else g_ear))
+
         uv, cams = collect_rays(c, g_head, pipe, angles=angles, verbose=False)
         for meth in ("lsq", "ransac"):
             P, n_in, n_view = fit_rays(uv, cams, meth, a.thresh)
             d = _surface_mm(scene, P, scale)
+            if a.reseat != "none":
+                m = np.isfinite(P).all(1) & (d > a.reseat_gate)
+                if m.any():
+                    P = P.copy()
+                    P[m] = tgt.compute_closest_points(o3d.core.Tensor(
+                        P[m].astype(np.float32)))["points"].numpy()
+                # keep the PRE-snap surface distance: the post-snap one is
+                # tautological, and this is the number worth reporting.
             paired = np.linalg.norm(P - lm_f, axis=1) * scale
             for k in range(len(d)):
                 rows.append(dict(ear=nm, j=k, method=meth, d_mm=d[k],
