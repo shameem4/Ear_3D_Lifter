@@ -69,6 +69,24 @@ DEFAULTS = dict(
                             # 93,736 -> 204,810, a 2.18x yield at a 2.57% ->
                             # 4.92% bad rate. Raise it toward 0.70 when a clean
                             # label matters more than a plentiful one.
+                            #
+                            # CORROBORATED UPSTREAM 2026-10-15. Ear_Landmarker
+                            # made the gate an explicit consumer choice rather
+                            # than a constant (resolve_confidence, profiles
+                            # interactive 0.70 / fewer 0.76 / fewest 0.86) and
+                            # sanctions a raw float for a consumer who has
+                            # swept its own corpus, which is what this is. They
+                            # then rendered 64 sampled "false positives" and
+                            # looked: 64 of 64 are REAL EARS their labels do
+                            # not mark, so the precision case for a high gate
+                            # collapsed and the optimum moves DOWN. An
+                            # `automated` profile was withdrawn for that
+                            # reason. Their small-ear tilt -- 0.70 to 0.86
+                            # discards 45.8% of ears under 32 px against 12.5%
+                            # over 80 px -- does not bite here, because these
+                            # renders frame the ear at 0.774 of frame height;
+                            # it is why their gate advice does not transfer
+                            # either way.
     detector_full_frame=True,
                             # Skip BlazeFace and run the ear model on the whole
                             # frame. The face stage exists to make a SMALL ear
