@@ -372,13 +372,23 @@ def main():
             n = plane_normal(Q)
             if n @ (cc - hc) < 0:
                 n = -n
-            # up: the pinna's long axis within the plane
-            Qc = Q - Q.mean(0)
-            Qp = Qc - np.outer(Qc @ n, n)
-            _, _, vtp = np.linalg.svd(Qp, full_matrices=False)
-            up_new = vtp[0]
-            if up_new @ up_i < 0:
-                up_new = -up_new
+            # UP STAYS WITH THE FACE FRAME. Recomputing it as the lifted
+            # points' long axis made it WORSE every pass -- 12.5 -> 10.4 ->
+            # 16.0 deg -- because the pinna's major axis is not the head's
+            # vertical. The front axis genuinely wants the landmark plane and
+            # converges (20.4 -> 9.6 -> 3.8); the up does not, so only the
+            # front is refined and up is re-orthogonalised against it.
+            if up_ref is not None:
+                up_new = up_ref - n * (up_ref @ n)
+                if np.linalg.norm(up_new) < 1e-6:
+                    up_new = up_i
+            else:
+                Qc = Q - Q.mean(0)
+                Qp = Qc - np.outer(Qc @ n, n)
+                _, _, vtp = np.linalg.svd(Qp, full_matrices=False)
+                up_new = vtp[0]
+                if up_new @ up_i < 0:
+                    up_new = -up_new
             ang = float(np.degrees(np.arccos(
                 np.clip(abs(n @ front_i), -1, 1))))
             front_i, up_i = n, up_new
@@ -404,6 +414,14 @@ def main():
             res["up_deg"] = float(np.degrees(np.arccos(
                 np.clip(R[1] @ gtR[1], -1, 1))))
             res["up_flipped"] = bool(R[1] @ gtR[1] < 0)
+            # THE THIRD AXIS IS NOT FREE INFORMATION -- R is orthonormal, so
+            # x = cross(y, z) and its error is determined by the other two.
+            # Reported because a large x error with small front/up errors
+            # would mean the frame is not orthonormal, i.e. a bug, not a
+            # measurement.
+            res["lat_deg"] = float(np.degrees(np.arccos(
+                np.clip(R[0] @ gtR[0], -1, 1))))
+            res["orthonormal_err"] = float(np.abs(R @ R.T - np.eye(3)).max())
             res["centre_mm"] = float(np.linalg.norm(cc - gtC))
         if a.render_dir:
             from PIL import Image
@@ -460,6 +478,12 @@ def main():
     print(f"\n{len(rows)} ears, against the GT frame")
     print(f"  view axis  median {np.median(v):5.2f} deg   max {v.max():5.2f}")
     print(f"  up axis    median {np.median(u):5.2f} deg   max {u.max():5.2f}")
+    lt = np.array([r["lat_deg"] for r in rows])
+    on = np.array([r["orthonormal_err"] for r in rows])
+    print(f"  lateral    median {np.median(lt):5.2f} deg   max {lt.max():5.2f}"
+          f"   (determined by the other two)")
+    print(f"  max |R R^T - I| over all ears {on.max():.2e}  "
+          f"(a frame that is not orthonormal is a bug, not an error)")
     print(f"  centre     median {np.median(cm):5.2f} mm")
     print(f"  the recorded convention won on {int(cw.sum())}/{len(rows)} ears")
     print(f"  margin over runner-up: median {np.median(mg):.3f}, min {mg.min():.3f}")
