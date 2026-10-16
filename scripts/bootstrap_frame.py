@@ -177,6 +177,11 @@ def main():
                         "and the margin, skips the angle comparison)")
     p.add_argument("--seed-axis", default="x", choices=list("xyz"),
                    help="axis for the SEED render that gets the detector box")
+    p.add_argument("--up-from-face", action="store_true", default=True,
+                   help="resolve the up SIGN from MediaPipe's head pose "
+                        "(default). --no-up-from-face for the old behaviour.")
+    p.add_argument("--no-up-from-face", dest="up_from_face",
+                   action="store_false")
     p.add_argument("--passes", type=int, default=2,
                    help="frame refinements after the chop. Pass 1 is chop+PCA; "
                         "each further pass lifts the landmarks in the current "
@@ -201,7 +206,7 @@ def main():
     a = p.parse_args()
 
     from escape_audit import DEFAULTS, WRAP, load_ear, ear_frame, light_mirror_for
-    from ear3d.frames import frame_from, in_frame, plane_normal
+    from ear3d.frames import frame_from, in_frame, plane_normal, head_pose
     from ear3d.render import render
     from ear3d.label import pick
     from ear3d.twod import make_pipeline
@@ -300,6 +305,23 @@ def main():
         cc = Pw.mean(0)
         cands, vt, ev = candidates(Pw, cc, hc - cc)
 
+        # UP FROM FACE ANATOMY, NOT FROM THE CHOP. PCA returns an axis, not
+        # a direction, and the 2D landmarker cannot supply the sign -- it
+        # places its template the same way up whichever way up the ear is
+        # (2e6a1c4). MediaPipe can: head_pose gives a vertical built from
+        # forehead, chin, nasion and nose tip, which owes nothing to the
+        # scan's axis convention and so survives a mesh we did not render.
+        # Measured against the GT frame's up: 4.36, 10.48, 6.42 deg.
+        up_ref = None
+        if a.up_from_face:
+            hp = head_pose(head, cfg)
+            if hp is not None:
+                up_ref = np.asarray(hp[1], float)
+        if up_ref is not None:
+            # keep each candidate's axis, take the SIGN from the face frame
+            for q in cands:
+                if q["up"] @ up_ref < 0:
+                    q["up"] = -q["up"]
         if a.rule == "smallest":
             fi, ui = int(np.argmin(ev)), int(np.argmax(ev))
             pickc = [c for c in cands if c["fi"] == fi and c["ui"] == ui]

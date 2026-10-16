@@ -125,6 +125,7 @@ def head_pose(mesh, cfg):
     fl = vision.FaceLandmarker.create_from_options(vision.FaceLandmarkerOptions(
         base_options=mpp.BaseOptions(model_asset_path=str(task)), num_faces=1))
     C0 = np.asarray(mesh.vertices).mean(0)
+    cands = []
     for axis in (0, 1, 2):
         for sgn in (1, -1):
             front = np.zeros(3); front[axis] = sgn
@@ -187,8 +188,25 @@ def head_pose(mesh, cfg):
                 lat = -lat
             vert -= lat * (vert @ lat)
             vert /= np.linalg.norm(vert)
-            print(f"mediapipe: face on axis {axis}{'+' if sgn > 0 else '-'}, "
-                  f"tragion separation {np.linalg.norm(P[TRAGION_L] - P[TRAGION_R]):.3f}")
-            return lat, vert, P[TRAGION_R], P[TRAGION_L]
-    print("mediapipe: no face found on any of the six views -- using the ear sweep")
-    return None
+            # KEEP THE BEST VIEW, NOT THE FIRST. FaceMesh will return a face
+            # from a SIDE view of a head, and taking the first hit meant that
+            # answer won whenever it came earlier in the axis order. On
+            # pp10_right, axis 0+ gave a vertical 143 deg from the GT frame's
+            # up while axis 2- gave 5.3 -- both detected, both with every
+            # required landmark, and the wrong one returned.
+            #
+            # Tragion separation is the discriminator: a frontal view sees
+            # both tragions at their true spacing, an oblique one foreshortens
+            # them (140.2 mm against 130.4 here). It costs nothing, since the
+            # value was already being computed for the log line.
+            sep = float(np.linalg.norm(P[TRAGION_L] - P[TRAGION_R]))
+            cands.append((sep, axis, sgn, lat, vert, P[TRAGION_R], P[TRAGION_L]))
+    if not cands:
+        print("mediapipe: no face found on any of the six views -- using the ear sweep")
+        return None
+    cands.sort(key=lambda t: -t[0])
+    sep, axis, sgn, lat, vert, trR, trL = cands[0]
+    runner = f", runner-up {cands[1][0]:.1f}" if len(cands) > 1 else ""
+    print(f"mediapipe: face on axis {axis}{'+' if sgn > 0 else '-'}, "
+          f"tragion separation {sep:.3f} (best of {len(cands)}{runner})")
+    return lat, vert, trR, trL
