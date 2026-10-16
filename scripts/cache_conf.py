@@ -34,9 +34,29 @@ views for one landmark (CV 0.590) than between landmarks (CV 0.237) -- so
 it moves along exactly the axis selection would use. It simply does not
 know which view placed the point well.
 
-THE REASON IS ARCHITECTURAL, NOT DOMAIN. An earlier version of this
-docstring blamed render-domain miscalibration. That was plausible and
-wrong; reading the model settles it.
+BOTH ARCHITECTURE AND DOMAIN MATTER -- an earlier version of this
+docstring said "architectural, NOT domain", which was a false dichotomy
+with nothing forcing it. Ear_Landmarker then measured the same quantity on
+1,054 photographs with the SAME checkpoint and it works there:
+
+    within-landmark rho    mine (renders) -0.018     theirs (photos) -0.486
+    landmarks below -0.1          2/55                       55/55
+    2D error p50                19.39 px                    1.92 px
+
+REGIME IS REFUTED FROM BOTH ENDS. They could not reach my error level
+(their worst 50 images only get to 6.32 px, still rho -0.314). I can reach
+theirs: selecting on the view TABLE is selection on a PRIOR, so unlike an
+error floor it does not truncate the outcome --
+
+    all views            27500 views, p50 17.38 px, rho -0.018
+    table best 8 views    8800 views, p50 12.02 px, rho -0.014
+    table best 3 views    3300 views, p50 10.87 px, rho -0.037
+
+Cutting the median error 40% moves nothing. So the signal is absent out of
+domain at every error level reachable here, and present in domain at every
+error level reachable there.
+
+THE ARCHITECTURE CLAIM STILL STANDS, and is about a different quantity.
 
 `heatmap_confidence` measures the spatial CONCENTRATION of a softmax.
 Deep-MVLM reads the AMPLITUDE of an hourglass heatmap trained with MSE
@@ -64,11 +84,16 @@ against a Gaussian) alongside the coordinate loss. Not proposed here, just
 noted: the current one cannot be fixed by reading it better, because the
 quantity is not in the model.
 
-STILL AN OPEN QUESTION, and cheap for them: does concentration predict
-error on PHOTOGRAPHS? This is 20 ears of renders with a photograph-trained
-model, so it bounds out-of-domain behaviour only. If it fails there too the
-architectural account is the whole story; if it works there, domain matters
-after all and this explanation is incomplete.
+WHAT THIS MEANS FOR VIEW SELECTION: closed on renders. Ear_Landmarker
+distinguishes DETECTION (separating good from bad, where their signal is
+strong) from RANKING (ordering among bad points, where it decays to -0.125).
+That distinction does not reach this case -- there is nothing to rank with
+and the flag does not fire in the right places. Do not revisit without a
+retrain changing the input.
+
+STILL UNTESTED BY ANYONE: whether a softmax can report ABSENCE. All 57,970
+of their points are visible, so their data cannot speak to it, and the claim
+rests on the code alone. Keep it as reasoning, not measurement.
 
 The cache is kept: conf is stored per (view, landmark) alongside the rays,
 so any later idea that wants it needs no re-render.
