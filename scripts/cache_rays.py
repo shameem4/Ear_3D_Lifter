@@ -36,6 +36,13 @@ def main():
     p.add_argument("--grid", type=float, default=30.0)
     p.add_argument("--grid-step", type=float, default=15.0)
     p.add_argument("--out", default="runs/raycache")
+    p.add_argument("--perturb-deg", type=float, default=0.0,
+                   help="rotate the frame by this many degrees about a random "
+                        "axis, seeded per ear. Converts a BOOTSTRAP ANGLE into "
+                        "millimetres: the production frame comes from chop+PCA "
+                        "at 2.4-3.1 deg, every accuracy number was measured at "
+                        "the GT frame, and nobody has priced the difference.")
+    p.add_argument("--perturb-seed", type=int, default=0)
     p.add_argument("--conf", type=float, default=None,
                    help="detector confidence. Default: whatever config says "
                         "(0.05). A higher gate yields fewer rays per point, "
@@ -73,6 +80,20 @@ def main():
         except (FileNotFoundError, KeyError, ValueError) as e:
             print(f"[{i+1}/{len(names)}] {nm}: skipped -- {e}"); continue
         R, C, s = ear_frame(head, lm, c)
+        if a.perturb_deg:
+            # A frame error does NOT move the landmarks relative to the ear --
+            # a rotation is an isometry, so paired mm stay comparable across
+            # angles. What it does is rotate the view grid relative to the
+            # anatomy, so the table's "best 8 views for landmark j" is applied
+            # to views that are no longer those views. That misapplication is
+            # the whole cost being measured here.
+            rg = np.random.default_rng((a.perturb_seed, i))
+            ax = rg.normal(size=3); ax /= np.linalg.norm(ax)
+            th = np.deg2rad(a.perturb_deg)
+            K = np.array([[0, -ax[2], ax[1]],
+                          [ax[2], 0, -ax[0]],
+                          [-ax[1], ax[0], 0]])
+            R = (np.eye(3) + np.sin(th) * K + (1 - np.cos(th)) * (K @ K)) @ R
         gh = in_frame(head, R, C, s)
         lm_f = ((lm - C) @ R.T) / s
         uv, cams = collect_rays(c, gh, pipe, angles=angles, verbose=False)
