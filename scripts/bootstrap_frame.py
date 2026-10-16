@@ -100,6 +100,30 @@ def candidates(P, centre, into_head):
     return out, vt, ev
 
 
+LOBE = [14, 15, 16, 17, 18, 19]
+SUP_CRUS = [50, 51, 52, 53, 54]
+
+
+def upright_by_anatomy(lm_uv):
+    """Is this render upright? The lobe sits BELOW the superior crus.
+
+    The up sign is the one thing the chop cannot settle: PCA gives an axis,
+    not a direction, and a 180 deg flip is an upside-down ear that a detector
+    boxes just as happily. Rather than invent a convention, ask the 2D model,
+    which was trained on ear anatomy and labels these groups semantically.
+    Image y grows downward, so upright means lobe y > crus y.
+
+    Returns None when either group is missing, so the caller can fall back
+    instead of trusting a coin flip.
+    """
+    ok = np.isfinite(lm_uv).all(1)
+    lo = [j for j in LOBE if ok[j]]
+    cr = [j for j in SUP_CRUS if ok[j]]
+    if len(lo) < 3 or len(cr) < 3:
+        return None
+    return bool(lm_uv[lo, 1].mean() > lm_uv[cr, 1].mean())
+
+
 def score_frame(mesh, front, up, cfg, pipe, centre, pts=None):
     """Render face-on in this frame and ask the detector what it sees.
 
@@ -135,7 +159,12 @@ def score_frame(mesh, front, up, cfg, pipe, centre, pts=None):
     # "ear" tends to be small and off-centre; a well-framed one is neither.
     span = (np.ptp(lm[ok, 0]) / W) * (np.ptp(lm[ok, 1]) / H) if ok.sum() > 5 else 0.0
     occ = float(np.clip(span / 0.08, 0, 1))        # 0.08 ~ a well-framed ear
-    return conf * (0.5 + 0.5 * occ), int(ok.sum()), conf
+    up_ok = upright_by_anatomy(lm)
+    # An upside-down frame is not a near-miss, it is wrong; weight it as such
+    # rather than letting a confident inverted detection outscore an upright
+    # one. None (groups missing) is treated as neutral, not as a pass.
+    mult = 1.0 if up_ok else (0.5 if up_ok is None else 0.1)
+    return conf * (0.5 + 0.5 * occ) * mult, int(ok.sum()), conf
 
 
 def main():
@@ -343,11 +372,16 @@ def main():
         if lm_gt is not None:
             gtR, gtC, _ = ear_frame(head, lm_gt, cfg)
             gt_front = gtR[2]
-            res["view_deg"] = float(np.degrees(np.arccos(
-                np.clip(abs(c["front"] @ gt_front), -1, 1))))
+            # SIGNED, NOT abs(). abs() maps a 180 deg flip onto 0, so an
+            # upside-down frame scored as perfect: the real up error here was
+            # 171.7 deg and the abs metric printed 8.3. Shameem caught it by
+            # looking at the render; no number in this script could have.
             R = frame_from(c["front"], c["up"], front=c["front"])
+            res["view_deg"] = float(np.degrees(np.arccos(
+                np.clip(R[2] @ gt_front, -1, 1))))
             res["up_deg"] = float(np.degrees(np.arccos(
-                np.clip(abs(R[1] @ gtR[1]), -1, 1))))
+                np.clip(R[1] @ gtR[1], -1, 1))))
+            res["up_flipped"] = bool(R[1] @ gtR[1] < 0)
             res["centre_mm"] = float(np.linalg.norm(cc - gtC))
         if a.render_dir:
             from PIL import Image
