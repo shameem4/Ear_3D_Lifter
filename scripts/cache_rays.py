@@ -36,6 +36,13 @@ def main():
     p.add_argument("--grid", type=float, default=30.0)
     p.add_argument("--grid-step", type=float, default=15.0)
     p.add_argument("--out", default="runs/raycache")
+    p.add_argument("--frames", default=None,
+                   help="npz of bootstrapped frames from "
+                        "bootstrap_frame.py --save-frames. With this the rays "
+                        "are collected in the frame the PRODUCTION path would "
+                        "have, not the ground-truth one, so scoring the cache "
+                        "measures the whole chain rather than the lift alone. "
+                        "Ears absent from the file are skipped.")
     p.add_argument("--perturb-deg", type=float, default=0.0,
                    help="rotate the frame by this many degrees about a random "
                         "axis, seeded per ear. Converts a BOOTSTRAP ANGLE into "
@@ -66,6 +73,7 @@ def main():
               for q in np.arange(-g, g + 1e-9, a.grid_step)]
     names = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz")
                    if str(np.load(f, allow_pickle=True)["dataset"]) == a.dataset)[:a.ears]
+    FR = np.load(a.frames) if a.frames else None
     out = pathlib.Path(a.out); out.mkdir(parents=True, exist_ok=True)
     print(f"{ck.parent.name}/{ck.name}  {len(names)} ears x {len(angles)} views"
           f"  detector_conf={cfg['detector_conf']}")
@@ -79,7 +87,13 @@ def main():
             head, ear, lm = load_ear(nm, a.dataset, c)
         except (FileNotFoundError, KeyError, ValueError) as e:
             print(f"[{i+1}/{len(names)}] {nm}: skipped -- {e}"); continue
-        R, C, s = ear_frame(head, lm, c)
+        if FR is not None:
+            if f"{nm}__R" not in FR:
+                print(f"[{i+1}/{len(names)}] {nm}: no bootstrapped frame");
+                continue
+            R, C, s = FR[f"{nm}__R"], FR[f"{nm}__C"], float(FR[f"{nm}__s"])
+        else:
+            R, C, s = ear_frame(head, lm, c)
         if a.perturb_deg:
             # A frame error does NOT move the landmarks relative to the ear --
             # a rotation is an isometry, so paired mm stay comparable across

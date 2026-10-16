@@ -214,6 +214,12 @@ def main():
                         "the recorded convention (front = smallest chop axis, "
                         "up = largest) and so isolates whether chop+PCA is "
                         "sound from whether the scorer can rank candidates.")
+    p.add_argument("--save-frames", default=None,
+                   help="write the bootstrapped frames to this .npz so the "
+                        "triangulation path can render in them. Frames as "
+                        "DATA rather than an imported function: cache_rays "
+                        "reads the file, nothing imports this script, and "
+                        "the frames stay inspectable after the fact.")
     p.add_argument("--render-dir", default=None,
                    help="write the winning frame's render here, to look at")
     a = p.parse_args()
@@ -452,8 +458,10 @@ def main():
             cc = Q.mean(0) * 1.0
             traj.append((f"pass{it+2}", f"moved {ang:.2f} deg"))
         c = dict(c, front=front_i, up=up_i)
+        _R = frame_from(c["front"], c["up"], front=c["front"])
         res = dict(front=c["front"], up=c["up"], centre=cc, ev=ev,
-                   traj=traj,
+                   traj=traj, R=_R,
+                   scale=float(np.abs((Pw - cc) @ _R.T).max()),
                    fi=c["fi"], ui=c["ui"], sgn=c["sgn"], margin=margin,
                    score=top[0], nlm=top[1], evr=float(ev.min() / max(ev.max(), 1e-12)))
         # did the recorded convention (front = smallest axis) win?
@@ -508,7 +516,7 @@ def main():
 
     names = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz")
                    if str(np.load(f, allow_pickle=True)["dataset"]) == a.dataset)[:a.ears]
-    rows = []
+    rows, ok_names = [], []
     for i, nm in enumerate(names):
         c = dict(cfg, light_mirror=light_mirror_for(nm, "frame", a.dataset))
         try:
@@ -518,12 +526,22 @@ def main():
         res, err = one(nm, head, lm)
         if err:
             print(f"[{i+1}/{len(names)}] {nm}: {err}"); continue
-        rows.append(res)
+        rows.append(res); ok_names.append(nm)
         print(f"[{i+1}/{len(names)}] {nm}: view {res['view_deg']:5.2f} deg, "
               f"up {res['up_deg']:5.2f}, centre {res['centre_mm']:5.2f} mm, "
               f"margin {res['margin']:.3f}, "
               f"{'convention' if res['convention_won'] else 'OVERRODE convention'}",
               flush=True)
+
+    if a.save_frames and rows:
+        out = {}
+        for nm, r in zip(ok_names, rows):
+            out[f"{nm}__R"] = r["R"]
+            out[f"{nm}__C"] = r["centre"]
+            out[f"{nm}__s"] = np.array(r["scale"])
+        pathlib.Path(a.save_frames).parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(a.save_frames, **out)
+        print(f"wrote {len(rows)} frames to {a.save_frames}")
 
     if not rows:
         sys.exit("no ears bootstrapped")
