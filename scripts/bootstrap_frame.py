@@ -171,6 +171,11 @@ def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--ears", type=int, default=8)
+    p.add_argument("--workers", type=int, default=1,
+                   help="bootstrap ears in this many processes. Each ear is "
+                        "independent and one process left the GPU mostly "
+                        "idle; measured peak is ~2.4 GB per process")
+    p.add_argument("--shard", default=None, help=argparse.SUPPRESS)
     p.add_argument("--dataset", default="hutubs")
     p.add_argument("--mesh", default=None,
                    help="score a mesh with no ground truth (prints the frame "
@@ -415,6 +420,7 @@ def main():
         # here. Trimmed to 80% for the same reason.
         front_i, up_i = c["front"], c["up"]
         traj = []
+        Qall = None            # every lifted landmark, untrimmed; sets the scale
         for it in range(max(0, a.passes - 1)):
             try:
                 use_tbl = TBL is not None and (it + 2) >= a.table_from
@@ -428,6 +434,7 @@ def main():
             if P3 is None or np.isfinite(P3).all(1).sum() < 20:
                 traj.append(("too few points", "")); break
             Q = P3[np.isfinite(P3).all(1)]
+            Qall = Q
             n = plane_normal(Q)
             # trim: drop the 20% furthest from the plane, refit
             dd = np.abs((Q - Q.mean(0)) @ n)
@@ -459,9 +466,31 @@ def main():
             traj.append((f"pass{it+2}", f"moved {ang:.2f} deg"))
         c = dict(c, front=front_i, up=up_i)
         _R = frame_from(c["front"], c["up"], front=c["front"])
+        s_chop = float(np.abs((Pw - cc) @ _R.T).max())
+        s_lm = (float(np.abs((Qall - cc) @ _R.T).max())
+                if Qall is not None else s_chop)
+        # CLAMPED TO THE CHOP. When the lift has failed the lifted points are
+        # scattered over the head and their extent is meaningless: pp6_right
+        # came out at 14x the chop (s=410 mm) and the ear was a dot in every
+        # orbit view. Over 112 ears the ratio on good frames is 0.99-1.26
+        # (p10-p90); a ratio at the clamp is reported, because it is one of
+        # the few failure signs this script gets without ground truth -- but
+        # it is NOT a frame detector: only 4 of 16 bad frames hit it.
+        s_fin = float(np.clip(s_lm, 0.8 * s_chop, 1.6 * s_chop))
+        if s_fin != s_lm:
+            traj.append(("scale clamped", f"lift/chop {s_lm / s_chop:.2f}"))
         res = dict(front=c["front"], up=c["up"], centre=cc, ev=ev,
                    traj=traj, R=_R,
-                   scale=float(np.abs((Pw - cc) @ _R.T).max()),
+                   # SCALE FROM THE LANDMARKS, NOT THE CHOP. ear_frame scales
+                   # by the largest centred landmark coordinate; the chop is a
+                   # box-and-depth-shell subset of the ear and came out a
+                   # median 0.87 of that, 0.57-0.78 on the worst ears. The
+                   # orbit views then clipped the helix and the lobe, and that
+                   # -- not frame angle -- was the gross-error tail on ears
+                   # whose axes were within 20 deg: ratio <0.85 averaged 6.6%
+                   # gross, >=0.85 averaged 0.47%. Same definition as the GT
+                   # frame, so the two scales are comparable by construction.
+                   scale=s_fin, scale_ratio=s_lm / s_chop,
                    fi=c["fi"], ui=c["ui"], sgn=c["sgn"], margin=margin,
                    score=top[0], nlm=top[1], evr=float(ev.min() / max(ev.max(), 1e-12)))
         # did the recorded convention (front = smallest axis) win?
@@ -516,6 +545,13 @@ def main():
 
     names = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz")
                    if str(np.load(f, allow_pickle=True)["dataset"]) == a.dataset)[:a.ears]
+    if a.workers > 1 and not a.shard:
+        rows = run_sharded(a, names)
+        summarize(rows)
+        return
+    if a.shard:
+        i, n = (int(x) for x in a.shard.split("/"))
+        names = names[i::n]
     rows, ok_names = [], []
     for i, nm in enumerate(names):
         c = dict(cfg, light_mirror=light_mirror_for(nm, "frame", a.dataset))
@@ -530,6 +566,7 @@ def main():
         print(f"[{i+1}/{len(names)}] {nm}: view {res['view_deg']:5.2f} deg, "
               f"up {res['up_deg']:5.2f}, centre {res['centre_mm']:5.2f} mm, "
               f"margin {res['margin']:.3f}, "
+              f"lift/chop scale {res['scale_ratio']:.2f}, "
               f"{'convention' if res['convention_won'] else 'OVERRODE convention'}",
               flush=True)
 
@@ -539,10 +576,89 @@ def main():
             out[f"{nm}__R"] = r["R"]
             out[f"{nm}__C"] = r["centre"]
             out[f"{nm}__s"] = np.array(r["scale"])
+            if "view_deg" in r:        # the GT comparison, so shards can be merged
+                out[f"{nm}__m"] = np.array([r[k] for k in METRICS], float)
         pathlib.Path(a.save_frames).parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(a.save_frames, **out)
         print(f"wrote {len(rows)} frames to {a.save_frames}")
 
+    if a.shard:                 # the parent summarises the merged corpus
+        return
+    summarize(rows)
+
+
+METRICS = ("view_deg", "up_deg", "centre_mm", "margin", "convention_won",
+           "lat_deg", "orthonormal_err")
+
+
+def run_sharded(a, names):
+    """Re-run this script as a.workers shard processes and merge their frames.
+
+    The per-ear work -- renders, detector, lift -- shares nothing between
+    ears, so the shards are the same program over names[i::n]. Each writes
+    its frames AND its GT metrics to its own npz; the parent merges those
+    into --save-frames and prints the same summary a single process would.
+    Lines from the shards are streamed through as they come, so the log
+    reads the same but out of order.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+    import threading
+    n = min(a.workers, len(names))
+    tmp = tempfile.mkdtemp(prefix="bootstrap_shards_", dir=ROOT / "runs")
+    argv = list(sys.argv[1:])
+    for flag in ("--save-frames", "--workers"):
+        while flag in argv:
+            k = argv.index(flag); del argv[k:k + 2]
+    # ONE THREAD POOL PER CORE, NOT PER SHARD. Left alone, every shard's
+    # torch/OpenMP/BLAS opens cpu_count threads; 6 shards on 32 cores ran at
+    # load 74, stalled, and were no faster than the serial run.
+    import os
+    th = str(max(1, (os.cpu_count() or 1) // n))
+    env = dict(os.environ, OMP_NUM_THREADS=th, MKL_NUM_THREADS=th,
+               OPENBLAS_NUM_THREADS=th, NUMEXPR_NUM_THREADS=th)
+    procs = []
+    for i in range(n):
+        cmd = [sys.executable, sys.argv[0], *argv, "--workers", "1",
+               "--shard", f"{i}/{n}", "--save-frames", f"{tmp}/shard{i}.npz"]
+        # stderr is inherited, not merged: Filament/MediaPipe chatter on
+        # stderr is thousands of lines and would bury the per-ear lines.
+        procs.append(subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True,
+                                      env=env))
+
+    def pump(pr, i):
+        for line in pr.stdout:
+            if line.startswith("[Open3D"):       # one per render, all identical
+                continue
+            print(f"[w{i}] {line}", end="", flush=True)
+    ts = [threading.Thread(target=pump, args=(pr, i)) for i, pr in enumerate(procs)]
+    for t in ts: t.start()
+    for t in ts: t.join()
+    rcs = [pr.wait() for pr in procs]
+    out, rows = {}, []
+    for i in range(n):
+        f = pathlib.Path(f"{tmp}/shard{i}.npz")
+        if not f.exists():
+            print(f"shard {i} wrote nothing (rc={rcs[i]})"); continue
+        z = np.load(f)
+        out.update({k: z[k] for k in z.files})
+        for k in z.files:
+            if k.endswith("__m"):
+                rows.append(dict(zip(METRICS, z[k].tolist())))
+        f.unlink()
+    shutil.rmtree(tmp, ignore_errors=True)
+    if any(rcs):
+        print(f"shard exit codes {rcs}")
+    if a.save_frames and out:
+        pathlib.Path(a.save_frames).parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(a.save_frames, **out)
+        nf = sum(k.endswith("__R") for k in out)
+        print(f"wrote {nf} frames to {a.save_frames}")
+    return rows
+
+
+def summarize(rows):
     if not rows:
         sys.exit("no ears bootstrapped")
     v = np.array([r["view_deg"] for r in rows])
