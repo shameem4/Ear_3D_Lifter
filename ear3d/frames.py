@@ -137,7 +137,14 @@ def head_pose(mesh, cfg):
     if not flipped:
         return r
     print("mediapipe: face is UPSIDE DOWN; turning it over and fitting again")
-    return _head_pose(mesh, dict(cfg, _turn_over=(fwd, vert, tip)))
+    r2 = _head_pose(mesh, dict(cfg, _turn_over=(fwd, vert, tip)))
+    if r2 is None:
+        # Never lose a head the first pass found: under a camera-axis sun
+        # pp23 was flagged while upright, the refit found nothing, and the
+        # head was dropped. Falling back cannot be worse than not checking.
+        print("mediapipe: turned-over refit found no face; keeping the first pass")
+        return r
+    return r2
 
 
 def _head_pose(mesh, cfg):
@@ -371,13 +378,22 @@ def _head_pose(mesh, cfg):
             return None
         return (P2 * sc @ R) + nose, hit2
 
-    for _ in range(2):
-        r = face_on(P, vert)
-        if r is None:
-            break
-        P, hit = r
-        vert = P[FOREHEAD] - P[CHIN]
-        vert /= np.linalg.norm(vert)
+    def refine(P, hit, vert):
+        """Two face-on passes. Tried: repeat until the view moves < 1 deg (cap
+        5). It did not reduce how much the frame depends on the light (per-
+        head spread over five lights 2.6 -> 2.4 deg median, same outliers)
+        and 47 of 175 runs hit the cap: FaceMesh jitters ~1 deg+ per pass,
+        so the loop never settles. Two passes it stays."""
+        for _ in range(2):
+            r = face_on(P, vert)
+            if r is None:
+                break
+            P, hit = r
+            vert = P[FOREHEAD] - P[CHIN]
+            vert /= np.linalg.norm(vert)
+        return P, hit, vert
+
+    P, hit, vert = refine(P, hit, vert)
     model = Path(cfg.get("face_model") or Path(task).parent / "canonical_face_model.obj")
     if model.exists():
         canon = np.array([[float(x) for x in l.split()[1:4]]
@@ -398,15 +414,9 @@ def _head_pose(mesh, cfg):
                 print("mediapipe: turned-over view found no face")
                 return None
             P, hit = flip
-            for _ in range(2):
-                vert = P[FOREHEAD] - P[CHIN]
-                vert /= np.linalg.norm(vert)
-                r = face_on(P, vert)
-                if r is None:
-                    break
-                P, hit = r
             vert = P[FOREHEAD] - P[CHIN]
             vert /= np.linalg.norm(vert)
+            P, hit, vert = refine(P, hit, vert)
         ok = hit[: len(canon)]
         X, Y = canon[ok], P[: len(canon)][ok]
         cx, cy = X.mean(0), Y.mean(0)
