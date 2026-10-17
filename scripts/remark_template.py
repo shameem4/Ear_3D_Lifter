@@ -93,8 +93,10 @@ def skinned(V, F):
     m = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(V),
                                   o3d.utility.Vector3iVector(F))
     m.compute_vertex_normals()
-    apply_skin(m, seed=0, tone=DEFAULTS["tone"],
-               ao_strength=DEFAULTS["ao_strength"], n_rays=DEFAULTS["ao_rays"])
+    # The EAR skin (clean tone 5), the same the ear pipeline renders with.
+    apply_skin(m, seed=0, tone=DEFAULTS["ear_tone"],
+               ao_strength=DEFAULTS["ao_strength"], n_rays=DEFAULTS["ao_rays"],
+               noise=DEFAULTS["ear_skin_noise"])
     return m
 
 
@@ -269,7 +271,7 @@ def write_wrap(src, dst, tri, bary, names_55):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--template", default=str(WRAP / "templates/ear_mean_v4.obj"))
-    p.add_argument("--marks", default=str(WRAP / "templates/mark_mean_v5.wrap"),
+    p.add_argument("--marks", default=str(WRAP / "templates/mark_mean_v6_spacing.wrap"),
                    help="the project to copy; points 55+ are carried over")
     p.add_argument("--out", default=str(WRAP / "templates/mark_mean_v6_landmarker.wrap"))
     p.add_argument("--npz", default="")
