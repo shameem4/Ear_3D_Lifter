@@ -249,7 +249,7 @@ def main():
     a = p.parse_args()
 
     from escape_audit import DEFAULTS, WRAP, load_ear, ear_frame, light_mirror_for
-    from ear3d.frames import frame_from, in_frame, plane_normal, head_pose
+    from ear3d.frames import frame_from, in_frame, plane_normal, head_pose, normalize_head
     from ear3d.render import render
     from ear3d.label import pick
     from ear3d.twod import make_pipeline
@@ -357,9 +357,29 @@ def main():
 
     def one(nm, head, lm_gt):
         """Bootstrap one head. lm_gt may be None (no ground truth)."""
+        head0 = head                    # the world-frame mesh, for renders
+        # THE GT FRAME IS A WORLD QUANTITY; take it before any re-framing.
+        if lm_gt is not None and nm not in GTO:
+            GTO[nm] = ear_frame(head, lm_gt, cfg)[:2]
+        # START AT THE TRUE ORIGIN. With --seed-face the head is rotated
+        # into its own frame first (+x subject's left, +y up, +z forward,
+        # centroid at 0) and EVERYTHING below runs there; the only transform
+        # back to the world is the one at the end. Without it R_head is the
+        # identity and nothing changes.
+        R_head, hc0 = np.eye(3), np.asarray(head.vertices).mean(0)
+        hp = None
+        if a.seed_face:
+            nh = normalize_head(head, cfg)
+            if nh is None:
+                return None, "normalize_head: no face passing the gate on 26 views"
+            head, R_head, hc0 = nh
+            if lm_gt is not None:
+                lm_gt = (lm_gt - hc0) @ R_head.T
+            hp = (np.array([1.0, 0, 0]), np.array([0, 1.0, 0]), None, None)
+        elif a.up_from_face:
+            hp = head_pose(head, cfg)
         V = np.asarray(head.vertices)
         hc = V.mean(0)
-        hp = head_pose(head, cfg) if (a.up_from_face or a.seed_face) else None
         seed_centre, seed_scale = hc, None
         traj = []                      # how the frame got where it is
         # SEED: a coarse view, only good enough to put AN ear in frame and get
@@ -378,7 +398,6 @@ def main():
             if hp is None:
                 return None, "seed-face: no face found on 26 views"
             lat = np.asarray(hp[0], float)
-            trR, trL = np.asarray(hp[2], float), np.asarray(hp[3], float)
             if lm_gt is not None:
                 # validation: the ear being scored. Production does both.
                 gdir = lm_gt.mean(0) - hc
@@ -394,8 +413,7 @@ def main():
             # centrality prior was measured with. So: centroid and whole
             # head; only the DIRECTION comes from the face.
             seed_centre, seed_scale = hc, None
-            tr = trR if (trR - hc) @ seed > (trL - hc) @ seed else trL
-            traj.append(("face seed", f"model tragion {np.linalg.norm(tr - hc):.0f} mm from centroid"))
+            traj.append(("face seed", f"canonical {'+x' if seed[0] > 0 else '-x'}"))
         elif a.seed_sweep:
             # Six axis renders, keep the most confident ear box. With GT
             # present the sweep may land on the OTHER ear; then this ear is
@@ -663,7 +681,14 @@ def main():
             front_i, up_i = n, up_new
             cc = Q.mean(0) * 1.0
             traj.append((f"pass{it+2}", f"moved {ang:.2f} deg"))
-        c = dict(c, front=front_i, up=up_i)
+        # BACK TO THE WORLD, once. Directions as d @ R_head, points as
+        # p @ R_head + centre; the GT frame was taken in the world above.
+        c = dict(c, front=front_i @ R_head, up=up_i @ R_head)
+        cc = cc @ R_head + hc0
+        Pw = Pw @ R_head + hc0
+        if Qall is not None:
+            Qall = Qall @ R_head + hc0
+        head = head0
         _R = frame_from(c["front"], c["up"], front=c["front"])
         s_chop = float(np.abs((Pw - cc) @ _R.T).max())
         s_lm = (float(np.abs((Qall - cc) @ _R.T).max())

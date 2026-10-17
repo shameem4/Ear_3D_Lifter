@@ -339,3 +339,39 @@ def head_pose(mesh, cfg):
     else:
         print(f"mediapipe: no canonical_face_model.obj at {model}; 4-point frame")
     return lat, vert, trR, trL
+
+
+def normalize_head(mesh, cfg):
+    """The head in its own frame: centroid at the origin, +x the subject's
+    left, +y scalp up, +z nose forward. Returns (mesh_c, R_head, centre) with
+    V_c = (V - centre) @ R_head.T, or None when no face passes head_pose's
+    gate.
+
+    WHY A SEPARATE STEP. Every stage after the face search wants a known
+    orientation: the seed render wants the ear upright and face-on, the
+    chop candidates want a sign convention, the template fit wants left
+    form. Threading lateral/vertical through each of them worked, but each
+    was one more place to get a transform backwards, and every debug render
+    came out at a random roll. Rotating ONCE here puts the whole pipeline
+    at the true origin; results go back to the world with the one inverse.
+    The per-ear pinna tilt (8-35 deg off the head's lateral axis) is NOT
+    part of this -- that is what the ear stage recovers.
+
+    Rows of R_head are the canonical axes expressed in the world, so a
+    canonical direction d maps to the world as d @ R_head and a point as
+    p @ R_head + centre.
+    """
+    hp = head_pose(mesh, cfg)
+    if hp is None:
+        return None
+    lat, vert = np.asarray(hp[0], float), np.asarray(hp[1], float)
+    vert = vert - lat * (vert @ lat)
+    vert /= np.linalg.norm(vert)
+    fwd = np.cross(lat, vert)                 # x cross y = z: nose forward
+    R_head = np.stack([lat, vert, fwd])
+    V = np.asarray(mesh.vertices)
+    centre = V.mean(0)
+    mesh_c = o3d.geometry.TriangleMesh(mesh)
+    mesh_c.vertices = o3d.utility.Vector3dVector((V - centre) @ R_head.T)
+    mesh_c.compute_vertex_normals()
+    return mesh_c, R_head, centre
