@@ -86,6 +86,9 @@ def find_ears(mesh, det, cfg, probe_size=400, dist=2.4):
     return out[:2]
 
 
+HEAD_ALT = {}   # diagnostic: both verticals from the last head_pose call
+
+
 def head_pose(mesh, cfg):
     """Head frame from MediaPipe FaceMesh, in the mesh's own coordinates.
 
@@ -329,16 +332,56 @@ def head_pose(mesh, cfg):
             D[-1, -1] = -1                      # rotation only, no mirror
         Rc = U @ D @ Vt                         # Y ~ k (X - cx) @ Rc + cy
         k = (S * np.diag(D)).sum() / (A ** 2).sum()
-        lat, vert, fwd = (np.eye(3) @ Rc)       # canonical axes in the world
+        # ANATOMICAL AXES, NOT THE MODEL'S. The canonical model's Frankfort
+        # line (tragion -> lower orbit) sits 7.4 deg above its own z axis,
+        # so a camera on canonical z sees every face pitched nose-down by
+        # that much (seen on all 20 heads of the orientation review).
+        # lateral = left eye minus right eye (outer corners), forward = the
+        # Frankfort direction made perpendicular to lateral, up = lat x fwd.
+        # Built in canonical coordinates once, then carried by Rc.
+        EYE_R, EYE_L, ORB_R, ORB_L = 33, 263, 230, 450
+        e_lat = canon[EYE_L] - canon[EYE_R]
+        e_lat /= np.linalg.norm(e_lat)
+        e_fwd = 0.5 * (canon[ORB_R] + canon[ORB_L]) - 0.5 * (canon[TRAGION_R] + canon[TRAGION_L])
+        e_fwd -= e_lat * (e_fwd @ e_lat)
+        e_fwd /= np.linalg.norm(e_fwd)
+        e_up = np.cross(e_lat, e_fwd)
+        if e_up[1] < 0:                         # model y is up; keep it so
+            e_up, e_fwd = -e_up, -e_fwd
+        B = np.stack([e_lat, e_up, e_fwd])      # anatomical basis, canonical coords
+        lat, vert, fwd = B @ Rc                 # ...expressed in the world
         for v_ in (lat, vert, fwd):
             v_ /= np.linalg.norm(v_)
+        # Alternative vertical from the landmarker reference: the subject's
+        # own midline, subnasale-ish (164) -> glabella (9), measured on this
+        # head rather than taken from the model. cfg up_rule="164_9".
+        HEAD_ALT["frankfort"] = vert.copy()
+        if hit[164] and hit[9]:
+            u = P[9] - P[164]
+            u = u - lat * (u @ lat)
+            u /= np.linalg.norm(u)
+            HEAD_ALT["164_9"] = u
+            if cfg.get("up_rule", "164_9") == "164_9":
+                vert = u
+                fwd = np.cross(vert, lat)
+        # Forehead (10) -> chin (152), measured on this head. cfg up_rule="forehead_chin".
+        if hit[FOREHEAD] and hit[CHIN]:
+            u = P[FOREHEAD] - P[CHIN]
+            u = u - lat * (u @ lat)
+            u /= np.linalg.norm(u)
+            HEAD_ALT["forehead_chin"] = u
+            if cfg.get("up_rule") == "forehead_chin":
+                vert = u
+                fwd = np.cross(vert, lat)
         trR, trL = (k * (canon[[TRAGION_R, TRAGION_L]] - cx) @ Rc + cy)
+        nose = k * (canon[NOSE_TIP] - cx) @ Rc + cy
         rms = float(np.sqrt(((k * A @ Rc + cy - Y) ** 2).sum(1).mean()))
         print(f"mediapipe: canonical face fit on {int(ok.sum())} points, rms {rms:.1f} mm, "
               f"face-on refine moved the view {np.degrees(np.arccos(np.clip(fwd @ front0, -1, 1))):.1f} deg")
     else:
         print(f"mediapipe: no canonical_face_model.obj at {model}; 4-point frame")
-    return lat, vert, trR, trL
+        nose = P[NOSE_TIP]
+    return lat, vert, trR, trL, nose
 
 
 def normalize_head(mesh, cfg):
@@ -374,7 +417,8 @@ def normalize_head(mesh, cfg):
     mesh_c = o3d.geometry.TriangleMesh(mesh)
     mesh_c.vertices = o3d.utility.Vector3dVector((V - centre) @ R_head.T)
     mesh_c.compute_vertex_normals()
-    return mesh_c, R_head, centre
+    nose_c = (np.asarray(hp[4], float) - centre) @ R_head.T
+    return mesh_c, R_head, centre, nose_c
 
 
 def mirror_x(mesh):

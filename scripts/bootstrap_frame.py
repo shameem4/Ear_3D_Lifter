@@ -375,7 +375,7 @@ def main():
             nh = normalize_head(head, cfg)
             if nh is None:
                 return None, "normalize_head: no face passing the gate on 26 views"
-            head, R_head, hc0 = nh
+            head, R_head, hc0, _nose = nh
             if lm_gt is not None:
                 lm_gt = (lm_gt - hc0) @ R_head.T
             hp = (np.array([1.0, 0, 0]), np.array([0, 1.0, 0]), None, None)
