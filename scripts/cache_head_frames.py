@@ -1,7 +1,10 @@
 """Run the orientation stage once and cache its output, so later stages
 (ear detection, zoom, chop) can be iterated without re-finding the face.
 
-Usage: cache_head_frames.py OUTDIR ROT_SEED N_HEADS WORKER N_WORKERS
+Usage: cache_head_frames.py OUTDIR ROT_SEED N_HEADS WORKER N_WORKERS [SAMPLE_SEED]
+
+SAMPLE_SEED 0 (default) is the original sample; any other seed draws
+N_HEADS new heads that exclude the seed-0 sample, for held-out checks.
 
 Per head writes OUTDIR/<head>.npz: the normalised mesh (V, F, C colours),
 R_head, centre, nose (all in the normalised frame) and the random rotation
@@ -18,7 +21,11 @@ out, rot_seed, n_heads, WK, NW = pathlib.Path(sys.argv[1]), int(sys.argv[2]), in
 out.mkdir(parents=True, exist_ok=True)
 names = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz") if str(np.load(f, allow_pickle=True)["dataset"]) == "hutubs")
 heads = sorted({n.rsplit("_", 1)[0] for n in names})
+ss = int(sys.argv[6]) if len(sys.argv) > 6 else 0
 ALLS = sorted(np.random.default_rng(0).choice(heads, n_heads, replace=False).tolist())
+if ss:
+    pool = sorted(set(heads) - set(ALLS))
+    ALLS = sorted(np.random.default_rng(ss).choice(pool, n_heads, replace=False).tolist())
 
 def random_rotation(seed):
     q = np.random.default_rng(seed).normal(size=4); q /= np.linalg.norm(q); w, x, y, z = q

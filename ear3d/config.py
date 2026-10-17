@@ -145,13 +145,15 @@ DEFAULTS = dict(
                             # worth MORE than the fusion it sits on top of
                             # (1.710 none, 1.514 fusion, 1.290 both).
 
-    light_dir=(1.2, -0.4, -0.9),   # swept, not guessed: 1.61% past 10 mm
-                            # against 3.90% at the old +0.3, better on 39 of
-                            # 40 ears, p=2.0e-07. render.sun_world carries the
-                            # curve. +1.8 scores 1.54% but the last step is
-                            # p=0.97 and the render goes dark, so the default
-                            # sits on the plateau rather than at the edge of
-                            # the sweep.
+    light_dir=(1.2, -0.4, -0.4),   # 2026-10-17 reboot. Side views of the
+                            # normalised head, light from the face side via
+                            # render.side_light (x flipped for the right ear).
+                            # Depth component -0.9 -> -0.4, chosen on the two
+                            # left ears BlazeEar missed (pp6, pp80); on all 40
+                            # side views of 20 heads its top box lands on the
+                            # ear 20/20 + 20/20 (was 19 + 20), median score
+                            # 0.83/0.89 (was 0.79/0.87). The earlier value was
+                            # swept for landmark accuracy in the old pipeline.
     light_frame="world",    # "view" rotates the sun with the camera instead.
                             # Measured on the same grid: 3.45% against 3.24%,
                             # so world wins -- but only in the orbited views,
