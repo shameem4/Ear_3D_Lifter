@@ -182,6 +182,25 @@ def main():
                         "and the margin, skips the angle comparison)")
     p.add_argument("--seed-axis", default="x", choices=list("xyz"),
                    help="axis for the SEED render that gets the detector box")
+    p.add_argument("--seed-face", action="store_true",
+                   help="HYBRID seed: MediaPipe head_pose gives the lateral "
+                        "axis and the tragion; the seed render is centred on "
+                        "the tragion looking along the lateral axis, i.e. an "
+                        "ear-centred frame, the regime the detector and pick() "
+                        "were measured in. The frame itself then comes from "
+                        "the chop and the template (--rule procrustes).")
+    p.add_argument("--seed-sweep", action="store_true",
+                   help="PRODUCTION seed: render the six axis views and take "
+                        "the one with the most confident ear box, instead of "
+                        "seeding toward the GT ear (validation) or a fixed axis")
+    p.add_argument("--only", nargs="*", default=None,
+                   help="run only these ears (the --random-rot draw stays "
+                        "keyed to each ear's index in the full list)")
+    p.add_argument("--random-rot", type=int, default=None,
+                   help="rotate every head (and its GT) by a random rotation "
+                        "drawn from this seed before anything runs. The chop, "
+                        "the candidates, the Procrustes pick and the refinement "
+                        "are orientation-free BY CONSTRUCTION; this tests it.")
     p.add_argument("--up-from-face", action="store_true", default=True,
                    help="resolve the up SIGN from MediaPipe's head pose "
                         "(default). --no-up-from-face for the old behaviour.")
@@ -214,7 +233,7 @@ def main():
     p.add_argument("--depth-mm", type=float, default=25.0,
                    help="depth of the kept shell behind the frontmost vertex, "
                         "in mm. A pinna's relief is 10-20.")
-    p.add_argument("--rule", default="score", choices=("score", "smallest"),
+    p.add_argument("--rule", default="score", choices=("score", "smallest", "face", "face-nearest", "procrustes"),
                    help="how to pick the axis assignment. 'smallest' forces "
                         "the recorded convention (front = smallest chop axis, "
                         "up = largest) and so isolates whether chop+PCA is "
@@ -307,6 +326,21 @@ def main():
 
     cfg = dict(DEFAULTS)
     pipe, ck = make_pipeline(cfg)
+    TPL = None
+    if a.rule == "procrustes":
+        # THE GENERIC TEMPLATE, NOT THE CORPUS. Production has ear_lmv_v3 --
+        # the landmark-vertex template, landmark j = vertex j -- and no wrap
+        # fits, so the 55 reference points are its first 55 vertices (mm,
+        # canonical frame, up = +y). They sit 1.25 mm RMS from the corpus
+        # mean of lm3d_v7, which was used first and must not be: a per-ear
+        # corpus file is exactly the dependency the bootstrap exists to drop.
+        # Per-ear RMS of real ears to this template is ~2 mm, so a lift with
+        # the RIGHT correspondences aligns to a few mm and one from a
+        # wrong-way-up render -- where the orientation-blind 2D model has
+        # labelled the lobe as the helix -- does not.
+        TPL = np.array([[float(x) for x in l.split()[1:4]]
+                        for l in open(WRAP / "templates/ear_lmv_v3.obj")
+                        if l.startswith("v ")])[:55]
     print(f"{ck.parent.name}/{ck.name}")
 
     TBL = None
@@ -319,10 +353,15 @@ def main():
     if a.render_dir:
         pathlib.Path(a.render_dir).mkdir(parents=True, exist_ok=True)
 
+    GTO = {}        # GT frame override under --random-rot (see call site)
+
     def one(nm, head, lm_gt):
         """Bootstrap one head. lm_gt may be None (no ground truth)."""
         V = np.asarray(head.vertices)
         hc = V.mean(0)
+        hp = head_pose(head, cfg) if (a.up_from_face or a.seed_face) else None
+        seed_centre, seed_scale = hc, None
+        traj = []                      # how the frame got where it is
         # SEED: a coarse view, only good enough to put AN ear in frame and get
         # a detector box. It is allowed to be a long way off.
         #
@@ -335,17 +374,86 @@ def main():
         # that is a validation convenience, exactly like the fit, and it is
         # not available in production. In production the detector picks an ear
         # and that is the ear you lift, so there is nothing to disambiguate.
-        if lm_gt is not None:
+        if a.seed_face:
+            if hp is None:
+                return None, "seed-face: no face found on 26 views"
+            lat = np.asarray(hp[0], float)
+            trR, trL = np.asarray(hp[2], float), np.asarray(hp[3], float)
+            if lm_gt is not None:
+                # validation: the ear being scored. Production does both.
+                gdir = lm_gt.mean(0) - hc
+                seed = lat if lat @ gdir > 0 else -lat
+            else:
+                seed = lat
+            # NOT THE TRAGION. FaceMesh's tragion is the landmark the
+            # reference implementation marks "most likely not possible", and
+            # centring on it put the rotated pp10_left seed on the cheek. In
+            # a side view the ear sits close to the head's projected
+            # centroid, which is what the validation seed (centre = head
+            # centroid, whole-head scale) relied on and what pick()'s
+            # centrality prior was measured with. So: centroid and whole
+            # head; only the DIRECTION comes from the face.
+            seed_centre, seed_scale = hc, None
+            tr = trR if (trR - hc) @ seed > (trL - hc) @ seed else trL
+            traj.append(("face seed", f"model tragion {np.linalg.norm(tr - hc):.0f} mm from centroid"))
+        elif a.seed_sweep:
+            # Six axis renders, keep the most confident ear box. With GT
+            # present the sweep may land on the OTHER ear; then this ear is
+            # skipped rather than scored against the wrong target, and the
+            # skip is reported, because "found an ear" and "found THIS ear"
+            # are different claims.
+            sweep = []
+            for ax in range(3):
+                for sg in (1.0, -1.0):
+                    sd = np.zeros(3); sd[ax] = sg
+                    Rq = frame_from(sd, np.array([0.0, 0.0, 1.0]) if ax != 2
+                                    else np.array([0.0, 1.0, 0.0]), front=sd)
+                    sq = float(np.abs((V - hc) @ Rq.T).max())
+                    imq, _, _ = render(in_frame(head, Rq, hc, sq), cfg)
+                    # NOT pick(): its centrality prior is for frames built
+                    # around one ear. On a whole head it chose a central
+                    # scalp false positive (conf 0.82) over the real ear at
+                    # the edge of the frame -- seen on pp10_left, pp19_left.
+                    dets = pipe(np.asarray(imq), timestamp=0.0)
+                    if dets:
+                        bq = max(dets, key=lambda d: float(d["confidence"]))
+                        sweep.append((float(bq["confidence"]), sd))
+            if not sweep:
+                return None, "seed sweep found no ear on any of six views"
+            sweep.sort(key=lambda t: -t[0])
+            seed = sweep[0][1]
+            if lm_gt is not None:
+                gdir = lm_gt.mean(0) - hc
+                if seed @ gdir < 0:
+                    return None, (f"seed sweep chose the other ear (conf "
+                                  f"{sweep[0][0]:.2f}); not scorable against this GT")
+        elif lm_gt is not None:
             seed = lm_gt.mean(0) - hc
             seed = seed / max(np.linalg.norm(seed), 1e-9)
         else:
             ax = {"x": 0, "y": 1, "z": 2}[a.seed_axis]
             seed = np.zeros(3); seed[ax] = 1.0
-        Rs = frame_from(seed, np.array([0.0, 1.0, 0.0]), front=seed)
-        ss = float(np.abs((V - hc) @ Rs.T).max())
-        gs = in_frame(head, Rs, hc, ss)
+        # any up that is not the seed itself: a seed along y (which the
+        # sweep and a rotated head both produce) made frame_from degenerate
+        up_s = np.array([0.0, 1.0, 0.0]) if abs(seed[1]) < 0.9 else np.array([0.0, 0.0, 1.0])
+        if a.seed_face and hp is not None:
+            # UPRIGHT EAR IN THE SEED RENDER. With a world axis as "up" the
+            # side view of a rotated head shows the ear rolled by a random
+            # angle, and the detector then boxed the jaw, the cheek, or half
+            # the ear (9 of 18 rotated heads failed the residual gate that
+            # way). The face vertical is already known; it makes the ear
+            # upright, the regime the detector and pick() were measured in.
+            up_s = np.asarray(hp[1], float)
+        Rs = frame_from(seed, up_s, front=seed)
+        ss = seed_scale or float(np.abs((V - hc) @ Rs.T).max())
+        gs = in_frame(head, Rs, seed_centre, ss)
         img, _, cam = render(gs, cfg)
-        best = pick(pipe(np.asarray(img), timestamp=0.0), cfg, img.shape[:2])
+        dets = pipe(np.asarray(img), timestamp=0.0)
+        if a.seed_sweep:
+            # whole-head frame: no centrality prior (see the sweep)
+            best = max(dets, key=lambda d: float(d["confidence"])) if dets else None
+        else:
+            best = pick(dets, cfg, img.shape[:2])
         if best is None:
             return None, "seed render found no ear"
         bx = best.get("box") or best.get("bbox")
@@ -365,7 +473,7 @@ def main():
         if keep.sum() < 50:
             return None, f"chop kept only {int(keep.sum())} vertices"
         # back to world coordinates for the PCA
-        Pw = Vs[keep] * ss @ Rs + hc
+        Pw = Vs[keep] * ss @ Rs + seed_centre
         cc = Pw.mean(0)
         cands, vt, ev = candidates(Pw, cc, hc - cc)
 
@@ -376,17 +484,100 @@ def main():
         # forehead, chin, nasion and nose tip, which owes nothing to the
         # scan's axis convention and so survives a mesh we did not render.
         # Measured against the GT frame's up: 4.36, 10.48, 6.42 deg.
-        up_ref = None
+        up_ref = lat_ref = None
         if a.up_from_face:
-            hp = head_pose(head, cfg)
             if hp is not None:
                 up_ref = np.asarray(hp[1], float)
+                lat_ref = np.asarray(hp[0], float)
         if up_ref is not None:
             # keep each candidate's axis, take the SIGN from the face frame
             for q in cands:
                 if q["up"] @ up_ref < 0:
                     q["up"] = -q["up"]
-        if a.rule == "smallest":
+        if a.rule == "face" and lat_ref is not None:
+            # FRONT FROM THE FACE, NOT THE CHOP. On a protruding ear the
+            # chop's smallest PCA axis is anterior-posterior -- the pinna is a
+            # flap, thin front-to-back -- and the seed view then looks at the
+            # ear from BEHIND (pp70_right 81 deg, pp41_left 41, pp66_left 56,
+            # pp33_right 50; all with a correctly found face). Refinement
+            # cannot recover from that because the detector is shown the back
+            # of the pinna. The face's lateral axis is 8-35 deg from the
+            # pinna plane, which refinement does recover from (20 -> 4 deg).
+            # The chop still sets centre and scale; the sign points away from
+            # the head centroid, as every front here does.
+            f0 = lat_ref if lat_ref @ (cc - hc) > 0 else -lat_ref
+            u0 = up_ref - f0 * (up_ref @ f0)
+            u0 /= np.linalg.norm(u0)
+            c = dict(front=f0, up=u0, fi=-1, ui=-1, sgn=0)
+            top, margin = (float("nan"), 0, 0.0, c), 0.0
+        elif a.rule == "procrustes":
+            # THE TEMPLATE PICKS THE FRAME. Lift the 55 landmarks in every
+            # chop candidate and align them to the template's 55 by a
+            # similarity (reflection allowed); the residual is anatomy's
+            # verdict on the candidate, and the alignment hands back the up
+            # axis WITH its sign -- which is what the face was for. No
+            # FaceMesh, no scalp false positives, no axis convention.
+            from suggest_landmarks import similarity
+            tsz = float(np.sqrt(((TPL - TPL.mean(0)) ** 2).sum(1).mean()))
+            tried = []
+            for q in cands:
+                try:
+                    P3 = lift_in_frame(head, q["front"], q["up"], cc, cfg, pipe,
+                                       a.refine_grid, Pw)
+                except Exception as e:                  # noqa: BLE001
+                    P3 = None
+                if P3 is None:
+                    tried.append((np.inf, q, None)); continue
+                ok = np.isfinite(P3).all(1)
+                if ok.sum() < 20:
+                    tried.append((np.inf, q, None)); continue
+                # ROTATION ONLY. With reflection allowed, a candidate whose up
+                # is flipped matched the template through a mirror at the
+                # SAME residual as the right one (det -1, tied residuals on
+                # the rotated pp10/pp16), so the up sign was undecidable.
+                # Handedness is not the template's job: the corpus is in
+                # left form, and in production the side comes from the face
+                # frame (which side of the head the chop is on), with
+                # right-side heads mirrored first, as the corpus was.
+                Y, (Rp, kp, _, _) = similarity(P3[ok], TPL[ok], reflect=False)
+                resid = float(np.sqrt(((Y - TPL[ok]) ** 2).sum(1).mean())) / tsz
+                tried.append((resid, q, (Rp, kp, int(ok.sum()))))
+            tried.sort(key=lambda t: t[0])
+            if not np.isfinite(tried[0][0]):
+                return None, "procrustes: no candidate lifted"
+            resid, c, (Rp, kp, nok) = tried[0]
+            second = tried[1][0] if len(tried) > 1 else np.inf
+            # RESIDUAL GATE. On 18 randomly rotated heads every correct frame
+            # had residual <= 0.25 and every wrong one >= 0.67 (0.666 was a
+            # 21 deg up error). A frame nothing resembles an ear in is a
+            # reported failure, not a result.
+            if resid > 0.45:
+                return None, f"procrustes: no candidate resembles an ear (resid {resid:.3f})"
+            # a world direction d is d @ Rp in template coordinates, so the
+            # template's up (0,1,0) is this in the world:
+            up_w = np.array([0.0, 1.0, 0.0]) @ Rp.T
+            up_w /= np.linalg.norm(up_w)
+            up_ref = up_w                 # refinement keeps up from here on
+            c = dict(c, up=up_w - c["front"] * (up_w @ c["front"]))
+            c["up"] /= np.linalg.norm(c["up"])
+            traj.append(("procrustes", f"resid {resid:.3f} next {second:.3f} "
+                                       f"det {np.sign(np.linalg.det(Rp)):+.0f} n {nok}"))
+            top, margin = (-resid, nok, 0.0, c), float(second - resid)
+        elif a.rule == "face-nearest" and lat_ref is not None:
+            # THE CHOP AXIS NEAREST THE FACE LATERAL. 'face' alone fixed the
+            # posterior-view ears but broke six others (pp48_right 62 deg,
+            # pp66_right 64, pp82_left 134, ...) that the chop had right to
+            # 1-3 deg: the face lateral is sometimes too far from the pinna
+            # plane for refinement to close. The chop's axes are accurate
+            # when the right one is chosen; the face is reliable about WHICH
+            # one. So the face selects among the chop's candidates instead
+            # of replacing them.
+            f0 = lat_ref if lat_ref @ (cc - hc) > 0 else -lat_ref
+            # tie-break the up axis (two per front) by the face vertical
+            c = max(cands, key=lambda q: (round(float(q["front"] @ f0), 6),
+                                          float(q["up"] @ up_ref)))
+            top, margin = (float(c["front"] @ f0), 0, 0.0, c), 0.0
+        elif a.rule == "smallest":
             fi, ui = int(np.argmin(ev)), int(np.argmax(ev))
             pickc = [c for c in cands if c["fi"] == fi and c["ui"] == ui]
             # up sign still has to be resolved somehow; take the better one so
@@ -419,7 +610,6 @@ def main():
         # a 0.065% gross-error rate, which is what makes the same idea work
         # here. Trimmed to 80% for the same reason.
         front_i, up_i = c["front"], c["up"]
-        traj = []
         Qall = None            # every lifted landmark, untrimmed; sets the scale
         for it in range(max(0, a.passes - 1)):
             try:
@@ -476,9 +666,19 @@ def main():
         # (p10-p90); a ratio at the clamp is reported, because it is one of
         # the few failure signs this script gets without ground truth -- but
         # it is NOT a frame detector: only 4 of 16 bad frames hit it.
-        s_fin = float(np.clip(s_lm, 0.8 * s_chop, 1.6 * s_chop))
-        if s_fin != s_lm:
-            traj.append(("scale clamped", f"lift/chop {s_lm / s_chop:.2f}"))
+        # LIFT-SANITY GATE, NOT A CHOP-TIED CLAMP. The clamp (0.8-1.6x the
+        # chop) assumed the chop was the better-known size; on a rotated head
+        # (pp16_left) the chop was 2x the ear, the lift had the scale right
+        # at 0.50x, and the clamp forced a wrong answer. The chop is now only
+        # the fallback for a lift that is thin (<40 landmarks) or, under the
+        # Procrustes rule, that does not resemble an ear (residual >= 0.45).
+        lift_ok = Qall is not None and len(Qall) >= 40
+        if lift_ok and a.rule == "procrustes":
+            lift_ok = any(k == "procrustes" and float(v.split()[1]) < 0.45
+                          for k, v in traj)
+        s_fin = s_lm if lift_ok else s_chop
+        if not lift_ok:
+            traj.append(("scale from chop", f"lift/chop {s_lm / s_chop:.2f}"))
         res = dict(front=c["front"], up=c["up"], centre=cc, ev=ev,
                    traj=traj, R=_R,
                    # SCALE FROM THE LANDMARKS, NOT THE CHOP. ear_frame scales
@@ -496,7 +696,13 @@ def main():
         # did the recorded convention (front = smallest axis) win?
         res["convention_won"] = (c["fi"] == int(np.argmin(ev)))
         if lm_gt is not None:
-            gtR, gtC, _ = ear_frame(head, lm_gt, cfg)
+            # ear_frame's up is the WORLD y axis, i.e. the scan convention;
+            # under --random-rot that is no longer anatomical up, so the GT
+            # frame is built on the unrotated head and rotated with it.
+            if nm in GTO:
+                gtR, gtC = GTO[nm]
+            else:
+                gtR, gtC, _ = ear_frame(head, lm_gt, cfg)
             gt_front = gtR[2]
             # SIGNED, NOT abs(). abs() maps a 180 deg flip onto 0, so an
             # upside-down frame scored as perfect: the real up error here was
@@ -545,6 +751,9 @@ def main():
 
     names = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz")
                    if str(np.load(f, allow_pickle=True)["dataset"]) == a.dataset)[:a.ears]
+    names_all = list(names)
+    if a.only:
+        names = [n for n in names if n in set(a.only)]
     if a.workers > 1 and not a.shard:
         rows = run_sharded(a, names)
         summarize(rows)
@@ -559,6 +768,21 @@ def main():
             head, ear, lm = load_ear(nm, a.dataset, c)
         except (FileNotFoundError, KeyError, ValueError) as e:
             print(f"[{i+1}/{len(names)}] {nm}: skipped -- {e}"); continue
+        if a.random_rot is not None:
+            # a uniformly random rotation, fixed per (seed, ear) so runs repeat
+            rr = np.random.default_rng((a.random_rot, names_all.index(nm)))
+            q = rr.normal(size=4); q /= np.linalg.norm(q)
+            w_, x_, y_, z_ = q
+            Rr = np.array([[1 - 2*(y_*y_ + z_*z_), 2*(x_*y_ - z_*w_), 2*(x_*z_ + y_*w_)],
+                           [2*(x_*y_ + z_*w_), 1 - 2*(x_*x_ + z_*z_), 2*(y_*z_ - x_*w_)],
+                           [2*(x_*z_ - y_*w_), 2*(y_*z_ + x_*w_), 1 - 2*(x_*x_ + y_*y_)]])
+            assert abs(np.linalg.det(Rr) - 1) < 1e-9
+            gR0, gC0, _ = ear_frame(head, lm, c)
+            GTO[nm] = (gR0 @ Rr.T, Rr @ gC0)      # rows are axes: v -> Rr v
+            import open3d as o3d
+            head.vertices = o3d.utility.Vector3dVector(np.asarray(head.vertices) @ Rr.T)
+            head.compute_vertex_normals()
+            lm = lm @ Rr.T
         res, err = one(nm, head, lm)
         if err:
             print(f"[{i+1}/{len(names)}] {nm}: {err}"); continue
@@ -567,7 +791,8 @@ def main():
               f"up {res['up_deg']:5.2f}, centre {res['centre_mm']:5.2f} mm, "
               f"margin {res['margin']:.3f}, "
               f"lift/chop scale {res['scale_ratio']:.2f}, "
-              f"{'convention' if res['convention_won'] else 'OVERRODE convention'}",
+              + "".join(f"[{k}: {v}] " for k, v in res["traj"] if k == "procrustes")
+              + f"{'convention' if res['convention_won'] else 'OVERRODE convention'}",
               flush=True)
 
     if a.save_frames and rows:

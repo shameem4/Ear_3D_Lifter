@@ -13,8 +13,10 @@ import numpy as np
 import open3d as o3d
 
 from .backproject import backproject
+from .camera import orbit_extrinsic
 from .render import render
 from .scheme import CHIN, FOREHEAD, NASION, NOSE_TIP, TRAGION_L, TRAGION_R
+CHEEK_R, CHEEK_L = 50, 280          # FaceMesh cheek points, for nose relief
 
 def load_head(path):
     """Head mesh, centred and scaled to unit radius."""
@@ -126,87 +128,214 @@ def head_pose(mesh, cfg):
         base_options=mpp.BaseOptions(model_asset_path=str(task)), num_faces=1))
     C0 = np.asarray(mesh.vertices).mean(0)
     cands = []
-    for axis in (0, 1, 2):
-        for sgn in (1, -1):
-            front = np.zeros(3); front[axis] = sgn
-            up = np.array([0.0, 0.0, 1.0]) if axis != 2 else np.array([0.0, 1.0, 0.0])
-            R = frame_from(front, up, front=front)
-            if R is None:
+    axes = [(ax, sg) for ax in (0, 1, 2) for sg in (1, -1)]
+    # THE SIX AXIS VIEWS ASSUME A HEAD-ALIGNED SCAN. A head in an arbitrary
+    # pose can put the face 55 deg off every axis, beyond what FaceMesh
+    # detects reliably, so if the six find nothing the eight cube diagonals
+    # are tried as well (max obliquity then ~35 deg).
+    diag = [np.array(v, float) / np.sqrt(3.0) for v in
+            ((sx, sy, sz) for sx in (1, -1) for sy in (1, -1) for sz in (1, -1))]
+    # and the 12 cube-edge midpoints as a last ring (26 directions in all,
+    # max obliquity ~22 deg): the rotated pp19_left had no face on 14.
+    edge = [np.array(v, float) / np.sqrt(2.0) for v in
+            [(sa, sb, 0) for sa in (1, -1) for sb in (1, -1)]
+            + [(sa, 0, sb) for sa in (1, -1) for sb in (1, -1)]
+            + [(0, sa, sb) for sa in (1, -1) for sb in (1, -1)]]
+    # ABSOLUTE GATE, NOT JUST A RANKING. Ranking by relief and stability
+    # only helps when a real face is among the hits; on rotated heads
+    # (pp16_left, pp19_left) the ONLY hit was a scalp false positive --
+    # relief 11.0 and 7.3 mm, stable 2/4 and 1/4 -- and it was accepted,
+    # and the ear seed then looked at the top of the head. Real faces
+    # measured 15-45 mm and 3-4/4 (facediag, 32 ears), so a hit below
+    # 15 mm or under 3/4 does not count, the search goes on to the next
+    # ring, and with nothing passing the answer is "no face", not a frame.
+    good = lambda: [t for t in cands if t[0] >= 15.0 and t[1] >= 3]
+    for rnd, dirs in enumerate(([np.eye(3)[ax] * sg for ax, sg in axes], diag, edge)):
+        if rnd >= 1 and good():
+            break
+        # FOUR ROLLS PER DIRECTION. The face detector is weak beyond ~45 deg
+        # of in-plane roll, and with an arbitrary "up" a rotated head shows
+        # its face at a random roll: 11 of 18 randomly rotated heads had no
+        # face in 26 directions while 32 of 32 upright ones did. The
+        # reference implementation's random-rotation loop randomises roll
+        # implicitly; this does it explicitly.
+        for front in dirs:
+            axis = int(np.argmax(np.abs(front))); sgn = int(np.sign(front[axis]))
+            up0 = np.array([0.0, 0.0, 1.0]) if abs(front[2]) < 0.9 else np.array([0.0, 1.0, 0.0])
+            up0 = up0 - front * (up0 @ front); up0 /= np.linalg.norm(up0)
+            side = np.cross(front, up0)
+            ups = [up0, side, -up0, -side]
+            for up in ups:
+              R = frame_from(front, up, front=front)
+              if R is None:
                 continue
-            # SCALE BY THE MESH, NOT 1.0. The camera is set up for a mesh
-            # spanning ~2 units; a head in millimetres spans ~300, so a unit
-            # scale showed MediaPipe an extreme close-up of skin and it found
-            # a face on 0 of 6 views. This worked while heads were
-            # HUTUBS-normalised and broke silently when the corpus moved to
-            # mm -- the measurements in this docstring predate that. With the
-            # mesh framed, faces are found on 2 of 6 views again.
-            sc = float(np.abs((np.asarray(mesh.vertices) - C0) @ R.T).max())
-            g = in_frame(mesh, R, C0, sc)
-            img, depth, cam = render(g, cfg)
-            res = fl.detect(mp.Image(image_format=mp.ImageFormat.SRGB,
-                                     data=np.ascontiguousarray(img)))
-            if not res.face_landmarks:
-                continue
-            # MediaPipe normalises to the IMAGE it was handed, so scale by that
-            # image's own shape, never by the size we requested.
-            h, w = img.shape[:2]
-            uv = np.array([[p.x * w, p.y * h] for p in res.face_landmarks[0]])
-            P, hit = backproject(depth, uv, cam)
-            if not hit[[TRAGION_R, TRAGION_L, FOREHEAD, CHIN,
-                        NOSE_TIP, NASION]].all():
-                continue
-            # The landmarks come back in THIS frame's coordinates; everything
-            # downstream works in the mesh's own, so convert before using them.
-            # Skipping this put the ear view 62-70 deg off instead of 10-24.
-            P = (P * sc @ R) + C0
-            # THE EAR DIRECTION IS 90 DEG FROM THE NOSE: the normal of the
-            # sagittal plane, from the head's own up and forward axes.
-            #
-            # The obvious alternative is the tragion-to-tragion line, and over 12
-            # ears it is no better -- mean 25.1 deg from the pinna plane against
-            # 25.7 here, median 26.9 against 24.2. What decides it is that the
-            # tragion landmarks are the weak ones: the reference implementation in
-            # ../landmarking_stuff/landmarker marks exactly these indices "most
-            # likely not possible" and does not use them. Forehead, chin, nasion
-            # and nose tip are points FaceMesh is actually good at, so the same
-            # answer rests on firmer ground.
-            #
-            # A third option, the head's local surface normal at the tragion, is
-            # better typically (mean 16.4, median 14.4) but has a worse tail
-            # (48.2) and failed outright on 1 of 12. Not taken.
-            vert = P[FOREHEAD] - P[CHIN]
-            vert /= np.linalg.norm(vert)
-            fwd = P[NOSE_TIP] - P[NASION]
-            fwd -= vert * (fwd @ vert)
-            if np.linalg.norm(fwd) < 1e-6:
-                continue
-            fwd /= np.linalg.norm(fwd)
-            lat = np.cross(vert, fwd)
-            lat /= np.linalg.norm(lat)
-            # Orient toward the subject's left so "ear 0" keeps its meaning.
-            if lat @ (P[TRAGION_L] - P[TRAGION_R]) < 0:
-                lat = -lat
-            vert -= lat * (vert @ lat)
-            vert /= np.linalg.norm(vert)
-            # KEEP THE BEST VIEW, NOT THE FIRST. FaceMesh will return a face
-            # from a SIDE view of a head, and taking the first hit meant that
-            # answer won whenever it came earlier in the axis order. On
-            # pp10_right, axis 0+ gave a vertical 143 deg from the GT frame's
-            # up while axis 2- gave 5.3 -- both detected, both with every
-            # required landmark, and the wrong one returned.
-            #
-            # Tragion separation is the discriminator: a frontal view sees
-            # both tragions at their true spacing, an oblique one foreshortens
-            # them (140.2 mm against 130.4 here). It costs nothing, since the
-            # value was already being computed for the log line.
-            sep = float(np.linalg.norm(P[TRAGION_L] - P[TRAGION_R]))
-            cands.append((sep, axis, sgn, lat, vert, P[TRAGION_R], P[TRAGION_L]))
-    if not cands:
-        print("mediapipe: no face found on any of the six views -- using the ear sweep")
+              # SCALE BY THE MESH, NOT 1.0. The camera is set up for a mesh
+              # spanning ~2 units; a head in millimetres spans ~300, so a unit
+              # scale showed MediaPipe an extreme close-up of skin and it found
+              # a face on 0 of 6 views. This worked while heads were
+              # HUTUBS-normalised and broke silently when the corpus moved to
+              # mm -- the measurements in this docstring predate that. With the
+              # mesh framed, faces are found on 2 of 6 views again.
+              sc = float(np.abs((np.asarray(mesh.vertices) - C0) @ R.T).max())
+              g = in_frame(mesh, R, C0, sc)
+              img, depth, cam = render(g, cfg)
+              res = fl.detect(mp.Image(image_format=mp.ImageFormat.SRGB,
+                                       data=np.ascontiguousarray(img)))
+              if not res.face_landmarks:
+                  continue
+              # MediaPipe normalises to the IMAGE it was handed, so scale by that
+              # image's own shape, never by the size we requested.
+              h, w = img.shape[:2]
+              uv = np.array([[p.x * w, p.y * h] for p in res.face_landmarks[0]])
+              P, hit = backproject(depth, uv, cam)
+              if not hit[[TRAGION_R, TRAGION_L, FOREHEAD, CHIN,
+                          NOSE_TIP, NASION, CHEEK_R, CHEEK_L]].all():
+                  continue
+              # The landmarks come back in THIS frame's coordinates; everything
+              # downstream works in the mesh's own, so convert before using them.
+              # Skipping this put the ear view 62-70 deg off instead of 10-24.
+              P = (P * sc @ R) + C0
+              # THE EAR DIRECTION IS 90 DEG FROM THE NOSE: the normal of the
+              # sagittal plane, from the head's own up and forward axes.
+              #
+              # The obvious alternative is the tragion-to-tragion line, and over 12
+              # ears it is no better -- mean 25.1 deg from the pinna plane against
+              # 25.7 here, median 26.9 against 24.2. What decides it is that the
+              # tragion landmarks are the weak ones: the reference implementation in
+              # ../landmarking_stuff/landmarker marks exactly these indices "most
+              # likely not possible" and does not use them. Forehead, chin, nasion
+              # and nose tip are points FaceMesh is actually good at, so the same
+              # answer rests on firmer ground.
+              #
+              # A third option, the head's local surface normal at the tragion, is
+              # better typically (mean 16.4, median 14.4) but has a worse tail
+              # (48.2) and failed outright on 1 of 12. Not taken.
+              vert = P[FOREHEAD] - P[CHIN]
+              vert /= np.linalg.norm(vert)
+              fwd = P[NOSE_TIP] - P[NASION]
+              fwd -= vert * (fwd @ vert)
+              if np.linalg.norm(fwd) < 1e-6:
+                  continue
+              fwd /= np.linalg.norm(fwd)
+              lat = np.cross(vert, fwd)
+              lat /= np.linalg.norm(lat)
+              # Orient toward the subject's left so "ear 0" keeps its meaning.
+              if lat @ (P[TRAGION_L] - P[TRAGION_R]) < 0:
+                  lat = -lat
+              vert -= lat * (vert @ lat)
+              vert /= np.linalg.norm(vert)
+              # KEEP THE BEST VIEW, NOT THE FIRST. FaceMesh will return a face
+              # from a SIDE view of a head, and taking the first hit meant that
+              # answer won whenever it came earlier in the axis order. On
+              # pp10_right, axis 0+ gave a vertical 143 deg from the GT frame's
+              # up while axis 2- gave 5.3 -- both detected, both with every
+              # required landmark, and the wrong one returned.
+              #
+              # Tragion separation is the discriminator: a frontal view sees
+              # both tragions at their true spacing, an oblique one foreshortens
+              # them (140.2 mm against 130.4 here). It costs nothing, since the
+              # value was already being computed for the log line.
+              sep = float(np.linalg.norm(P[TRAGION_L] - P[TRAGION_R]))
+              # ...EXCEPT THAT IT IS NOT. Diagnosed over the 16 HUTUBS ears whose
+              # bootstrap frame came out >20 deg wrong plus 16 that came out
+              # right (facediag, 2026-10-16): FaceMesh returns a "face" from
+              # side views of a head and from the cut planes of a cropped
+              # scan, and those false faces have WIDER back-projected tragions
+              # than the real one (pp6_right: 177 vs 131 mm), so max-separation
+              # picked the wrong view on 6 of 16 failing ears and caused every
+              # up-flip. Two things separate a real face from a scalp hit on
+              # all 32 ears, each on its own:
+              #   nose relief   nose tip minus the cheek midpoint, along the
+              #                 view axis. Real faces 15-45 mm; false ones
+              #                 -11 to 19 mm (one overlap, so not a threshold
+              #                 by itself).
+              #   stability     the same face is still detected when the view
+              #                 is rotated +-15 deg in yaw and pitch. Real
+              #                 faces 3-4 of 4; false ones 0-1 (one at 3).
+              # The pick is max relief among hits that survive >=2 of the 4
+              # perturbed views; if none does, max relief alone. Costs four
+              # extra renders per hit.
+              relief = float((P[NOSE_TIP] - 0.5 * (P[CHEEK_R] + P[CHEEK_L])) @ front)
+              stab = 0
+              for yaw, pitch in ((15, 0), (-15, 0), (0, 15), (0, -15)):
+                  im2, dp2, cam2 = render(g, cfg, E=orbit_extrinsic(yaw, pitch, cfg))
+                  r2 = fl.detect(mp.Image(image_format=mp.ImageFormat.SRGB,
+                                          data=np.ascontiguousarray(im2)))
+                  stab += bool(r2.face_landmarks)
+              cands.append((relief, stab, sep, axis, sgn, lat, vert, P[TRAGION_R], P[TRAGION_L],
+                            P, hit, front))
+    if not good():
+        weak = ", ".join(f"relief {t[0]:.1f} stab {t[1]}" for t in cands)
+        print(f"mediapipe: no face passing the gate on 26 views"
+              f"{' (rejected: ' + weak + ')' if weak else ''} -- using the ear sweep")
         return None
-    cands.sort(key=lambda t: -t[0])
-    sep, axis, sgn, lat, vert, trR, trL = cands[0]
-    runner = f", runner-up {cands[1][0]:.1f}" if len(cands) > 1 else ""
+    stable = good()
+    stable.sort(key=lambda t: -t[0])
+    relief, stab, sep, axis, sgn, lat, vert, trR, trL, P, hit, front0 = stable[0]
+    others = ", ".join(f"{t[3]}{'+' if t[4] > 0 else '-'} relief {t[0]:.1f} stab {t[1]}"
+                       for t in cands if t is not stable[0])
     print(f"mediapipe: face on axis {axis}{'+' if sgn > 0 else '-'}, "
-          f"tragion separation {sep:.3f} (best of {len(cands)}{runner})")
+          f"nose relief {relief:.1f} mm, stable {stab}/4, tragion sep {sep:.1f}"
+          f" (of {len(cands)}{': ' + others if others else ''})")
+
+    # REFINE FACE-ON, THEN FIT THE CANONICAL FACE. The hit above came from
+    # whichever of 14 fixed directions was nearest the face, up to ~35-55
+    # deg oblique, and an oblique FaceMesh gives a poor frame: on a rotated
+    # pp10_left the "tragion" landed on the cheek and the lateral axis was
+    # ~50 deg off, so the ear-seed render framed the face. This is the trick
+    # from the reference implementation (landmarking_stuff/landmarker): once
+    # a nose is found, re-render looking straight at it with the forehead up
+    # and detect again, then take the head frame from a rotation-only
+    # similarity fit of MediaPipe's canonical face model (468 points, +x =
+    # subject's left, +y up, +z forward) onto the back-projected landmarks,
+    # rather than from four of them.
+    V = np.asarray(mesh.vertices)
+    for _ in range(2):
+        fwd = P[NOSE_TIP] - P[NASION]
+        fwd -= vert * (fwd @ vert)
+        if np.linalg.norm(fwd) < 1e-6:
+            break
+        fwd /= np.linalg.norm(fwd)
+        R = frame_from(fwd, vert, front=fwd)
+        if R is None:
+            break
+        nose = P[NOSE_TIP]
+        sc = 0.6 * float(np.abs((V - nose) @ R.T).max())
+        g = in_frame(mesh, R, nose, sc)
+        img, depth, cam = render(g, cfg)
+        res = fl.detect(mp.Image(image_format=mp.ImageFormat.SRGB,
+                                 data=np.ascontiguousarray(img)))
+        if not res.face_landmarks:
+            break
+        h, w = img.shape[:2]
+        uv = np.array([[p.x * w, p.y * h] for p in res.face_landmarks[0]])
+        P2, hit2 = backproject(depth, uv, cam)
+        if not hit2[[TRAGION_R, TRAGION_L, FOREHEAD, CHIN, NOSE_TIP, NASION]].all():
+            break
+        P, hit = (P2 * sc @ R) + nose, hit2
+        vert = P[FOREHEAD] - P[CHIN]
+        vert /= np.linalg.norm(vert)
+    model = Path(cfg.get("face_model") or Path(task).parent / "canonical_face_model.obj")
+    if model.exists():
+        canon = np.array([[float(x) for x in l.split()[1:4]]
+                          for l in open(model) if l.startswith("v ")])
+        ok = hit[: len(canon)]
+        X, Y = canon[ok], P[: len(canon)][ok]
+        cx, cy = X.mean(0), Y.mean(0)
+        A, B = X - cx, Y - cy
+        U, S, Vt = np.linalg.svd(A.T @ B)
+        D = np.eye(3)
+        if np.linalg.det(U @ Vt) < 0:
+            D[-1, -1] = -1                      # rotation only, no mirror
+        Rc = U @ D @ Vt                         # Y ~ k (X - cx) @ Rc + cy
+        k = (S * np.diag(D)).sum() / (A ** 2).sum()
+        lat, vert, fwd = (np.eye(3) @ Rc)       # canonical axes in the world
+        for v_ in (lat, vert, fwd):
+            v_ /= np.linalg.norm(v_)
+        trR, trL = (k * (canon[[TRAGION_R, TRAGION_L]] - cx) @ Rc + cy)
+        rms = float(np.sqrt(((k * A @ Rc + cy - Y) ** 2).sum(1).mean()))
+        print(f"mediapipe: canonical face fit on {int(ok.sum())} points, rms {rms:.1f} mm, "
+              f"face-on refine moved the view {np.degrees(np.arccos(np.clip(fwd @ front0, -1, 1))):.1f} deg")
+    else:
+        print(f"mediapipe: no canonical_face_model.obj at {model}; 4-point frame")
     return lat, vert, trR, trL
