@@ -166,6 +166,15 @@ DEFAULTS = dict(
                             # value today: 40 heads x 5 suns, this one gave
                             # the best face frames (median 5.1 deg vs scan,
                             # 40/40 found; a camera-axis sun lost 4).
+    gt_lm3d="lm3d_v9_canonical_mm.npz",  # the REFERENCE 3D landmarks, in
+                            # wrap_work/templates. v9 (2026-10-17, user's
+                            # choice): curves from the shipped landmarker run
+                            # multiview on ear_mean_v4, every strip re-spaced to
+                            # the spacing it uses on real ears (80 HUTUBS ears);
+                            # canal 39 unchanged. Model-derived, so the report
+                            # also scores against the alternates below.
+    gt_lm3d_also=("lm3d_v7_canonical_mm.npz",           # human curves (v6_spacing)
+                  "lm3d_v8_corpus_canonical_mm.npz"),   # median real-ear predictions
     multiview_light_dir=(0.6, -0.4, -1.0),  # the sun for the 25-view orbit
                             # (scripts/multiview_collect_rays.py), fixed to the
                             # head. 80 ears vs light_dir: table best-8 + re-seat

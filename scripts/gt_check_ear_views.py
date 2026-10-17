@@ -15,14 +15,17 @@ from ear3d import Camera
 from ear3d.backproject import backproject_snapped
 from escape_audit import DEFAULTS
 
-LM = np.load(WRAP / "templates/lm3d_v7_canonical_mm.npz", allow_pickle=True)
-NAMES = [str(x) for x in LM["names"]]
+# The reference is config's gt_lm3d (v9); gt_lm3d_also are scored alongside.
+def _load(fn): z = np.load(WRAP / "templates" / fn, allow_pickle=True); return z, [str(x) for x in z["names"]]
+LM, NAMES = _load(DEFAULTS["gt_lm3d"])
+ALSO = {fn: _load(fn) for fn in DEFAULTS.get("gt_lm3d_also", ())}
 def inv(name): return np.load(WRAP / "corpus/canon2scan" / f"{name}.npz", allow_pickle=True)["inverse"]
 
-def gt_in_cache(hd, side, head):
-    """Wrap landmarks of this ear in the cached normalised head frame (mm)."""
+def gt_in_cache(hd, side, head, ref=None):
+    """Reference landmarks of this ear in the cached normalised head frame (mm)."""
+    lmz, names = ref or (LM, NAMES)
     nm = f"{hd}_{'left' if side == 'L' else 'right'}"
-    P = LM["landmarks"][NAMES.index(nm)][:55]
+    P = lmz["landmarks"][names.index(nm)][:55]
     # ear's canonical -> scan mm -> the _left canonical the head cache was built in
     T = inv(f"{hd}_left") @ np.linalg.inv(inv(nm))
     P = (np.c_[P, np.ones(len(P))] @ T.T)[:, :3]
@@ -30,7 +33,7 @@ def gt_in_cache(hd, side, head):
 
 out = sys.argv[1]
 for tag in sys.argv[2:]:
-    D, rows, shown = [], [], []
+    D, rows, shown = [], [], []; DA = {fn: [] for fn in ALSO}
     for f in sorted(glob.glob(str(R0 / f"runs/cache/{tag}_s*/*_[LR].npz"))):
         z = np.load(f); head = np.load(str(z["head"]))
         stem = pathlib.Path(f).stem; hd, side = stem.rsplit("_", 1)
@@ -43,6 +46,8 @@ for tag in sys.argv[2:]:
         pw = P * s @ R + c0
         d = np.linalg.norm(pw - gt, axis=1); d[~hit] = np.nan      # NaN = escape
         D.append(d); rows.append(stem)
+        for fn, ref in ALSO.items():
+            da = np.linalg.norm(pw - gt_in_cache(hd, side, head, ref), axis=1); da[~hit] = np.nan; DA[fn].append(da)
         if len(shown) < 6 and side == ("L" if len(shown) % 2 == 0 else "R"):
             uv = cam.project((gt - c0) @ R.T / s)
             a = Image.fromarray(img); dr = ImageDraw.Draw(a)
@@ -54,9 +59,11 @@ for tag in sys.argv[2:]:
             shown.append(a.resize((384, 384)))
     D = np.array(D); flat = D.ravel(); esc = ~np.isfinite(flat); fv = np.where(esc, np.inf, flat)
     per_ear = np.nanmedian(D, axis=1); per_lm = np.nanmedian(D, axis=0)
-    print(f"{tag}: ears {len(D)} | per-point median {np.nanmedian(flat):.2f} mm mean {np.nanmean(flat):.2f} | "
+    print(f"{tag} vs {DEFAULTS['gt_lm3d']}: ears {len(D)} | per-point median {np.nanmedian(flat):.2f} mm mean {np.nanmean(flat):.2f} | "
           + " ".join(f">{t:g}mm {np.mean(fv > t) * 100:.1f}%" for t in (2, 5, 10, 20))
           + f" | no-hit {esc.sum()} | worst ears " + ", ".join(f"{rows[i]} {per_ear[i]:.1f}" for i in np.argsort(per_ear)[::-1][:5]))
+    for fn, Da in DA.items():
+        Da = np.array(Da); print(f"   also vs {fn}: median {np.nanmedian(Da):.2f} mm, >10mm {np.mean(np.where(np.isfinite(Da), Da, np.inf) > 10) * 100:.1f}%")
     print("   per-landmark median, worst 8:", ", ".join(f"{j}:{per_lm[j]:.1f}" for j in np.argsort(per_lm)[::-1][:8]))
     np.savez(f"{out}_{tag}.npz", D=D, ears=rows)
     S = Image.new("RGB", (384 * len(shown), 384))

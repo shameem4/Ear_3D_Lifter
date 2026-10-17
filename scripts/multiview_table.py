@@ -12,6 +12,11 @@ cd = pathlib.Path(sys.argv[1])
 fs = sorted(cd.glob("*.npz"))
 if len(sys.argv) > 2: keep = {p.stem for p in pathlib.Path(sys.argv[2]).glob("*.npz")}; fs = [f for f in fs if f.stem in keep]
 E = [dict(np.load(f, allow_pickle=True)) for f in fs]; names = [f.stem for f in fs]
+# Ground truth from config's reference (gt_lm3d), not the copy stored in the
+# ray cache, which is whatever reference was current when it was collected.
+_g = {}; exec(open(R0 / "scripts/gt_check_ear_views.py").read().split("out = sys.argv[1]")[0], _g)
+for nm_, e in zip(names, E):
+    hd_, sd_ = nm_.rsplit("_", 1); e["gt"] = _g["gt_in_cache"](hd_, sd_, np.load(str(e["head"])))
 grp = np.array([0 if "v4_s0" in str(e["head"]) else 1 for e in E])
 ANG = E[0]["angles"]; V = len(ANG)
 def anat(e):                       # view permutation so index = anatomical view
@@ -54,6 +59,7 @@ for n, e in enumerate(E):
         out["RANSAC, oracle best-8 (ceiling)"][j] = fuse(e, j, np.argsort(RD[n][:, j])[:8], "ransac")
     out["  + re-seat onto head"] = reseat(e, out["RANSAC, table best-8"])
     for k in rows: rows[k].append(np.linalg.norm(out[k] - e["gt"], axis=1))
+print(f"GT reference: {_g['DEFAULTS']['gt_lm3d']}")
 print(f"{cd.name}: {len(E)} ears ({(grp == 0).sum()} / {(grp == 1).sum()} by subject set), {V} views, RANSAC thresh 1.0 mm")
 print(f"{'method':34s} {'median':>7s} {'mean':>6s} {'>5mm':>6s} {'>10mm':>6s} {'>20mm':>6s} {'fail':>5s}")
 base = None

@@ -196,10 +196,10 @@ def load_ear(name, dataset="hutubs", cfg=None):
             np.asarray(head.triangles)[:, ::-1].copy())
     head.compute_vertex_normals()
 
-    lm = np.load(WRAP / "templates/lm3d_v7_canonical_mm.npz", allow_pickle=True)
+    lm = np.load(WRAP / "templates" / (cfg or DEFAULTS).get("gt_lm3d", DEFAULTS["gt_lm3d"]), allow_pickle=True)
     names = [str(x) for x in lm["names"]]
     if name not in names:
-        raise KeyError(f"{name} has no stored landmarks in lm3d_v7")
+        raise KeyError(f"{name} has no stored landmarks in the reference lm3d")
     P = lm["landmarks"][names.index(name)][:55]
     return head, ear, P
 
