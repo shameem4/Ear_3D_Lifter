@@ -3,11 +3,12 @@ landmark and lift checks can start from the framed ear.
 
 Usage: cache_ear_views.py HEAD_CACHE OUTDIR WORKER N_WORKERS [COLOUR_CACHE]
 
-COLOUR_CACHE: a head cache of the same heads whose vertex colours the ears
-are rendered with instead (same scan, same vertex order; checked). The face
-stage needs blotchy skin -- clean skin turned 2 of 40 heads upside down past
-the nose guard -- while the ear landmarker needs it clean, so the head frame
-comes from HEAD_CACHE and the ear skin from COLOUR_CACHE.
+The ears are re-skinned with config's ear_tone / ear_skin_noise (clean tone
+5) before rendering: the face stage needs blotchy skin -- clean skin turned
+2 of 40 heads upside down past the nose guard -- while the ear landmarker
+needs it clean. So the head frame comes from HEAD_CACHE and the skin is
+redone here. COLOUR_CACHE instead takes the vertex colours from a head cache
+of the same heads (same scan, same vertex order; checked).
 Per ear writes OUTDIR/<head>_<side>.npz: img, depth, K, E, size (rebuild with
 ear3d.Camera(K, E, img.shape[:2], size)), R, centre, scale, box_mm, and
 head = the HEAD_CACHE npz it came from (the mesh lives there, in the same
@@ -24,6 +25,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import open3d as o3d
 
 from escape_audit import DEFAULTS
+from skin import apply_skin
 from ear3d.ear_view import ear_view, load_yolo
 
 cache, out, WK, NW = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
@@ -32,12 +34,15 @@ yolo = load_yolo()
 for f in sorted(cache.glob("*.npz"))[WK::NW]:
     z = np.load(f)
     m = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(z["V"]), o3d.utility.Vector3iVector(z["F"]))
-    col = z["C"]
+    m.compute_vertex_normals()
     if len(sys.argv) > 5:
         zc = np.load(pathlib.Path(sys.argv[5]) / f.name)
         assert np.array_equal(zc["F"], z["F"]), f"{f.stem}: colour cache is a different mesh"
-        col = zc["C"]
-    m.vertex_colors = o3d.utility.Vector3dVector(col)
+        m.vertex_colors = o3d.utility.Vector3dVector(zc["C"])
+    else:
+        apply_skin(m, seed=DEFAULTS["skin_seed"], tone=DEFAULTS["ear_tone"],
+                   ao_strength=DEFAULTS["ao_strength"], n_rays=DEFAULTS["ao_rays"],
+                   noise=DEFAULTS["ear_skin_noise"])
     m.compute_vertex_normals()
     for side in "LR":
         dst = out / f"{f.stem}_{side}.npz"

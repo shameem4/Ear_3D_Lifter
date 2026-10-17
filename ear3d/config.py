@@ -112,8 +112,13 @@ DEFAULTS = dict(
                             # point is to inspect landmarks; ingest renders its
                             # training images with a realistic tone instead.
     skin_seed=0,            # also drives the blotching and grain
-    skin_noise=True,        # blotching + grain on. Off for inspection renders:
-                            # see scripts/skin.py apply_skin(noise=).
+    skin_noise=True,        # blotching + grain on. The FACE stage needs them:
+                            # clean skin turned 2/40 heads upside down.
+    ear_tone=5,             # the EAR renders' skin, applied by
+    ear_skin_noise=False,   # cache_ear_views. Clean tone 5 vs blotchy tone 10,
+                            # 80 ears, GT check: median 3.42 vs 5.17 mm, >20 mm
+                            # 0.3% vs 6.0%; clean tone 10 ties (3.56), tone 5
+                            # better on 60/80 ears.
     ao_strength=0.75,       # how hard ambient occlusion darkens cavities
 
     # --- the sun ---

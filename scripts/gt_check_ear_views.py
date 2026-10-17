@@ -1,5 +1,9 @@
 """GT check: 2D landmarks on cached ear views, back-projected, vs wrap landmarks.
 
+Back-projection is backproject_snapped with config's snap (on, radius 0.08):
+landmarks on a rim edge otherwise fall into the cavity behind it. Point 41
+sits 2.0 mm off in-plane but 12.5 mm too deep unsnapped; snapped, 4.2 mm.
+
 Usage: gt_check_ear_views.py OUT_PREFIX EAR_TAG [EAR_TAG...]   (tags: ears_v2c10, ears_v2c5, ears_v1)
 """
 import sys, glob, pathlib, numpy as np
@@ -8,7 +12,8 @@ sys.path.insert(0, str(R0)); sys.path.insert(0, str(R0 / "scripts"))
 from PIL import Image, ImageDraw
 from escape_audit import WRAP
 from ear3d import Camera
-from ear3d.backproject import backproject
+from ear3d.backproject import backproject_snapped
+from escape_audit import DEFAULTS
 
 LM = np.load(WRAP / "templates/lm3d_v7_canonical_mm.npz", allow_pickle=True)
 NAMES = [str(x) for x in LM["names"]]
@@ -34,7 +39,7 @@ for tag in sys.argv[2:]:
         R, c0, s = z["R"], z["centre"], float(z["scale"])
         gt = gt_in_cache(hd, side, head)
         lm = np.load(f.replace(".npz", "_lm.npy"))
-        P, hit = backproject(z["depth"], lm, cam)
+        P, hit, _ = backproject_snapped(z["depth"], lm, cam, DEFAULTS)
         pw = P * s @ R + c0
         d = np.linalg.norm(pw - gt, axis=1); d[~hit] = np.nan      # NaN = escape
         D.append(d); rows.append(stem)
