@@ -476,6 +476,7 @@ def main():
         Pw = Vs[keep] * ss @ Rs + seed_centre
         cc = Pw.mean(0)
         cands, vt, ev = candidates(Pw, cc, hc - cc)
+        s_fit = None                   # ear size from the template fit, if any
 
         # UP FROM FACE ANATOMY, NOT FROM THE CHOP. PCA returns an axis, not
         # a direction, and the 2D landmarker cannot supply the sign -- it
@@ -563,6 +564,14 @@ def main():
             traj.append(("procrustes", f"resid {resid:.3f} next {second:.3f} "
                                        f"det {np.sign(np.linalg.det(Rp)):+.0f} n {nok}"))
             top, margin = (-resid, nok, 0.0, c), float(second - resid)
+            # SCALE FROM THE FIT, NOT THE POINT SPREAD. max|centred lifted
+            # coordinate| is one outlier away from wrong: pp19_left (rotated)
+            # passed the gate at 0.26 and still came out at s=60.6 for a
+            # 52 mm ear. The similarity's scale k maps the lift onto the
+            # template, so the ear's size is the template's size / k, with
+            # the template's own max-abs extent -- the GT definition, on
+            # clean points.
+            s_fit = float(np.abs(TPL - TPL.mean(0)).max()) / max(kp, 1e-9)
         elif a.rule == "face-nearest" and lat_ref is not None:
             # THE CHOP AXIS NEAREST THE FACE LATERAL. 'face' alone fixed the
             # posterior-view ears but broke six others (pp48_right 62 deg,
@@ -659,6 +668,8 @@ def main():
         s_chop = float(np.abs((Pw - cc) @ _R.T).max())
         s_lm = (float(np.abs((Qall - cc) @ _R.T).max())
                 if Qall is not None else s_chop)
+        if s_fit is not None:
+            s_lm = s_fit
         # CLAMPED TO THE CHOP. When the lift has failed the lifted points are
         # scattered over the head and their extent is meaningless: pp6_right
         # came out at 14x the chop (s=410 mm) and the ear was a dot in every
