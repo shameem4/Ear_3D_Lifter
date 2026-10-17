@@ -96,8 +96,14 @@ def ambient_occlusion(mesh, n_rays: int = 24, radius_frac: float = 0.04,
 
 
 def apply_skin(mesh, seed: int = 0, tone: int | None = None,
-               ao_strength: float = 0.75, n_rays: int = 24):
-    """Colour a mesh in place with a synthetic skin appearance. Returns it."""
+               ao_strength: float = 0.75, n_rays: int = 24, noise: bool = True):
+    """Colour a mesh in place with a synthetic skin appearance. Returns it.
+
+    noise=False drops the blotching and grain (step 4). Training images keep
+    them; for INSPECTION renders they hurt: on 4 side-view ears the shipped
+    landmarker floated its outer ring onto the neck under blotchy tone-10
+    skin and put it on the rim and lobe with them off (confidence 0.35 ->
+    0.46). The rng draws still happen, so other outputs are unchanged."""
     rng = np.random.default_rng(seed)
     V = np.asarray(mesh.vertices)
     if not mesh.has_vertex_normals():
@@ -153,6 +159,6 @@ def apply_skin(mesh, seed: int = 0, tone: int | None = None,
     grain = (np.sin(P @ (w * freq).T + ph).sum(axis=1)
              * 0.012 * np.sqrt(2.0 / n_wave))             # sd ~ the old 0.012
 
-    col = base[None, :] * shade * warm + (blotch + grain)[:, None]
+    col = base[None, :] * shade * warm + (float(noise) * (blotch + grain))[:, None]
     mesh.vertex_colors = o3d.utility.Vector3dVector(np.clip(col, 0, 1))
     return mesh

@@ -112,6 +112,8 @@ DEFAULTS = dict(
                             # point is to inspect landmarks; ingest renders its
                             # training images with a realistic tone instead.
     skin_seed=0,            # also drives the blotching and grain
+    skin_noise=True,        # blotching + grain on. Off for inspection renders:
+                            # see scripts/skin.py apply_skin(noise=).
     ao_strength=0.75,       # how hard ambient occlusion darkens cavities
 
     # --- the sun ---

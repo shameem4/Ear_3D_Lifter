@@ -1,7 +1,9 @@
 """Run the orientation stage once and cache its output, so later stages
 (ear detection, zoom, chop) can be iterated without re-finding the face.
 
-Usage: cache_head_frames.py OUTDIR ROT_SEED N_HEADS WORKER N_WORKERS [SAMPLE_SEED]
+Usage: cache_head_frames.py OUTDIR ROT_SEED N_HEADS WORKER N_WORKERS [SAMPLE_SEED [TONE SKIN_NOISE]]
+
+TONE and SKIN_NOISE (0/1) override config's tone and skin_noise.
 
 SAMPLE_SEED 0 (default) is the original sample; any other seed draws
 N_HEADS new heads that exclude the seed-0 sample, for held-out checks.
@@ -35,6 +37,8 @@ for hd in ALLS[WK::NW]:
     if (out / f"{hd}.npz").exists(): continue
     i = ALLS.index(hd)
     c = dict(DEFAULTS, light_mirror=light_mirror_for(f"{hd}_left", "frame", "hutubs"))
+    if len(sys.argv) > 8:
+        c.update(tone=int(sys.argv[7]), skin_noise=bool(int(sys.argv[8])))
     head, _, _ = load_ear(f"{hd}_left", "hutubs", c)
     Rr = random_rotation((rot_seed, i))
     head.vertices = o3d.utility.Vector3dVector(np.asarray(head.vertices) @ Rr.T); head.compute_vertex_normals()

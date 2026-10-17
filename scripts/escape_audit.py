@@ -165,7 +165,8 @@ def load_ear(name, dataset="hutubs", cfg=None):
         if cfg.get("skin"):
             from skin import apply_skin
             apply_skin(h, seed=cfg["skin_seed"], tone=cfg["tone"],
-                       ao_strength=cfg["ao_strength"], n_rays=cfg["ao_rays"])
+                       ao_strength=cfg["ao_strength"], n_rays=cfg["ao_rays"],
+                       noise=cfg.get("skin_noise", True))
         _SKIN_CACHE[key] = h
     head = o3d.geometry.TriangleMesh(_SKIN_CACHE[key])
     # Units by extent, the convention gt_landmark_check already uses: a head
