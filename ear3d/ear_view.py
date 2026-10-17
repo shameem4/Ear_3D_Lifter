@@ -18,6 +18,14 @@ ear light of a5a949b/dc484d5, ear height as a fraction of the final frame
 
 Equally consistent; the second pass costs a render and a detection per ear.
 
+SUPERSEDED ZOOMS (scripts/bootstrap_frame.py), kept as a note only:
+  - committed: ss_z = 0.3 * head extent -- magnification varied with head
+    size (170-230 mm), ear at 40-60% of frame.
+  - never committed: box-sized, half-width = b_mm / (0.7 * 2 * half_units),
+    clamped to 25-80 mm (ear's longer side ~70% of frame). Same idea as
+    here but on the old transposed-box detector and the head light; this
+    module replaces it, so the edit was discarded 2026-10-17.
+
 YOLO resolution: $BLAZEEAR, else a BlazeEar directory next to this repo.
 """
 import os
