@@ -166,6 +166,8 @@ DEFAULTS = dict(
                             # value today: 40 heads x 5 suns, this one gave
                             # the best face frames (median 5.1 deg vs scan,
                             # 40/40 found; a camera-axis sun lost 4).
+    use_mesh_texture=True,  # pipeline: a mesh with its own colour is rendered
+                            # with it and the synthetic skins are skipped.
     gt_lm3d="lm3d_v9_canonical_mm.npz",  # the REFERENCE 3D landmarks, in
                             # wrap_work/templates. v9 (2026-10-17, user's
                             # choice): curves from the shipped landmarker run

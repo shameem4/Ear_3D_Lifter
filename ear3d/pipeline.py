@@ -9,6 +9,10 @@ subject's left ear (+x of the normalised head frame).
 
 Stages, each the one measured best on 2026-10-17 (80 HUTUBS ears):
 
+  0. TEXTURE GATE: a mesh that brings its own colour (vertex colours with real
+     variation, or a UV texture, which is baked to vertices) is rendered with
+     it, and both synthetic skins below are skipped. Off with
+     cfg use_mesh_texture=False.
   1. face skin (blotchy, config tone) -> frames.normalize_head: head frame
      from FaceMesh, upside-down guard. Clean skin turned 2/40 heads over.
   2. ear skin (clean, config ear_tone) -> ear_view: side view, YOLO box,
@@ -38,6 +42,7 @@ from .render import render
 from .triangulate import ransac_point
 
 TABLE = pathlib.Path(__file__).with_name("view_table_v9.npz")
+TEXTURE_MIN_SD = 0.02        # colour s.d. below this is treated as untextured
 K_BEST = 8
 RANSAC_MM = 1.0
 
@@ -48,6 +53,36 @@ def _apply_skin():
     spec = importlib.util.spec_from_file_location("skin", ROOT / "scripts" / "skin.py")
     mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
     return mod.apply_skin
+
+
+def mesh_texture(mesh):
+    """Per-vertex colours the mesh brings with it, or None.
+
+    Vertex colours count if they vary (a flat or default colour is not a
+    texture). Otherwise a UV texture is baked: each vertex takes the mean of
+    the texel colours at its triangle corners.
+    """
+    if mesh.has_vertex_colors():
+        C = np.asarray(mesh.vertex_colors)
+        if len(C) == len(mesh.vertices) and C.std(0).max() > TEXTURE_MIN_SD:
+            return C.copy()
+    if mesh.has_triangle_uvs() and len(mesh.textures) > 0:
+        F = np.asarray(mesh.triangles); uv = np.asarray(mesh.triangle_uvs).reshape(-1, 3, 2)
+        ids = (np.asarray(mesh.triangle_material_ids) if mesh.has_triangle_material_ids()
+               else np.zeros(len(F), int))
+        acc = np.zeros((len(mesh.vertices), 3)); n = np.zeros(len(mesh.vertices))
+        for t in np.unique(ids):
+            img = np.asarray(mesh.textures[int(t)])
+            if img.size == 0:
+                continue
+            img = img[..., :3].astype(float) / (255.0 if img.dtype == np.uint8 else 1.0)
+            h, w = img.shape[:2]; sel = ids == t
+            u = np.clip((uv[sel, :, 0] * (w - 1)).round().astype(int), 0, w - 1)
+            v = np.clip(((1 - uv[sel, :, 1]) * (h - 1)).round().astype(int), 0, h - 1)
+            np.add.at(acc, F[sel].ravel(), img[v.ravel(), u.ravel()]); np.add.at(n, F[sel].ravel(), 1)
+        if n.any() and (acc[n > 0] / n[n > 0, None]).std(0).max() > TEXTURE_MIN_SD:
+            return acc / np.maximum(n, 1)[:, None]
+    return None
 
 
 class Pipeline:
@@ -71,18 +106,24 @@ class Pipeline:
 
     def run(self, mesh, return_debug=False):
         c = self.cfg
-        face = self._skinned(mesh, c["tone"], c["skin_noise"])
+        tex = mesh_texture(mesh) if c.get("use_mesh_texture", True) else None
+        if tex is not None:                                      # the mesh's own appearance
+            face = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(np.asarray(mesh.vertices)),
+                                             o3d.utility.Vector3iVector(np.asarray(mesh.triangles)))
+            face.vertex_colors = o3d.utility.Vector3dVector(tex); face.compute_vertex_normals()
+        else:
+            face = self._skinned(mesh, c["tone"], c["skin_noise"])
         nh = normalize_head(face, c)
         if nh is None:
             return None
         mesh_c, R_head, centre, _ = nh
         # Same vertices, re-coloured with the ear skin (colour is per vertex,
         # so the face-skinned normalised mesh can simply be re-skinned).
-        ear = self._skinned(mesh_c, c["ear_tone"], c["ear_skin_noise"])
+        ear = mesh_c if tex is not None else self._skinned(mesh_c, c["ear_tone"], c["ear_skin_noise"])
         scene = o3d.t.geometry.RaycastingScene()
         scene.add_triangles(o3d.core.Tensor(np.asarray(mesh_c.vertices, np.float32)),
                             o3d.core.Tensor(np.asarray(mesh_c.triangles, np.uint32)))
-        out, dbg = {}, {"R_head": R_head, "centre": centre}
+        out, dbg = {}, {"R_head": R_head, "centre": centre, "textured": tex is not None}
         for side in "LR":
             v = ear_view(ear, side, c, self.yolo)
             if v is None:
