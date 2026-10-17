@@ -89,7 +89,58 @@ def find_ears(mesh, det, cfg, probe_size=400, dist=2.4):
 HEAD_ALT = {}   # diagnostic: both verticals from the last head_pose call
 
 
+def nose_upside_down(V, vert, fwd, nose):
+    """(upside_down, geometric tip) from the nose profile.
+
+    From the GEOMETRIC tip (most forward point within 30 mm of `nose`), the
+    surface falls back gently toward the brow and steeply to the lip.
+    Compare the fall-back 15 mm up and 15 mm down the midline."""
+    lat = np.cross(vert, fwd)
+    L = (np.asarray(V) - nose) @ np.stack([lat, vert, fwd]).T
+    near = L[np.hypot(L[:, 0], L[:, 1]) < 30]
+    t = near[np.argmax(near[:, 2])]
+    mid = L[np.abs(L[:, 0] - t[0]) < 4]
+
+    def fall(dy):
+        s_ = mid[np.abs(mid[:, 1] - (t[1] + dy)) < 2.5]
+        return t[2] - s_[:, 2].max() if len(s_) else np.nan
+    up_, dn_ = fall(15.0), fall(-15.0)
+    print(f"mediapipe: nose falls back {up_:.1f} mm above the tip, {dn_:.1f} below")
+    return bool(up_ > dn_), nose + t @ np.stack([lat, vert, fwd])
+
+
 def head_pose(mesh, cfg):
+    """Returns (lat, vert, trR, trL, nose) or None; see _head_pose.
+
+    UPSIDE-DOWN CHECK. FaceMesh always labels an upright face: shown a
+    face turned 180 deg it puts "forehead" on the chin and "chin" on
+    the scalp, confidently (pp95, pp60 turned over). If the search won
+    on an upside-down render, everything above is consistently flipped
+    and no gate catches it -- held-out pp90 came out 159 deg off. The
+    fit residual cannot tell (pp90: 6.2 mm upside down, 10.4 turned
+    over). The nose can: from the tip, the surface falls back gently
+    toward the brow and steeply to the lip. Measured 15 mm each way
+    along the midline from the GEOMETRIC tip (most forward point within
+    30 mm of the landmark, which on a hallucinated face is 28 mm off):
+    39 correct heads fall back more below than above (-5.4 to -19 mm),
+    pp90 the other way (+11.7). Sign only, no threshold.
+    Checked on the FINAL frame: before the canonical fit the axes come
+    from the hallucinated landmarks and the test reads near zero (pp90,
+    -0.3). If upside down, run again turning the face over before the fit.
+    """
+    r = _head_pose(mesh, cfg)
+    if r is None or cfg.get("_turn_over"):
+        return r
+    lat, vert = np.asarray(r[0]), np.asarray(r[1])
+    fwd = np.cross(lat, vert)
+    flipped, tip = nose_upside_down(mesh.vertices, vert, fwd, np.asarray(r[4]))
+    if not flipped:
+        return r
+    print("mediapipe: face is UPSIDE DOWN; turning it over and fitting again")
+    return _head_pose(mesh, dict(cfg, _turn_over=(fwd, vert, tip)))
+
+
+def _head_pose(mesh, cfg):
     """Head frame from MediaPipe FaceMesh, in the mesh's own coordinates.
 
     Returns (lateral, vertical, tragion_R, tragion_L) or None.
@@ -293,35 +344,69 @@ def head_pose(mesh, cfg):
     # subject's left, +y up, +z forward) onto the back-projected landmarks,
     # rather than from four of them.
     V = np.asarray(mesh.vertices)
-    for _ in range(2):
+
+    def face_on(P, vert):
+        """Render looking straight at the nose with `vert` as image-up and
+        detect again. Returns (P, hit) in mesh coordinates, or None."""
         fwd = P[NOSE_TIP] - P[NASION]
-        fwd -= vert * (fwd @ vert)
+        fwd = fwd - vert * (fwd @ vert)
         if np.linalg.norm(fwd) < 1e-6:
-            break
-        fwd /= np.linalg.norm(fwd)
+            return None
+        return face_view(fwd / np.linalg.norm(fwd), vert, P[NOSE_TIP])
+
+    def face_view(fwd, vert, nose, need=(TRAGION_R, TRAGION_L, FOREHEAD, CHIN, NOSE_TIP, NASION)):
         R = frame_from(fwd, vert, front=fwd)
         if R is None:
-            break
-        nose = P[NOSE_TIP]
+            return None
         sc = 0.6 * float(np.abs((V - nose) @ R.T).max())
-        g = in_frame(mesh, R, nose, sc)
-        img, depth, cam = render(g, cfg)
+        img, depth, cam = render(in_frame(mesh, R, nose, sc), cfg)
         res = fl.detect(mp.Image(image_format=mp.ImageFormat.SRGB,
                                  data=np.ascontiguousarray(img)))
         if not res.face_landmarks:
-            break
+            return None
         h, w = img.shape[:2]
         uv = np.array([[p.x * w, p.y * h] for p in res.face_landmarks[0]])
         P2, hit2 = backproject(depth, uv, cam)
-        if not hit2[[TRAGION_R, TRAGION_L, FOREHEAD, CHIN, NOSE_TIP, NASION]].all():
+        if not hit2[list(need)].all():
+            return None
+        return (P2 * sc @ R) + nose, hit2
+
+    for _ in range(2):
+        r = face_on(P, vert)
+        if r is None:
             break
-        P, hit = (P2 * sc @ R) + nose, hit2
+        P, hit = r
         vert = P[FOREHEAD] - P[CHIN]
         vert /= np.linalg.norm(vert)
     model = Path(cfg.get("face_model") or Path(task).parent / "canonical_face_model.obj")
     if model.exists():
         canon = np.array([[float(x) for x in l.split()[1:4]]
                           for l in open(model) if l.startswith("v ")])
+
+        if cfg.get("_turn_over"):
+            # head_pose() found this face upside down on the first pass and
+            # passes its final forward axis, vertical and geometric nose tip:
+            # look from there with the vertical reversed. (The landmark nose
+            # and nasion are hallucinated, so a view built from them misses.)
+            f_, v_, n_ = cfg["_turn_over"]
+            # The first-pass frame came from a hallucinated fit, so this view
+            # can be ~35 deg oblique (pp90) and hide a tragion: ask only for
+            # the midline here, then square up with the usual two refines.
+            flip = face_view(np.asarray(f_), -np.asarray(v_), np.asarray(n_),
+                             need=(FOREHEAD, CHIN, NOSE_TIP, NASION))
+            if flip is None:
+                print("mediapipe: turned-over view found no face")
+                return None
+            P, hit = flip
+            for _ in range(2):
+                vert = P[FOREHEAD] - P[CHIN]
+                vert /= np.linalg.norm(vert)
+                r = face_on(P, vert)
+                if r is None:
+                    break
+                P, hit = r
+            vert = P[FOREHEAD] - P[CHIN]
+            vert /= np.linalg.norm(vert)
         ok = hit[: len(canon)]
         X, Y = canon[ok], P[: len(canon)][ok]
         cx, cy = X.mean(0), Y.mean(0)
@@ -363,7 +448,7 @@ def head_pose(mesh, cfg):
             HEAD_ALT["164_9"] = u
             if cfg.get("up_rule", "164_9") == "164_9":
                 vert = u
-                fwd = np.cross(vert, lat)
+                fwd = np.cross(lat, vert)
         # Forehead (10) -> chin (152), measured on this head. cfg up_rule="forehead_chin".
         if hit[FOREHEAD] and hit[CHIN]:
             u = P[FOREHEAD] - P[CHIN]
@@ -372,7 +457,7 @@ def head_pose(mesh, cfg):
             HEAD_ALT["forehead_chin"] = u
             if cfg.get("up_rule") == "forehead_chin":
                 vert = u
-                fwd = np.cross(vert, lat)
+                fwd = np.cross(lat, vert)
         trR, trL = (k * (canon[[TRAGION_R, TRAGION_L]] - cx) @ Rc + cy)
         nose = k * (canon[NOSE_TIP] - cx) @ Rc + cy
         rms = float(np.sqrt(((k * A @ Rc + cy - Y) ** 2).sum(1).mean()))
