@@ -28,6 +28,28 @@ SUN_VIEW = (0.3, 0.4, 0.9)
 SUN_LUX = 95000
 
 
+def side_light(cfg, side):
+    """cfg for a SIDE VIEW of a normalised head: light from the face side.
+
+    Side views put the camera on +x (side "L", the subject's left ear) or -x
+    ("R") of the head frame, with the same up. The configured sun is fixed
+    to the camera, so it lights the left ear from in front of the face and
+    the right ear from behind the head. Measured on 20 randomly rotated
+    HUTUBS heads, BlazeEar's top box on the ear:
+
+        left ear,  sun as configured   18/20  median score 0.79
+        left ear,  sun x flipped        6/20               0.40
+        right ear, sun as configured    9/20               0.47
+        right ear, sun x flipped       20/20               0.87
+
+    No single camera-fixed sun does both (overhead 16/16, x=0 12/16). So
+    the right view flips x and both ears are lit from the face side. This
+    is NOT the reflected-geometry flip config.light_mirror warns about: the
+    mesh is not reflected here, only the camera changes side.
+    """
+    return dict(cfg, light_mirror=(side == "R"))
+
+
 def sun_world(cfg, E):
     """The sun as a world direction, for a render whose extrinsic is E.
 

@@ -10,7 +10,7 @@ import sys, numpy as np
 sys.path.insert(0, "/mnt/14BE47C2BE479ADE/Code/ear_stuff/Ear_3D_Lifter"); sys.path.insert(0, "/mnt/14BE47C2BE479ADE/Code/ear_stuff/Ear_3D_Lifter/scripts")
 from escape_audit import DEFAULTS, WRAP, load_ear, light_mirror_for
 from ear3d.frames import frame_from, in_frame, normalize_head
-from ear3d.render import render
+from ear3d.render import render, side_light
 from PIL import Image, ImageDraw
 import open3d as o3d
 out, rot_seed, WK, NW = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
@@ -33,7 +33,7 @@ for hd in ALLS[WK::NW]:
     for tag, sd in (("L", np.array([1.0, 0, 0])), ("R", np.array([-1.0, 0, 0]))):
         R = frame_from(sd, np.array([0, 1.0, 0]), front=sd)
         sc = float(np.abs((V - C) @ R.T).max())
-        img, _, _ = render(in_frame(mesh_c, R, C, sc), c)
+        img, _, _ = render(in_frame(mesh_c, R, C, sc), side_light(c, tag))
         im = Image.fromarray(img); d = ImageDraw.Draw(im); W, H = im.size
         d.line([(W//2, 0), (W//2, H)], fill=(0, 255, 0)); d.line([(0, H//2), (W, H//2)], fill=(0, 255, 0))
         d.text((4, 4), f"{hd} {'LEFT ear (+x)' if tag == 'L' else 'RIGHT ear (-x)'}", fill=(255, 255, 0))
