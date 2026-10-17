@@ -189,6 +189,8 @@ def main():
                         "ear-centred frame, the regime the detector and pick() "
                         "were measured in. The frame itself then comes from "
                         "the chop and the template (--rule procrustes).")
+    p.add_argument("--side", default="L", choices=("L", "R"),
+                   help="production (--mesh, no GT): which ear to lift")
     p.add_argument("--seed-sweep", action="store_true",
                    help="PRODUCTION seed: render the six axis views and take "
                         "the one with the most confident ear box, instead of "
@@ -249,7 +251,7 @@ def main():
     a = p.parse_args()
 
     from escape_audit import DEFAULTS, WRAP, load_ear, ear_frame, light_mirror_for
-    from ear3d.frames import frame_from, in_frame, plane_normal, head_pose, normalize_head
+    from ear3d.frames import frame_from, in_frame, plane_normal, head_pose, normalize_head, mirror_x
     from ear3d.render import render
     from ear3d.label import pick
     from ear3d.twod import make_pipeline
@@ -368,6 +370,7 @@ def main():
         # identity and nothing changes.
         R_head, hc0 = np.eye(3), np.asarray(head.vertices).mean(0)
         hp = None
+        mirrored = False
         if a.seed_face:
             nh = normalize_head(head, cfg)
             if nh is None:
@@ -403,7 +406,19 @@ def main():
                 gdir = lm_gt.mean(0) - hc
                 seed = lat if lat @ gdir > 0 else -lat
             else:
-                seed = lat
+                seed = lat if a.side == "L" else -lat
+            # LEFT FORM ALWAYS. The -x side (the subject's right ear) is
+            # mirrored so the detector sees what it has always seen; see
+            # mirror_x. In validation the corpus has already mirrored right
+            # ears into left form, so this branch is the production case.
+            mirrored = seed[0] < 0
+            if mirrored:
+                head = mirror_x(head)
+                V = np.asarray(head.vertices); hc = V.mean(0)
+                seed = -seed
+                if lm_gt is not None:
+                    lm_gt = lm_gt * np.array([-1.0, 1.0, 1.0])
+                traj.append(("mirrored", "-x side run in left form"))
             # NOT THE TRAGION. FaceMesh's tragion is the landmark the
             # reference implementation marks "most likely not possible", and
             # centring on it put the rotated pp10_left seed on the cheek. In
@@ -730,8 +745,14 @@ def main():
             front_i, up_i = n, up_new
             cc = Q.mean(0) * 1.0
             traj.append((f"pass{it+2}", f"moved {ang:.2f} deg"))
-        # BACK TO THE WORLD, once. Directions as d @ R_head, points as
-        # p @ R_head + centre; the GT frame was taken in the world above.
+        # BACK TO THE WORLD, once: un-mirror (x -> -x), then directions as
+        # d @ R_head and points as p @ R_head + centre; the GT frame was
+        # taken in the world above.
+        if mirrored:
+            M = np.array([-1.0, 1.0, 1.0])
+            front_i, up_i, cc, Pw = front_i * M, up_i * M, cc * M, Pw * M
+            if Qall is not None:
+                Qall = Qall * M
         c = dict(c, front=front_i @ R_head, up=up_i @ R_head)
         cc = cc @ R_head + hc0
         Pw = Pw @ R_head + hc0
