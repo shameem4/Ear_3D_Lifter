@@ -465,7 +465,7 @@ def main():
         Rs = frame_from(seed, up_s, front=seed)
         ss = seed_scale or float(np.abs((V - hc) @ Rs.T).max())
         gs = in_frame(head, Rs, seed_centre, ss)
-        img, _, cam = render(gs, cfg)
+        img, depth_s, cam = render(gs, cfg)
         dets = pipe(np.asarray(img), timestamp=0.0)
         if a.seed_sweep:
             # whole-head frame: no centrality prior (see the sweep)
@@ -474,12 +474,35 @@ def main():
             best = pick(dets, cfg, img.shape[:2])
         if best is None:
             return None, "seed render found no ear"
-        bx = best.get("box") or best.get("bbox")
-        if bx is None:
-            lmv = np.asarray(best["landmarks"], float)
-            o = np.isfinite(lmv).all(1)
-            bx = [lmv[o, 0].min(), lmv[o, 1].min(), lmv[o, 0].max(), lmv[o, 1].max()]
-        bx = [float(v) for v in np.asarray(bx).ravel()[:4]]
+
+        # bbox is [ymin, xmin, ymax, xmax]; box_xyxy is the ONLY reader
+        from ear3d.label import box_xyxy as box_of
+        bx = box_of(best)
+        if a.seed_face:
+            # ZOOM AND LOOK AGAIN. On a whole-head render the ear is ~90 px
+            # and the detector's box covered about the lower half of it
+            # (pp21_left, pp20_right, pp23_right in stored orientation), so
+            # the chop missed the upper helix, every candidate lifted badly
+            # and the template gate rejected 35 of 112. Back-project the
+            # coarse box centre, re-render at 0.3x the head around it and
+            # detect again; the ear is then ~3x larger and the box is the
+            # ear. Falls back to the coarse box if the zoomed view finds
+            # nothing.
+            from ear3d.backproject import backproject
+            cu, cv = 0.5 * (bx[0] + bx[2]), 0.5 * (bx[1] + bx[3])
+            P0, hit0 = backproject(depth_s, np.array([[cu, cv]]), cam)
+            if hit0[0]:
+                centre_z = P0[0] * ss @ Rs + seed_centre
+                ss_z = 0.3 * ss
+                gs_z = in_frame(head, Rs, centre_z, ss_z)
+                img_z, depth_z, cam_z = render(gs_z, cfg)
+                best_z = pick(pipe(np.asarray(img_z), timestamp=0.0), cfg, img_z.shape[:2])
+                if best_z is not None:
+                    gs, img, cam, ss, seed_centre = gs_z, img_z, cam_z, ss_z, centre_z
+                    bx = box_of(best_z)
+                    traj.append(("seed zoom", f"conf {float(best_z['confidence']):.2f}"))
+                else:
+                    traj.append(("seed zoom", "no ear in the zoomed view; coarse box kept"))
         # pad, because a tight landmark hull clips the helix rim that defines
         # the plane -- the trimmed-PCA failure was exactly this
         w, h = bx[2] - bx[0], bx[3] - bx[1]
@@ -488,6 +511,20 @@ def main():
 
         Vs = np.asarray(gs.vertices)
         keep = chop_to_box(Vs, cam, bx, depth_mm=a.depth_mm, scale=ss)
+        if a.render_dir:
+            # the seed view the chop was cut from: box in green, kept
+            # vertices in cyan, GT landmarks (if any) in red
+            from PIL import Image, ImageDraw
+            dbg = Image.fromarray(np.asarray(img)); dr = ImageDraw.Draw(dbg)
+            dr.rectangle(bx, outline=(0, 255, 0), width=2)
+            for u, v in cam.project(Vs[keep])[::7]:
+                dr.point((u, v), fill=(0, 255, 255))
+            if lm_gt is not None:
+                for u, v in cam.project((lm_gt - seed_centre) @ Rs.T / ss):
+                    dr.ellipse([u - 2, v - 2, u + 2, v + 2], fill=(255, 0, 0))
+            dr.text((4, 4), f"{nm} seed/chop: {int(keep.sum())} verts kept", fill=(255, 255, 0))
+            pathlib.Path(a.render_dir).mkdir(parents=True, exist_ok=True)
+            dbg.save(pathlib.Path(a.render_dir) / f"{nm}_seed.png")
         if keep.sum() < 50:
             return None, f"chop kept only {int(keep.sum())} vertices"
         # back to world coordinates for the PCA
@@ -566,6 +603,18 @@ def main():
                 return None, "procrustes: no candidate lifted"
             resid, c, (Rp, kp, nok) = tried[0]
             second = tried[1][0] if len(tried) > 1 else np.inf
+            if a.render_dir:
+                # the best candidate's face-on view, GT landmarks in red
+                from PIL import Image, ImageDraw
+                Rc0 = frame_from(c["front"], c["up"], front=c["front"])
+                sc0 = float(np.abs((Pw - cc) @ Rc0.T).max())
+                im0, _, cam0 = render(in_frame(head, Rc0, cc, sc0), cfg)
+                im0 = Image.fromarray(im0); dr0 = ImageDraw.Draw(im0)
+                if lm_gt is not None:
+                    for u, v in cam0.project((lm_gt - cc) @ Rc0.T / sc0):
+                        dr0.ellipse([u - 2, v - 2, u + 2, v + 2], fill=(255, 0, 0))
+                dr0.text((4, 4), f"{nm} best candidate (pre-refine) resid {resid:.3f}", fill=(255, 255, 0))
+                im0.save(pathlib.Path(a.render_dir) / f"{nm}_cand.png")
             # RESIDUAL GATE. On 18 randomly rotated heads every correct frame
             # had residual <= 0.25 and every wrong one >= 0.67 (0.666 was a
             # 21 deg up error). A frame nothing resembles an ear in is a
@@ -695,6 +744,15 @@ def main():
                 if Qall is not None else s_chop)
         if s_fit is not None:
             s_lm = s_fit
+        # COLLAPSED-LIFT GATE. With the box read correctly the chop is the
+        # whole ear and a sound lift comes out at 1.05-1.42x the chop (21
+        # ears). The two wrong frames that passed the residual gate (0.38,
+        # 0.44) were at 0.28 and 0.39 -- a lift that has shrunk onto a part
+        # of the ear fits the template's shape at that size and the
+        # residual cannot see it; the size can. Earlier wrong frames sat at
+        # 0.07-0.29. Reported as a failure, not scored as a frame.
+        if a.rule == "procrustes" and s_lm / s_chop < 0.6:
+            return None, f"collapsed lift: scale {s_lm / s_chop:.2f}x the chop (resid {resid:.3f})"
         # CLAMPED TO THE CHOP. When the lift has failed the lifted points are
         # scattered over the head and their extent is meaningless: pp6_right
         # came out at 14x the chop (s=410 mm) and the ear was a dot in every

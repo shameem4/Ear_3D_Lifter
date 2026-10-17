@@ -16,6 +16,33 @@ from .frames import frame_from, in_frame, plane_normal
 from .render import render
 from .scheme import STRIPS, STRIP_NAMES
 
+def box_xyxy(det):
+    """A detection's box as [xmin, ymin, xmax, ymax] in pixels.
+
+    The pipeline's `bbox` is [ymin, xmin, ymax, xmax]. Read as xyxy it is a
+    transposed box that still looks like a box: in bootstrap_frame it sat on
+    the lower-front half of the ear for every head, so the chop was a subset
+    of the ear (0.87 of the GT extent, 0.57 on the worst), the zoomed seed
+    boxed the cheek, and 35 of 112 heads were rejected by the template gate
+    for lifts that had nothing to lift from. Found by printing the raw box
+    next to the landmark hull: raw [169, 237, 418, 385] against an ear at
+    x 221-377, y 166-448. Every consumer goes through this function.
+    """
+    b = det.get("bbox")
+    if b is None:
+        b = det.get("box")
+        if b is None:
+            import numpy as _np
+            L = _np.asarray(det["landmarks"], float)
+            o = _np.isfinite(L).all(1)
+            return [float(L[o, 0].min()), float(L[o, 1].min()),
+                    float(L[o, 0].max()), float(L[o, 1].max())]
+        b = [float(v) for v in b]
+        return b[:4]
+    b = [float(v) for v in b]
+    return [b[1], b[0], b[3], b[2]]
+
+
 def pick(res, cfg, img_hw):
     """Choose WHICH detection to lift when the detector returns several.
 
