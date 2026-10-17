@@ -154,6 +154,11 @@ DEFAULTS = dict(
                             # ear 20/20 + 20/20 (was 19 + 20), median score
                             # 0.83/0.89 (was 0.79/0.87). The earlier value was
                             # swept for landmark accuracy in the old pipeline.
+    face_light_dir=(1.2, -0.4, -0.4),  # the sun for head_pose's FACE renders
+                            # only; light_dir above is the EAR light. Same
+                            # value today: 40 heads x 5 suns, this one gave
+                            # the best face frames (median 5.1 deg vs scan,
+                            # 40/40 found; a camera-axis sun lost 4).
     light_frame="world",    # "view" rotates the sun with the camera instead.
                             # Measured on the same grid: 3.45% against 3.24%,
                             # so world wins -- but only in the orbited views,

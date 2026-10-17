@@ -178,6 +178,10 @@ def _head_pose(mesh, cfg):
     this frame -- it is not explained, and worth a look before trusting left-ear
     labels as much as right.
     """
+    # FACE RENDERS HAVE THEIR OWN SUN. light_dir is the EAR light (chosen
+    # for BlazeEar on side views); face finding reads face_light_dir, so a
+    # change made for faces can never move the ear renders, or vice versa.
+    cfg = dict(cfg, light_dir=cfg.get("face_light_dir", cfg["light_dir"]))
     task = cfg.get("face_task")
     if not task or not Path(task).exists():
         print(f"mediapipe: no face_landmarker.task at {task} -- using the ear sweep")
