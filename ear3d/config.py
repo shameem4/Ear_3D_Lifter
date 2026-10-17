@@ -166,6 +166,12 @@ DEFAULTS = dict(
                             # value today: 40 heads x 5 suns, this one gave
                             # the best face frames (median 5.1 deg vs scan,
                             # 40/40 found; a camera-axis sun lost 4).
+    multiview_light_dir=(0.6, -0.4, -1.0),  # the sun for the 25-view orbit
+                            # (scripts/multiview_collect_rays.py), fixed to the
+                            # head. 80 ears vs light_dir: table best-8 + re-seat
+                            # 2.29 vs 2.39 mm, better on 51/80 (p=6e-3); >10 mm
+                            # 0.2% vs 0.6%. NOT for the single face-on view,
+                            # where it is worse (3.31 vs 3.16, p=6e-4).
     light_frame="world",    # "view" rotates the sun with the camera instead.
                             # Measured on the same grid: 3.45% against 3.24%,
                             # so world wins -- but only in the orbited views,

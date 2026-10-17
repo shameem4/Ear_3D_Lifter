@@ -4,7 +4,7 @@ Usage: multiview_collect_rays.py EAR_TAG OUT LIGHT WORKER N_WORKERS [EAR_LIMIT] 
   LIGHT: head  -- sun fixed to the head (same world direction in every view)
          cam   -- sun fixed to the camera (rotates with the orbit; equals
                   'head' at the face-on view)
-  SUN: optional "x,y,z" override of config light_dir (before side mirroring).
+  SUN: optional "x,y,z" override of config multiview_light_dir (before side mirroring).
 Per ear writes OUT/<ear>.npz: angles (V,2), uv (V,55,2), o/d (V,55,3) rays in
 head mm, gt (55,3) head mm, p0 (55,3) face-on snapped back-projection, side.
 """
@@ -22,7 +22,7 @@ g = {}; exec(open(R0 / "scripts/gt_check_ear_views.py").read().split("out = sys.
 
 tag, out, LIGHT, WK, NW = sys.argv[1], pathlib.Path(sys.argv[2]), sys.argv[3], int(sys.argv[4]), int(sys.argv[5])
 LIMIT = int(sys.argv[6]) if len(sys.argv) > 6 and sys.argv[6] != "-" else None
-SUN = np.array([float(x) for x in sys.argv[7].split(",")]) if len(sys.argv) > 7 else np.asarray(DEFAULTS["light_dir"], float)
+SUN = np.array([float(x) for x in sys.argv[7].split(",")]) if len(sys.argv) > 7 else np.asarray(DEFAULTS["multiview_light_dir"], float)
 out.mkdir(parents=True, exist_ok=True)
 ANG = [(float(y), float(p)) for y in range(-30, 31, 15) for p in range(-30, 31, 15)]
 pred = LandmarkPredictor(find_best_checkpoint(), "cuda")
