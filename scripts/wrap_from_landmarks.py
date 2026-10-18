@@ -58,6 +58,21 @@ def _template():
     return Vt, Ft, left
 
 
+def _wrap_env():
+    """The environment WrapCmd needs. Importing cv2 (the pipeline does) points
+    QT_QPA_PLATFORM_PLUGIN_PATH, QT_QPA_FONTDIR and LD_LIBRARY_PATH at OpenCV's
+    bundled Qt; Wrap then loads the wrong xcb plugin and aborts (signal 6)
+    without an ERROR line -- seen as 'no output' on every AudioEar ear."""
+    import os
+    env = {k: v for k, v in os.environ.items() if not k.startswith("QT_QPA_")}
+    ld = [d for d in env.get("LD_LIBRARY_PATH", "").split(":") if d and "cv2" not in d]
+    if ld:
+        env["LD_LIBRARY_PATH"] = ":".join(ld)
+    else:
+        env.pop("LD_LIBRARY_PATH", None)
+    return env
+
+
 def fit_faces(side):
     """Faces for a fit returned by wrap_ear. A right ear's vertices are a
     mirrored left fit, so its triangles must be wound the other way or every
@@ -79,8 +94,11 @@ def cut_ear(V, F, P):
     return m
 
 
-def wrap_ear(V, F, P, side, work_dir, name="ear"):
-    """Fitted template vertices (base resolution) in the head's frame, or raise."""
+def wrap_ear(V, F, P, side, work_dir, name="ear", cut=True):
+    """Fitted template vertices (base resolution) in the input's frame, or raise.
+
+    cut=False fits (V, F) as given -- an ear-only surface such as a meshed
+    AudioEar3D cloud -- instead of cutting the ear out of a head first."""
     P = np.asarray(P, float)
     if not np.isfinite(P).all():
         ok = np.isfinite(P).all(1)
@@ -89,8 +107,10 @@ def wrap_ear(V, F, P, side, work_dir, name="ear"):
     else:
         ok = np.ones(55, bool)
     mir = np.array([1.0, 1.0, -1.0]) if side == "R" else np.ones(3)
-    cut = cut_ear(np.asarray(V, float), np.asarray(F), P[ok])
-    Vs, Fs = np.asarray(cut.vertices) * mir, np.asarray(cut.faces)
+    if cut:
+        m = cut_ear(np.asarray(V, float), np.asarray(F), P[ok])
+        V, F = m.vertices, m.faces
+    Vs, Fs = np.asarray(V, float) * mir, np.asarray(F)
     if side == "R":
         Fs = Fs[:, ::-1]
     Pm = P * mir
@@ -127,10 +147,11 @@ def wrap_ear(V, F, P, side, work_dir, name="ear"):
     proj["timeline"] = {"current": 0, "min": 0, "max": 0}
     pj = wd / f"{name}.wrap"; json.dump(proj, open(pj, "w"), indent=4)
     r = subprocess.run([str(WRAPCMD), "compute", str(pj), "-s", "0", "-e", "0"],
-                       capture_output=True, text=True, timeout=1800)
+                       capture_output=True, text=True, timeout=1800, env=_wrap_env())
     bad = [l for l in (r.stdout + r.stderr).splitlines() if l.startswith("ERROR")]
-    if bad or not dst.exists():
-        raise RuntimeError(bad[0] if bad else "Wrap wrote no output")
+    if bad or r.returncode != 0 or not dst.exists():
+        tail = (r.stdout + r.stderr).strip().splitlines()[-3:]
+        raise RuntimeError(bad[0] if bad else f"Wrap exit {r.returncode}: {' | '.join(tail)}")
     Vf = np.asarray(trimesh.load(dst, process=False).vertices)[:len(Vt)] / work
     return Vf * mir
 
