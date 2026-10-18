@@ -109,6 +109,15 @@ def ear_box(yolo, img):
     return min(ok, key=area)
 
 
+def ear_score(det, img):
+    """Top ear-detector confidence on img (0 if nothing)."""
+    if isinstance(det, BlazeEarBoxes):
+        _, S = det.boxes(img)
+    else:
+        S = det.predict(np.ascontiguousarray(img[:, :, ::-1]), conf=0.05, verbose=False)[0].boxes.conf.cpu().numpy()
+    return float(S.max()) if len(S) else 0.0
+
+
 def side_frame(side):
     """World -> camera rotation for the side view of a normalised head."""
     sd = np.array([1.0 if side == "L" else -1.0, 0.0, 0.0])

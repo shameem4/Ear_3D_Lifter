@@ -37,9 +37,9 @@ import open3d as o3d
 
 from .camera import orbit_extrinsic
 from .config import DEFAULTS, ROOT
-from .ear_view import ear_view, load_detector
+from .ear_view import ear_score, ear_view, load_detector, side_frame
 from .frames import in_frame, normalize_head
-from .render import render
+from .render import render, side_light
 from .triangulate import ransac_point
 
 TABLE = pathlib.Path(__file__).with_name("view_table_v9.npz")
@@ -181,11 +181,31 @@ class Pipeline:
             Q = np.eye(3) if k == 0 else _retry_rotation(k)
             m = o3d.geometry.TriangleMesh(face)
             m.vertices = o3d.utility.Vector3dVector(V @ Q.T); m.compute_vertex_normals()
-            nh = normalize_head(m, self.cfg)
+            nh = normalize_head(m, dict(self.cfg, upright_judge=self._ear_judge(m)))
             if nh is not None:
                 mesh_c, Rh, cen, nose = nh
                 return mesh_c, Rh @ Q, cen @ Q, nose
         return None
+
+    def _ear_judge(self, face):
+        """Score a candidate head frame by how readily the ear detector
+        finds an ear in each side view (top confidence, L + R). An ear seen
+        upside down scores lower. Used only on close upside-down calls."""
+        V = np.asarray(face.vertices); c0 = V.mean(0)
+
+        def judge(r):
+            lat, vert = np.asarray(r[0], float), np.asarray(r[1], float)
+            vert = vert - lat * (vert @ lat); vert /= np.linalg.norm(vert)
+            Rh = np.stack([lat, vert, np.cross(lat, vert)])
+            g = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector((V - c0) @ Rh.T), face.triangles)
+            g = self._skinned(g, self.cfg["ear_tone"], self.cfg["ear_skin_noise"])
+            tot = 0.0
+            for side in "LR":
+                R = side_frame(side); sc = float(np.abs(np.asarray(g.vertices) @ R.T).max())
+                img, _, _ = render(in_frame(g, R, np.zeros(3), sc), side_light(self.cfg, side))
+                tot += ear_score(self.yolo, img)
+            return tot
+        return judge
 
     def _multiview(self, ear, side, R, c0, s):
         c = self.cfg

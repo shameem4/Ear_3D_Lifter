@@ -86,6 +86,7 @@ def find_ears(mesh, det, cfg, probe_size=400, dist=2.4):
     return out[:2]
 
 
+NOSE_CLOSE_MM = 5.0   # nose margin below this is a close call (see head_pose)
 HEAD_ALT = {}   # diagnostic: both verticals from the last head_pose call
 
 
@@ -106,6 +107,7 @@ def nose_upside_down(V, vert, fwd, nose):
         return t[2] - s_[:, 2].max() if len(s_) else np.nan
     up_, dn_ = fall(15.0), fall(-15.0)
     print(f"mediapipe: nose falls back {up_:.1f} mm above the tip, {dn_:.1f} below")
+    HEAD_ALT["nose_margin"] = dn_ - up_
     return bool(up_ > dn_), nose + t @ np.stack([lat, vert, fwd])
 
 
@@ -134,6 +136,21 @@ def head_pose(mesh, cfg):
     lat, vert = np.asarray(r[0]), np.asarray(r[1])
     fwd = np.cross(lat, vert)
     flipped, tip = nose_upside_down(mesh.vertices, vert, fwd, np.asarray(r[4]))
+    judge = cfg.get("upright_judge")
+    if judge is not None and abs(HEAD_ALT["nose_margin"]) < NOSE_CLOSE_MM:
+        # CLOSE CALL: fit it the other way up too and let the caller judge.
+        # SONICOM P0027_right / P0208_left were rolled ~160 deg with the
+        # nose saying "upright" by 2.8 / 1.4 mm, and the margin is not even
+        # reproducible across processes (P0176_right: +0.8 in one run, -0.8
+        # in another). Neither the margin nor the fit rms separates right
+        # from wrong (pp22: right frame rms 9.7, wrong 7.7); ear-detector
+        # confidence on the two side views did, 5/5 close calls.
+        r2 = _head_pose(mesh, dict(cfg, _turn_over=(fwd, vert, tip)))
+        if r2 is None:
+            return r
+        s1, s2 = judge(r), judge(r2)
+        print(f"mediapipe: close nose call; upright judge {s1:.2f} vs turned over {s2:.2f}")
+        return r2 if s2 > s1 else r
     if not flipped:
         return r
     print("mediapipe: face is UPSIDE DOWN; turning it over and fitting again")
