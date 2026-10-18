@@ -73,6 +73,45 @@ def _wrap_env():
     return env
 
 
+INLIER_MM = 5.0       # a landmark further than this from the robust similarity is dropped
+RANSAC_ITERS = 400
+
+
+def _similarity(A, B):
+    a, b = A.mean(0), B.mean(0); A0, B0 = A - a, B - b
+    U, S, Vt = np.linalg.svd(A0.T @ B0)
+    D = np.diag([1, 1, np.sign(np.linalg.det(U @ Vt))]); R = U @ D @ Vt
+    s = (S * np.diag(D)).sum() / (A0 ** 2).sum()
+    return lambda X: s * (X - a) @ R + b
+
+
+def robust_inliers(P, seed=0):
+    """Landmarks that agree with a rigid + scale placement of the template.
+
+    RANSAC over 4-point similarities of the template's 55 landmark points
+    onto P, then a refit on the best consensus. A bad landmark set (005_right,
+    037_left: 6-8 mm landmark shifts between passes) drags a least-squares
+    pose off the ear; these are the points to drop before RigidAlignment, and
+    their count is the confidence of the whole set.
+    Returns (mask, median inlier residual mm)."""
+    Vt, Ft, _ = _template()
+    z = np.load(MARKS, allow_pickle=True)
+    T = (Vt[Ft[z["triangle"][:55]]] * z["barycentric"][:55][:, :, None]).sum(1)
+    ok = np.isfinite(P).all(1); idx = np.flatnonzero(ok)
+    rng = np.random.default_rng(seed); best = np.zeros(55, bool)
+    for _ in range(RANSAC_ITERS):
+        pick = rng.choice(idx, 4, replace=False)
+        f = _similarity(T[pick], P[pick])
+        inl = ok & (np.linalg.norm(f(T) - np.where(ok[:, None], P, 0), axis=1) < INLIER_MM)
+        if inl.sum() > best.sum():
+            best = inl
+    for _ in range(2):                                     # refit on the consensus
+        f = _similarity(T[best], P[best])
+        best = ok & (np.linalg.norm(f(T) - np.where(ok[:, None], P, 0), axis=1) < INLIER_MM)
+    r = np.linalg.norm(f(T) - np.where(ok[:, None], P, 0), axis=1)
+    return best, float(np.median(r[best]))
+
+
 def fit_faces(side):
     """Faces for a fit returned by wrap_ear. A right ear's vertices are a
     mirrored left fit, so its triangles must be wound the other way or every
@@ -94,7 +133,7 @@ def cut_ear(V, F, P):
     return m
 
 
-def wrap_ear(V, F, P, side, work_dir, name="ear", cut=True):
+def wrap_ear(V, F, P, side, work_dir, name="ear", cut=True, use=None):
     """Fitted template vertices (base resolution) in the input's frame, or raise.
 
     cut=False fits (V, F) as given -- an ear-only surface such as a meshed
@@ -106,6 +145,10 @@ def wrap_ear(V, F, P, side, work_dir, name="ear", cut=True):
             raise ValueError(f"only {ok.sum()} finite landmarks")
     else:
         ok = np.ones(55, bool)
+    if use is not None:                                    # e.g. robust_inliers(P)[0]
+        ok = ok & use
+        if ok.sum() < 12:
+            raise ValueError(f"only {ok.sum()} usable landmarks")
     mir = np.array([1.0, 1.0, -1.0]) if side == "R" else np.ones(3)
     if cut:
         m = cut_ear(np.asarray(V, float), np.asarray(F), P[ok])
@@ -120,6 +163,12 @@ def wrap_ear(V, F, P, side, work_dir, name="ear", cut=True):
     bb = trimesh.triangles.points_to_barycentric(Vs[Fs[tid]], cl)
     right = [[int(t), float(b[0]), float(b[1])] for t, b in zip(tid, bb)]
     left = [l for l, k in zip(left, ok) if k]
+    # a landmark that lands on a near-zero-area triangle (smoothed cloud
+    # meshes) gets NaN barycentrics, and Wrap refuses the whole project
+    fin = [bool(np.isfinite(r[1:]).all()) for r in right]
+    left = [l for l, f in zip(left, fin) if f]; right = [r for r, f in zip(right, fin) if f]
+    if len(right) < 12:
+        raise ValueError(f"only {len(right)} usable landmark pairs")
 
     work = WORK_SIZE / float(np.ptp(Vs, axis=0).max())
     wd = pathlib.Path(work_dir); wd.mkdir(parents=True, exist_ok=True)
