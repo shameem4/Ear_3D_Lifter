@@ -15,7 +15,8 @@ Stages, each the one measured best on 2026-10-17 (80 HUTUBS ears):
      (cfg use_mesh_texture); synthetic skin looked better on a real scan.
   1. face skin (blotchy, config tone) -> frames.normalize_head: head frame
      from FaceMesh, upside-down guard. Clean skin turned 2/40 heads over.
-  2. ear skin (clean, config ear_tone) -> ear_view: side view, YOLO box,
+  2. ear skin (clean, config ear_tone) -> ear_view: side view, ear box
+     (config ear_detector: BlazeEar by default, Apache-2.0; YOLO optional),
      pad, one zoom. Fixes each ear's frame (R, centre, scale).
   3. 25 views (+-30 deg, 15 deg steps) orbited about that frame, sun fixed to
      the head (config multiview_light_dir, x mirrored for the right ear),
@@ -36,7 +37,7 @@ import open3d as o3d
 
 from .camera import orbit_extrinsic
 from .config import DEFAULTS, ROOT
-from .ear_view import ear_view, load_yolo
+from .ear_view import ear_view, load_detector
 from .frames import in_frame, normalize_head
 from .render import render
 from .triangulate import ransac_point
@@ -98,7 +99,7 @@ class Pipeline:
     def __init__(self, cfg=None, device="cuda"):
         from .twod import LandmarkPredictor, find_best_checkpoint
         self.cfg = dict(DEFAULTS, **(cfg or {}))
-        self.yolo = load_yolo()
+        self.yolo = load_detector(self.cfg["ear_detector"])
         self.pred = LandmarkPredictor(find_best_checkpoint(), device)
         t = np.load(TABLE, allow_pickle=True)
         self.table, self.angles = t["table"], t["angles"]

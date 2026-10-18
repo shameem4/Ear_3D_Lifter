@@ -17,26 +17,26 @@ or `from ear3d.pipeline import Pipeline; Pipeline().run(mesh)`.
   is outside 100-600 units), any orientation; colour is ignored by default.
 - **Output:** `L` and `R`, each 55 x 3, in the input mesh's own coordinates;
   NaN where an ear or a landmark could not be found. `L` is the subject's left.
-- **No fit, no ground truth** at inference: FaceMesh orients the head, a YOLO
-  ear box frames each ear, the 2D landmarker reads 25 rendered views, and
+- **No fit, no ground truth** at inference: FaceMesh orients the head, a BlazeEar
+  box frames each ear, the 2D landmarker reads 25 rendered views, and
   each landmark is triangulated from its best 8 views (`ear3d/view_table_v9.npz`,
   a 25x55 table of numbers learned on HUTUBS ears) and re-seated on the head.
   `ear3d/pipeline.py` lists the stages and why each setting was chosen.
 
 Measured on 16 HUTUBS heads used nowhere in building it, randomly rotated:
-all faces and all 32 ears found; median error 1.6 mm against the reference
-landmarks (`lm3d_v9`), 2.6 mm against the human-drawn v7 marks, under 3% of
+all faces and all 32 ears found; median error 1.7 mm against the reference
+landmarks (`lm3d_v9`), 2.6 mm against the human-drawn v7 marks, 3.8% of
 points beyond 5 mm. About 15 s per head on one GPU.
 
 Needs, besides this repository: `Ear_Landmarker` beside it (or
 `$EAR_LANDMARKER`) for the 2D model; `BlazeEar` beside it (or `$BLAZEEAR`) for
-`model_weights/yolov11_ear_detector.pt`; a MediaPipe `face_landmarker.task`
+the ear detector (`model_weights/BlazeEar_best_256px.pth`); a MediaPipe `face_landmarker.task`
 (`$FACE_LANDMARKER_TASK`).
 
-**Licence caution.** The ear box comes from an Ultralytics YOLO model;
-Ultralytics is AGPL-3.0, and BlazeEar keeps those weights out of version
-control for that reason. Running this locally is fine; redistributing it, or
-offering it as a service, needs that resolved first. The view table is
+**Licences.** The default ear box is BlazeEar (Apache-2.0). An Ultralytics
+YOLO ear box is available with `ear_detector="yolo"` (1.6 mm, slightly better)
+but Ultralytics is AGPL-3.0: use it locally only, not in anything
+redistributed or offered as a service. The view table is
 derived from HUTUBS (CC BY 4.0) and is credited as such.
 
 Limits: validated only on HUTUBS scans (no hair, one scanner); the view table

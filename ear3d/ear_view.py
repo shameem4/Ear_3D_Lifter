@@ -5,8 +5,11 @@ the subject's left, +y up, +z nose forward. The ear on side "L" is seen
 from +x, on side "R" from -x, both with +y up and lit from the face side
 (render.side_light).
 
-The box comes from the YOLO11 ear detector shipped in BlazeEar, not from
-BlazeEar itself. On side views of 20 randomly rotated heads YOLO's top box
+The box comes from BlazeEar (Apache-2.0) by default, taking its top box;
+cfg ear_detector="yolo" uses the YOLO11 ear detector kept locally in BlazeEar
+(Ultralytics, AGPL-3.0). End to end on 16 held-out heads: BlazeEar 1.68 mm,
+YOLO 1.61 mm median vs v9, 32/32 ears both (2026-10-17). Earlier, before the
+current lighting: On side views of 20 randomly rotated heads YOLO's top box
 was on the ear 40/40, BlazeEar's 33/40 under the light of the time.
 
 ONE ZOOM, NOT TWO. Measured on 40 heads x 2 sides with the head frame and
@@ -40,6 +43,7 @@ from .render import render, side_light
 _DEFAULT = pathlib.Path(__file__).resolve().parents[2] / "BlazeEar"
 BLAZEEAR = pathlib.Path(os.environ.get("BLAZEEAR", _DEFAULT))
 YOLO_EAR = BLAZEEAR / "model_weights" / "yolov11_ear_detector.pt"
+BLAZE_EAR = BLAZEEAR / "model_weights" / "BlazeEar_best_256px.pth"
 
 PAD = 0.25          # each side, as a fraction of the box's longer side
 MIN_WIDTH = 0.4     # smallest-box rule ignores boxes narrower than this x top.
@@ -54,6 +58,27 @@ def load_yolo(path=YOLO_EAR):
     return YOLO(str(path))
 
 
+class BlazeEarBoxes:
+    """BlazeEar (Apache-2.0) behind the same call as the YOLO model: returns
+    (boxes [x0, y0, x1, y1] px, scores). BlazeEar itself emits
+    [ymin, xmin, ymax, xmax]; the swap happens here and only here."""
+    def __init__(self, path=BLAZE_EAR, device="cuda"):
+        import sys
+        sys.path.insert(0, str(BLAZEEAR))
+        from blazeear_inference import BlazeEarInference
+        self.net = BlazeEarInference(str(path), confidence_threshold=0.05, device=device).to(device).eval()
+
+    def boxes(self, img):
+        import torch
+        with torch.no_grad():
+            d = self.net(np.ascontiguousarray(img)).detach().cpu().numpy().astype(float).reshape(-1, 5)
+        return d[:, [1, 0, 3, 2]], d[:, 4]
+
+
+def load_detector(kind="yolo"):
+    return BlazeEarBoxes() if kind == "blazeear" else load_yolo()
+
+
 def ear_box(yolo, img):
     """[x0, y0, x1, y1] px, or None.
 
@@ -64,10 +89,17 @@ def ear_box(yolo, img):
     >= half the smaller box), but not one narrower than MIN_WIDTH of the top
     box, so a small false box on the tragus cannot win.
     """
-    r = yolo.predict(np.ascontiguousarray(img[:, :, ::-1]), conf=0.05, verbose=False)[0]
-    if not len(r.boxes):
+    if isinstance(yolo, BlazeEarBoxes):
+        # Top box only: BlazeEar's NMS (IoU 0.3) already drops nested
+        # duplicates, and the rule below swapped a correct 0.79 box on pp30
+        # for a 0.21 box on the lobe nested inside it.
+        B, S = yolo.boxes(img)
+        return B[np.argmax(S)] if len(B) else None
+    else:
+        r = yolo.predict(np.ascontiguousarray(img[:, :, ::-1]), conf=0.05, verbose=False)[0]
+        B, S = r.boxes.xyxy.cpu().numpy(), r.boxes.conf.cpu().numpy()
+    if not len(B):
         return None
-    B, S = r.boxes.xyxy.cpu().numpy(), r.boxes.conf.cpu().numpy()
     t = B[np.argmax(S)]
     area = lambda b: (b[2] - b[0]) * (b[3] - b[1])
     inter = lambda a, b: (max(0, min(a[2], b[2]) - max(a[0], b[0]))

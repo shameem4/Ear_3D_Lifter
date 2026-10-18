@@ -166,6 +166,9 @@ DEFAULTS = dict(
                             # value today: 40 heads x 5 suns, this one gave
                             # the best face frames (median 5.1 deg vs scan,
                             # 40/40 found; a camera-axis sun lost 4).
+    ear_detector="blazeear",  # pipeline ear box: "blazeear" (Apache-2.0) or "yolo"
+                              # (Ultralytics, AGPL-3.0; local use only). 16 held-out
+                              # heads: 1.68 vs 1.61 mm median vs v9, 32/32 ears both.
     use_mesh_texture=False, # pipeline: True renders a mesh that brings its own
                             # colour with it and skips the synthetic skins.
                             # Off: on the one textured scan tried (2026-10-17)
