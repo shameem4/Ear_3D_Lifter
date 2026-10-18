@@ -7,6 +7,43 @@ The 55-point ear scheme is annotated on photographs, and a 2D detector
 points reliably. This repository is about the next step: recovering where
 those points sit in space — depth, pose, and a surface that agrees with them.
 
+## End-to-end: head mesh in, 3D ear landmarks out
+
+    python scripts/run_pipeline.py head.obj [out.npz]
+
+or `from ear3d.pipeline import Pipeline; Pipeline().run(mesh)`.
+
+- **Input:** a head scan in millimetres (it refuses a mesh whose longest side
+  is outside 100-600 units), any orientation; colour is ignored by default.
+- **Output:** `L` and `R`, each 55 x 3, in the input mesh's own coordinates;
+  NaN where an ear or a landmark could not be found. `L` is the subject's left.
+- **No fit, no ground truth** at inference: FaceMesh orients the head, a YOLO
+  ear box frames each ear, the 2D landmarker reads 25 rendered views, and
+  each landmark is triangulated from its best 8 views (`ear3d/view_table_v9.npz`,
+  a 25x55 table of numbers learned on HUTUBS ears) and re-seated on the head.
+  `ear3d/pipeline.py` lists the stages and why each setting was chosen.
+
+Measured on 16 HUTUBS heads used nowhere in building it, randomly rotated:
+all faces and all 32 ears found; median error 1.6 mm against the reference
+landmarks (`lm3d_v9`), 2.6 mm against the human-drawn v7 marks, under 3% of
+points beyond 5 mm. About 15 s per head on one GPU.
+
+Needs, besides this repository: `Ear_Landmarker` beside it (or
+`$EAR_LANDMARKER`) for the 2D model; `BlazeEar` beside it (or `$BLAZEEAR`) for
+`model_weights/yolov11_ear_detector.pt`; a MediaPipe `face_landmarker.task`
+(`$FACE_LANDMARKER_TASK`).
+
+**Licence caution.** The ear box comes from an Ultralytics YOLO model;
+Ultralytics is AGPL-3.0, and BlazeEar keeps those weights out of version
+control for that reason. Running this locally is fine; redistributing it, or
+offering it as a service, needs that resolved first. The view table is
+derived from HUTUBS (CC BY 4.0) and is credited as such.
+
+Limits: validated only on HUTUBS scans (no hair, one scanner); the view table
+must be rebuilt (`scripts/build_view_table.py`) if the 2D model or the view
+grid changes; a mesh's own texture can be used (`use_mesh_texture=True`) but
+is off, since synthetic skin looked better on the one real scan tried.
+
 ## Prior research
 
 A 3D effort preceded this repository. `RESEARCH_BRIEF.md` records what it

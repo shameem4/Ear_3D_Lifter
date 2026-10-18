@@ -11,8 +11,8 @@ Stages, each the one measured best on 2026-10-17 (80 HUTUBS ears):
 
   0. TEXTURE GATE: a mesh that brings its own colour (vertex colours with real
      variation, or a UV texture, which is baked to vertices) is rendered with
-     it, and both synthetic skins below are skipped. Off with
-     cfg use_mesh_texture=False.
+     it, and both synthetic skins below are skipped. OFF by default
+     (cfg use_mesh_texture); synthetic skin looked better on a real scan.
   1. face skin (blotchy, config tone) -> frames.normalize_head: head frame
      from FaceMesh, upside-down guard. Clean skin turned 2/40 heads over.
   2. ear skin (clean, config ear_tone) -> ear_view: side view, YOLO box,
@@ -42,7 +42,16 @@ from .render import render
 from .triangulate import ransac_point
 
 TABLE = pathlib.Path(__file__).with_name("view_table_v9.npz")
-TEXTURE_MIN_SD = 0.02        # colour s.d. below this is treated as untextured
+TEXTURE_MIN_SD = 0.02
+FACE_RETRIES = 2             # extra face searches on the mesh turned by a fixed rotation
+
+
+def _retry_rotation(k):
+    """A fixed, reproducible 3D rotation for face-search retry k."""
+    q = np.random.default_rng(1000 + k).normal(size=4); q /= np.linalg.norm(q); w, x, y, z = q
+    return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                     [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                     [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])        # colour s.d. below this is treated as untextured
 K_BEST = 8
 RANSAC_MM = 1.0
 
@@ -98,22 +107,41 @@ class Pipeline:
         self.apply_skin = _apply_skin()
 
     def _skinned(self, mesh, tone, noise):
-        m = o3d.geometry.TriangleMesh(mesh)
+        """A coloured copy. The skin's blotches and AO rays are laid out in
+        world axes, so it is computed on a copy in the mesh's own PCA frame
+        (signs fixed by the third moment) and the per-vertex colours copied
+        back: the same head in any orientation gets the same skin."""
+        V = np.asarray(mesh.vertices); c0 = V.mean(0)
+        _, _, Vt = np.linalg.svd(V - c0, full_matrices=False)
+        A = (V - c0) @ Vt.T
+        Vt = Vt * np.sign(np.sign((A ** 3).sum(0)) + 0.5)[:, None]        # 0 -> +1
+        if np.linalg.det(Vt) < 0:
+            Vt[2] = -Vt[2]
+        m = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector((V - c0) @ Vt.T),
+                                      o3d.utility.Vector3iVector(np.asarray(mesh.triangles)))
         m.compute_vertex_normals()
         c = self.cfg
-        return self.apply_skin(m, seed=c["skin_seed"], tone=tone, ao_strength=c["ao_strength"],
-                               n_rays=c["ao_rays"], noise=noise)
+        self.apply_skin(m, seed=c["skin_seed"], tone=tone, ao_strength=c["ao_strength"],
+                        n_rays=c["ao_rays"], noise=noise)
+        out = o3d.geometry.TriangleMesh(mesh)
+        out.vertex_colors = m.vertex_colors
+        out.compute_vertex_normals()
+        return out
 
     def run(self, mesh, return_debug=False):
         c = self.cfg
-        tex = mesh_texture(mesh) if c.get("use_mesh_texture", True) else None
+        ext = float(np.ptp(np.asarray(mesh.vertices), axis=0).max())
+        if not 100.0 <= ext <= 600.0:
+            raise ValueError(f"mesh spans {ext:.3g} along its longest axis; the pipeline needs a head "
+                             f"in MILLIMETRES (expected ~150-350). Metres? scale by 1000.")
+        tex = mesh_texture(mesh) if c.get("use_mesh_texture", False) else None
         if tex is not None:                                      # the mesh's own appearance
             face = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(np.asarray(mesh.vertices)),
                                              o3d.utility.Vector3iVector(np.asarray(mesh.triangles)))
             face.vertex_colors = o3d.utility.Vector3dVector(tex); face.compute_vertex_normals()
         else:
             face = self._skinned(mesh, c["tone"], c["skin_noise"])
-        nh = normalize_head(face, c)
+        nh = self._find_face(face)
         if nh is None:
             return None
         mesh_c, R_head, centre, _ = nh
@@ -130,10 +158,33 @@ class Pipeline:
                 out[side] = None
                 continue
             P = self._multiview(ear, side, v["R"], v["centre"], v["scale"])
-            P = scene.compute_closest_points(o3d.core.Tensor(P.astype(np.float32)))["points"].numpy()
+            ok = np.isfinite(P).all(1)                           # a failed landmark stays NaN:
+            if ok.any():                                         # the snap maps NaN to ~origin
+                P[ok] = scene.compute_closest_points(o3d.core.Tensor(P[ok].astype(np.float32)))["points"].numpy()
             out[side] = P @ R_head + centre                      # back to the input frame
             dbg[side] = dict(R=v["R"], centre=v["centre"], scale=v["scale"], P_norm=P)
         return (out, dbg) if return_debug else out
+
+    def _find_face(self, face):
+        """normalize_head, retried on the mesh turned by fixed rotations.
+
+        The face search renders 26 directions x 4 rolls fixed to the INPUT's
+        axes, so an unlucky orientation can leave every candidate view short
+        of the gate. Turning the mesh moves the views relative to the head;
+        the frame found is mapped back exactly (V' = V Q^T, so the head frame
+        of the original is R' Q and the centre c' Q). Skin is per vertex, so
+        the colours travel with the vertices unchanged.
+        """
+        V = np.asarray(face.vertices)
+        for k in range(FACE_RETRIES + 1):
+            Q = np.eye(3) if k == 0 else _retry_rotation(k)
+            m = o3d.geometry.TriangleMesh(face)
+            m.vertices = o3d.utility.Vector3dVector(V @ Q.T); m.compute_vertex_normals()
+            nh = normalize_head(m, self.cfg)
+            if nh is not None:
+                mesh_c, Rh, cen, nose = nh
+                return mesh_c, Rh @ Q, cen @ Q, nose
+        return None
 
     def _multiview(self, ear, side, R, c0, s):
         c = self.cfg
