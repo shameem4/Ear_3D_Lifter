@@ -64,14 +64,23 @@ def un_normalise(V_scan, how):
     raise ValueError(how)
 
 
-def compose(name, dataset, side, scan_cache):
-    """The 4x4 canonical mm -> scan mm, plus what it was checked against."""
+def compose(name, dataset, side, scan_cache, canonical="canonical_esc",
+            direct=None):
+    """The 4x4 canonical mm -> scan mm, plus what it was checked against.
+
+    direct: {name: scan path} for fits made IN the scan's own frame, in mm
+    (corpus/lmwrap_v1, from wrap_from_landmarks). Their to_original already
+    lands on the scan, so the cut / mirror / un-normalise chain below does
+    not apply -- composing it anyway would apply each step twice."""
     import open3d as o3d
 
-    cn = np.load(WRAP / f"corpus/canonical_esc/{dataset}/{name}.npz",
+    cn = np.load(WRAP / f"corpus/{canonical}/{dataset}/{name}.npz",
                  allow_pickle=True)
-    tf = np.load(WRAP / f"corpus/tf_{dataset}/{name}.npz", allow_pickle=True)
-    scan_path = str(tf["source"])
+    if direct is not None:
+        scan_path = direct[name]
+    else:
+        tf = np.load(WRAP / f"corpus/tf_{dataset}/{name}.npz", allow_pickle=True)
+        scan_path = str(tf["source"])
 
     if scan_path not in scan_cache:
         m = o3d.io.read_triangle_mesh(scan_path)
@@ -89,22 +98,27 @@ def compose(name, dataset, side, scan_cache):
     V_scan, to_mm, scene = scan_cache[scan_path]
 
     T0 = cn["to_original"]                       # canonical mm -> fit native
-    M = tf["matrix"]                             # cut native -> normalised scan
-    s0, c0 = un_normalise(V_scan, NORMALISE[dataset])
-    mir = np.diag([1.0, 1.0, -1.0 if side == "right" else 1.0])
+    if direct is not None:                       # fit native is scan mm, but a
+        # right ear is stored z-mirrored into left form, as every corpus is
+        mir = np.diag([1.0, 1.0, -1.0 if side == "right" else 1.0])
+        A, b = mir @ T0[:3, :3], mir @ T0[:3, 3]
+    else:
+        M = tf["matrix"]                         # cut native -> normalised scan
+        s0, c0 = un_normalise(V_scan, NORMALISE[dataset])
+        mir = np.diag([1.0, 1.0, -1.0 if side == "right" else 1.0])
 
-    # x_scan_mm = ((mir @ T0 x) @ M.R' + M.t) * s0 * to_mm + c0 * to_mm
-    A = (mir @ T0[:3, :3])
-    b = mir @ T0[:3, 3]
-    A = M[:3, :3] @ A
-    b = M[:3, :3] @ b + M[:3, 3]
-    A = A * (s0 * to_mm)
-    b = b * (s0 * to_mm) + c0 * to_mm
+        # x_scan_mm = ((mir @ T0 x) @ M.R' + M.t) * s0 * to_mm + c0 * to_mm
+        A = (mir @ T0[:3, :3])
+        b = mir @ T0[:3, 3]
+        A = M[:3, :3] @ A
+        b = M[:3, :3] @ b + M[:3, 3]
+        A = A * (s0 * to_mm)
+        b = b * (s0 * to_mm) + c0 * to_mm
     T = np.eye(4)
     T[:3, :3], T[:3, 3] = A, b
 
     g = o3d.io.read_triangle_mesh(
-        str(WRAP / f"corpus/canonical_esc/{dataset}/{name}.obj"))
+        str(WRAP / f"corpus/{canonical}/{dataset}/{name}.obj"))
     X = np.asarray(g.vertices) @ A.T + b
     d = scene.compute_distance(o3d.core.Tensor(
         np.ascontiguousarray(X, np.float32))).numpy()
@@ -119,10 +133,20 @@ def main():
     p.add_argument("--out", default=str(WRAP / "corpus/canon2scan"))
     p.add_argument("--tol", type=float, default=TOL_MM)
     p.add_argument("--limit", type=int, default=0)
+    p.add_argument("--canonical", default="canonical_esc",
+                   help="canonical corpus dir under wrap_work/corpus")
+    p.add_argument("--direct", default=None,
+                   help="provenance.json of fits made in the scan frame, mm "
+                        "(corpus/lmwrap_v1/provenance.json): to_original is "
+                        "used as is, the scan path comes from the json")
     a = p.parse_args()
+    direct = None
+    if a.direct:
+        import json
+        direct = {k: v["scan"] for k, v in json.load(open(a.direct)).items()}
 
     rows = [r for r in csv.DictReader(
-        open(WRAP / "corpus/canonical_esc/manifest.csv", encoding="utf-8"))
+        open(WRAP / f"corpus/{a.canonical}/manifest.csv", encoding="utf-8"))
         if r["dataset"] in a.dataset]
     # sorted by subject so both ears reuse one loaded scan
     rows.sort(key=lambda r: (r["dataset"], r["name"]))
@@ -135,7 +159,7 @@ def main():
     for i, r in enumerate(rows):
         name, ds, side = r["name"], r["dataset"], r["side"]
         try:
-            T, scan, res = compose(name, ds, side, cache)
+            T, scan, res = compose(name, ds, side, cache, a.canonical, direct)
         except FileNotFoundError as e:
             miss.append((name, str(e).split("/")[-1]))
             continue

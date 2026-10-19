@@ -17,9 +17,16 @@ from escape_audit import DEFAULTS
 
 # The reference is config's gt_lm3d (v9); gt_lm3d_also are scored alongside.
 def _load(fn): z = np.load(WRAP / "templates" / fn, allow_pickle=True); return z, [str(x) for x in z["names"]]
-LM, NAMES = _load(DEFAULTS["gt_lm3d"])
+# GT_LM3D / GT_CANON2SCAN rebase the REFERENCE on another corpus generation
+# (e.g. lm3d_v11 on canonical_lmw with canon2scan_lmw). The head caches stay in
+# the frame they were built in -- the old canon2scan of the subject's left ear.
+import os
+GT_FILE = os.environ.get("GT_LM3D", DEFAULTS["gt_lm3d"])
+GT_C2S = os.environ.get("GT_CANON2SCAN", "corpus/canon2scan")
+LM, NAMES = _load(GT_FILE)
 ALSO = {fn: _load(fn) for fn in DEFAULTS.get("gt_lm3d_also", ())}
 def inv(name): return np.load(WRAP / "corpus/canon2scan" / f"{name}.npz", allow_pickle=True)["inverse"]
+def inv_gt(name): return np.load(WRAP / GT_C2S / f"{name}.npz", allow_pickle=True)["inverse"]
 
 def gt_in_cache(hd, side, head, ref=None):
     """Reference landmarks of this ear in the cached normalised head frame (mm)."""
@@ -27,7 +34,7 @@ def gt_in_cache(hd, side, head, ref=None):
     nm = f"{hd}_{'left' if side == 'L' else 'right'}"
     P = lmz["landmarks"][names.index(nm)][:55]
     # ear's canonical -> scan mm -> the _left canonical the head cache was built in
-    T = inv(f"{hd}_left") @ np.linalg.inv(inv(nm))
+    T = inv(f"{hd}_left") @ np.linalg.inv(inv_gt(nm))
     P = (np.c_[P, np.ones(len(P))] @ T.T)[:, :3]
     return (P @ head["Rr"].T - head["centre"]) @ head["R_head"].T
 

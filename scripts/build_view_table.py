@@ -30,5 +30,5 @@ for f, e in zip(fs, E):
     o, d = e["o"][p], e["d"][p]; v = gt[None] - o
     RD.append(np.linalg.norm(v - (v * d).sum(-1, keepdims=True) * d, axis=-1))
 T = np.nanmedian(RD, axis=0)
-np.savez(out, table=T, angles=ANG, n_ears=len(E), gt=g["DEFAULTS"]["gt_lm3d"], source=cd.name)
-print(f"{out}: {T.shape} from {len(E)} ears, GT {g['DEFAULTS']['gt_lm3d']}; median cell {np.median(T):.2f} mm")
+np.savez(out, table=T, angles=ANG, n_ears=len(E), gt=g["GT_FILE"], gt_canon2scan=g["GT_C2S"], source=cd.name)
+print(f"{out}: {T.shape} from {len(E)} ears, GT {g['GT_FILE']} via {g['GT_C2S']}; median cell {np.median(T):.2f} mm")
