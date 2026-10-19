@@ -44,6 +44,12 @@ for hd in ALLS[WK::NW]:
     Rr = random_rotation((rot_seed, i))
     head.vertices = o3d.utility.Vector3dVector(np.asarray(head.vertices) @ Rr.T); head.compute_vertex_normals()
     nh = normalize_head(head, c)
+    if nh is None:   # the pipeline's face search: turned retries + girth/symmetry checks. Only
+        # on a failure, so heads that pass the plain search cache exactly as before.
+        from ear3d.pipeline import Pipeline
+        pl = globals().get("_PL") or globals().setdefault("_PL", Pipeline())
+        pl.cfg = dict(pl.cfg, **c); nh = pl._find_face(head)
+        print(hd, "plain face search failed; pipeline retry", "found" if nh else "failed", flush=True)
     if nh is None: print(hd, "NO FACE", flush=True); continue
     m, R_head, centre, nose = nh
     np.savez(out / f"{hd}.npz", V=np.asarray(m.vertices), F=np.asarray(m.triangles), C=np.asarray(m.vertex_colors),
