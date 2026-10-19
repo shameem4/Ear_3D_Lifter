@@ -137,7 +137,7 @@ def head_pose(mesh, cfg):
     fwd = np.cross(lat, vert)
     flipped, tip = nose_upside_down(mesh.vertices, vert, fwd, np.asarray(r[4]))
     judge = cfg.get("upright_judge")
-    if judge is not None and abs(HEAD_ALT["nose_margin"]) < NOSE_CLOSE_MM:
+    if judge is not None and abs(HEAD_ALT["nose_margin"]) < cfg.get("nose_close_mm", NOSE_CLOSE_MM):
         # CLOSE CALL: fit it the other way up too and let the caller judge.
         # SONICOM P0027_right / P0208_left were rolled ~160 deg with the
         # nose saying "upright" by 2.8 / 1.4 mm, and the margin is not even

@@ -44,7 +44,20 @@ from .triangulate import ransac_point
 
 TABLE = pathlib.Path(__file__).with_name("view_table_v9.npz")
 TEXTURE_MIN_SD = 0.02
-FACE_RETRIES = 2             # extra face searches on the mesh turned by a fixed rotation
+FACE_RETRIES = 4             # extra face searches on the mesh turned by a fixed rotation
+# FRAME CHECKS, independent of FaceMesh. On SONICOM (cut at neck and crown)
+# FaceMesh sometimes "finds" a face on the back of the head or on an ear and
+# the frame comes out ~150-170 deg off. Measured on 34 SONICOM heads (31
+# right frames, 3 wrong):
+SYM_P90_MM = 7.0             # face mirror-symmetric about the nose: right 1.6-5.9, wrong 9.6-10.5
+NOSE_EAR_MIN_MM = 110.0      # nose far from both ears: right 127-165, wrong 31-87
+NOSE_EAR_BALANCE = 0.7       # nearer / farther ear distance: right 0.77-1.00, wrong 0.20-0.57
+# Upside-down frames pass both checks above (they are symmetric under the
+# flip) and swap the ears. The skull is wider than the neck/jaw: girth 60 mm
+# above vs below the nose, right 1.23-1.91 (10 heads), upside-down 1.02-1.07.
+GIRTH_OFFSET_MM = 60.0
+GIRTH_RATIO_MIN = 1.15
+_FLIP = np.diag([-1.0, -1.0, 1.0])  # 180 deg about the nose axis
 
 
 def _retry_rotation(k):
@@ -93,6 +106,19 @@ def mesh_texture(mesh):
         if n.any() and (acc[n > 0] / n[n > 0, None]).std(0).max() > TEXTURE_MIN_SD:
             return acc / np.maximum(n, 1)[:, None]
     return None
+
+
+def _girth_ratio(mesh_c, nose):
+    """Longest closed-ish section perimeter GIRTH_OFFSET_MM above the nose
+    over the one below. Skull over neck/jaw: > 1 when the frame is upright."""
+    import trimesh
+    tm = trimesh.Trimesh(np.asarray(mesh_c.vertices), np.asarray(mesh_c.triangles), process=False)
+    def girth(y):
+        sec = tm.section(plane_origin=[0, y, 0], plane_normal=[0, 1, 0])
+        if sec is None:
+            return 0.0
+        return max((float(np.linalg.norm(np.diff(np.asarray(d), axis=0), axis=1).sum()) for d in sec.discrete), default=0.0)
+    return girth(nose[1] + GIRTH_OFFSET_MM) / max(girth(nose[1] - GIRTH_OFFSET_MM), 1.0)
 
 
 class Pipeline:
@@ -177,6 +203,7 @@ class Pipeline:
         the colours travel with the vertices unchanged.
         """
         V = np.asarray(face.vertices)
+        best = (np.inf, None)    # least-bad frame, when no search passes every check
         for k in range(FACE_RETRIES + 1):
             Q = np.eye(3) if k == 0 else _retry_rotation(k)
             m = o3d.geometry.TriangleMesh(face)
@@ -184,8 +211,53 @@ class Pipeline:
             nh = normalize_head(m, dict(self.cfg, upright_judge=self._ear_judge(m)))
             if nh is not None:
                 mesh_c, Rh, cen, nose = nh
-                return mesh_c, Rh @ Q, cen @ Q, nose
-        return None
+                g = _girth_ratio(mesh_c, nose); print(f"pipeline: girth ratio {g:.2f}")
+                if g < GIRTH_RATIO_MIN:                      # try it the other way up
+                    mf = o3d.geometry.TriangleMesh(mesh_c)
+                    mf.vertices = o3d.utility.Vector3dVector(np.asarray(mesh_c.vertices) @ _FLIP)
+                    mf.compute_vertex_normals(); gf = _girth_ratio(mf, nose @ _FLIP)
+                    print(f"pipeline: face search {k} girth ratio {g:.2f}, flipped {gf:.2f}")
+                    if gf < GIRTH_RATIO_MIN:
+                        print(f"pipeline: face search {k} rejected (no clear skull above neck); retrying turned")
+                        if GIRTH_RATIO_MIN / g < best[0]:
+                            best = (GIRTH_RATIO_MIN / g, (mesh_c, Rh @ Q, cen @ Q, nose))
+                        continue
+                    mesh_c, Rh, nose = mf, _FLIP @ Rh, nose @ _FLIP
+                ok, why, bad = self._frame_ok(mesh_c, nose)
+                if ok:
+                    return mesh_c, Rh @ Q, cen @ Q, nose
+                print(f"pipeline: face search {k} rejected ({why}); retrying turned")
+                if bad < best[0]:
+                    best = (bad, (mesh_c, Rh @ Q, cen @ Q, nose))
+        if best[1] is not None:
+            print(f"pipeline: no face search passed; keeping the least-bad (x{best[0]:.2f} past its gate)")
+        return best[1]
+
+    def _frame_ok(self, mesh_c, nose):
+        """(ok, reason, badness): is the normalised frame a real face? Symmetry about
+        the nose, and the nose well away from, and between, the two ears."""
+        from scipy.spatial import cKDTree
+        Vn = np.asarray(mesh_c.vertices); L = Vn - nose
+        near = L[np.hypot(L[:, 0], L[:, 1]) < 30]
+        if not len(near):
+            return False, "no surface at the nose", np.inf
+        t = near[np.argmax(near[:, 2])] + nose                   # geometric nose tip
+        reg = Vn[np.linalg.norm(Vn - t, axis=1) < 40]
+        reg = reg[reg[:, 2] > t[2] - 40]
+        mir = reg.copy(); mir[:, 0] = 2 * t[0] - mir[:, 0]
+        sym = float(np.percentile(cKDTree(Vn).query(mir)[0], 90))
+        if sym > SYM_P90_MM:
+            return False, f"asymmetric about the nose, p90 {sym:.1f} mm", sym / SYM_P90_MM
+        ear = self._skinned(mesh_c, self.cfg["ear_tone"], self.cfg["ear_skin_noise"])
+        d = []
+        for side in "LR":
+            v = ear_view(ear, side, self.cfg, self.yolo)
+            if v is None:
+                return False, f"no ear on side {side}", np.inf
+            d.append(float(np.linalg.norm(v["centre"] - t)))
+        if min(d) < NOSE_EAR_MIN_MM or min(d) / max(d) < NOSE_EAR_BALANCE:
+            return False, f"nose-ear {d[0]:.0f}/{d[1]:.0f} mm", max(NOSE_EAR_MIN_MM / min(d), NOSE_EAR_BALANCE * max(d) / min(d))
+        return True, "", 0.0
 
     def _ear_judge(self, face):
         """Score a candidate head frame by how readily the ear detector
