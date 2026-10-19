@@ -112,6 +112,19 @@ def robust_inliers(P, seed=0):
     return best, float(np.median(r[best]))
 
 
+def _anchor_pairs(anchors, P, Vs, Fs, mir):
+    """Wrapping control points for landmark indices `anchors` (all of them,
+    whether or not the robust pose kept them), as (template, scan) pairs."""
+    _, _, left_all = _template()
+    sm = trimesh.Trimesh(Vs, Fs, process=False)
+    js = [j for j in anchors if np.isfinite(P[j]).all()]
+    cl, _, tid = trimesh.proximity.closest_point(sm, (P[js] * mir))
+    bb = trimesh.triangles.points_to_barycentric(Vs[Fs[tid]], cl)
+    keep = [i for i in range(len(js)) if np.isfinite(bb[i]).all()]
+    return ([left_all[js[i]] for i in keep],
+            [[int(tid[i]), float(bb[i][0]), float(bb[i][1])] for i in keep])
+
+
 def fit_faces(side):
     """Faces for a fit returned by wrap_ear. A right ear's vertices are a
     mirrored left fit, so its triangles must be wound the other way or every
@@ -133,11 +146,17 @@ def cut_ear(V, F, P):
     return m
 
 
-def wrap_ear(V, F, P, side, work_dir, name="ear", cut=True, use=None):
+def wrap_ear(V, F, P, side, work_dir, name="ear", cut=True, use=None, anchors=()):
     """Fitted template vertices (base resolution) in the input's frame, or raise.
 
     cut=False fits (V, F) as given -- an ear-only surface such as a meshed
-    AudioEar3D cloud -- instead of cutting the ear out of a head first."""
+    AudioEar3D cloud -- instead of cutting the ear out of a head first.
+
+    anchors: landmark indices also given to Wrapping as control points. A
+    RESCUE, never a default: (15, 17, 19) pulls a lobe the automatic fit left
+    short (P0082_left: lobe landmark 8.2 mm off the fit, 1.8 mm off the old
+    one). Anchors may be landmarks the robust pose dropped -- that is the case
+    they exist for."""
     P = np.asarray(P, float)
     if not np.isfinite(P).all():
         ok = np.isfinite(P).all(1)
@@ -190,7 +209,8 @@ def wrap_ear(V, F, P, side, work_dir, name="ear", cut=True, use=None):
     pr = by[rig["params"]["points"]["connectedNodeId"]]
     pr["params"]["pointsLeft"]["value"], pr["params"]["pointsRight"]["value"] = left, right
     pw = by[wrp["params"]["points"]["connectedNodeId"]]
-    pw["params"]["pointsLeft"]["value"], pw["params"]["pointsRight"]["value"] = [], []
+    pw["params"]["pointsLeft"]["value"], pw["params"]["pointsRight"]["value"] = ([], []) if not anchors else \
+        _anchor_pairs(anchors, P, Vs, Fs, mir)
     sav = one(proj, "SaveGeom"); sav["params"]["fileName"]["value"] = str(dst)
     connect(sav, "geom", one(proj, "SubdivideGeom"))          # no ProjectGeom
     proj["timeline"] = {"current": 0, "min": 0, "max": 0}
