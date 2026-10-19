@@ -41,15 +41,14 @@ for hd in ALLS[WK::NW]:
     if len(sys.argv) > 8:
         c.update(tone=int(sys.argv[7]), skin_noise=bool(int(sys.argv[8])))
     head, _, _ = load_ear(f"{hd}_left", "hutubs", c)
-    Rr = random_rotation((rot_seed, i))
-    head.vertices = o3d.utility.Vector3dVector(np.asarray(head.vertices) @ Rr.T); head.compute_vertex_normals()
-    nh = normalize_head(head, c)
-    if nh is None:   # the pipeline's face search: turned retries + girth/symmetry checks. Only
-        # on a failure, so heads that pass the plain search cache exactly as before.
-        from ear3d.pipeline import Pipeline
-        pl = globals().get("_PL") or globals().setdefault("_PL", Pipeline())
-        pl.cfg = dict(pl.cfg, **c); nh = pl._find_face(head)
-        print(hd, "plain face search failed; pipeline retry", "found" if nh else "failed", flush=True)
+    V0 = np.asarray(head.vertices).copy()
+    for k in range(4):   # same plain search on a fresh random rotation; k=0 is the original draw,
+        # so a head that passes first time caches exactly as before (pp95 needed one more draw)
+        Rr = random_rotation((rot_seed, i) if k == 0 else (rot_seed, i, k))
+        head.vertices = o3d.utility.Vector3dVector(V0 @ Rr.T); head.compute_vertex_normals()
+        nh = normalize_head(head, c)
+        if nh is not None: break
+        print(hd, f"no face on rotation draw {k}", flush=True)
     if nh is None: print(hd, "NO FACE", flush=True); continue
     m, R_head, centre, nose = nh
     np.savez(out / f"{hd}.npz", V=np.asarray(m.vertices), F=np.asarray(m.triangles), C=np.asarray(m.vertex_colors),
