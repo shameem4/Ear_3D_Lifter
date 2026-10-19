@@ -17,7 +17,7 @@ from ear3d.camera import orbit_extrinsic
 from ear3d.frames import in_frame
 from ear3d.render import render
 from ear3d.backproject import backproject_snapped
-from ear3d.twod import LandmarkPredictor, find_best_checkpoint
+from ear3d.twod import LandmarkPredictor, landmarker_checkpoint
 g = {}; exec(open(R0 / "scripts/gt_check_ear_views.py").read().split("out = sys.argv[1]")[0], g)
 
 tag, out, LIGHT, WK, NW = sys.argv[1], pathlib.Path(sys.argv[2]), sys.argv[3], int(sys.argv[4]), int(sys.argv[5])
@@ -25,7 +25,7 @@ LIMIT = int(sys.argv[6]) if len(sys.argv) > 6 and sys.argv[6] != "-" else None
 SUN = np.array([float(x) for x in sys.argv[7].split(",")]) if len(sys.argv) > 7 else np.asarray(DEFAULTS["multiview_light_dir"], float)
 out.mkdir(parents=True, exist_ok=True)
 ANG = [(float(y), float(p)) for y in range(-30, 31, 15) for p in range(-30, 31, 15)]
-pred = LandmarkPredictor(find_best_checkpoint(), "cuda")
+CKPT = str(landmarker_checkpoint(DEFAULTS)); pred = LandmarkPredictor(CKPT, "cuda")
 fs = sorted(glob.glob(str(R0 / f"runs/cache/{tag}_s*/*_[LR].npz")))
 if LIMIT: fs = fs[::max(1, len(fs) // LIMIT)][:LIMIT]
 skinned = {}
@@ -57,5 +57,5 @@ for f in fs[WK::NW]:
             P, hit, _ = backproject_snapped(depth, lm, cam, DEFAULTS)
             p0 = np.where(hit[:, None], P * s @ R + c0, np.nan)
     gt = g["gt_in_cache"](hd, side, head)
-    np.savez(dst, angles=np.array(ANG), uv=uv, o=O, d=D, gt=gt, p0=p0, side=side, head=hp)
+    np.savez(dst, angles=np.array(ANG), uv=uv, o=O, d=D, gt=gt, p0=p0, side=side, head=hp, ckpt=CKPT)
     print(stem, "ok", flush=True)

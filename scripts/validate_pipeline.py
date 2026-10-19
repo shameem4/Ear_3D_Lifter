@@ -45,7 +45,7 @@ for i, hd in enumerate(sample[WK::NW]):
     Rr = rot((ss, 1000 + sample.index(hd)))
     head.vertices = o3d.utility.Vector3dVector(np.asarray(head.vertices) @ Rr.T); head.vertex_colors = o3d.utility.Vector3dVector()
     res = pipe.run(head)
-    rec = {"Rr": Rr}
+    rec = {"Rr": Rr, "ckpt": pipe.ckpt}
     for sd in "LR":
         rec[f"pred_{sd}"] = res[sd] if res and res[sd] is not None else np.full((55, 3), np.nan)
         nm = f"{hd}_{'left' if sd == 'L' else 'right'}"; T = g["inv"](f"{hd}_left", g["_corpus"].CURRENT) @ np.linalg.inv(g["inv_gt"](nm))   # load_ear built the head in CURRENT

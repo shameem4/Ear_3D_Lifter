@@ -32,8 +32,10 @@ DEFAULTS = dict(
                             # they may have superseded -- theirs moved from
                             # manual_occ_s42 to fixed_conv_s42 on 2026-10-14
                             # and this would not have noticed. Set it to a run
-                            # name, or cfg["ckpt"] to a path, when a
-                            # measurement needs one model held still.
+                            # name, or cfg["ckpt"] to a path, or env
+                            # EAR3D_CKPT (path or run; wins over both), when a
+                            # measurement needs one model held still. See
+                            # twod.landmarker_checkpoint; results record it.
     device="cuda",
 
     # --- the 2D detector, on RENDERS ----------------------------------------

@@ -124,10 +124,11 @@ def _girth_ratio(mesh_c, nose):
 
 class Pipeline:
     def __init__(self, cfg=None, device="cuda"):
-        from .twod import LandmarkPredictor, find_best_checkpoint
+        from .twod import LandmarkPredictor, landmarker_checkpoint
         self.cfg = dict(DEFAULTS, **(cfg or {}))
         self.yolo = load_detector(self.cfg["ear_detector"])
-        self.pred = LandmarkPredictor(find_best_checkpoint(), device)
+        self.ckpt = str(landmarker_checkpoint(self.cfg))     # record it with any result
+        self.pred = LandmarkPredictor(self.ckpt, device)
         t = np.load(TABLE, allow_pickle=True)
         self.table, self.angles = t["table"], t["angles"]
         key = {tuple(a): i for i, a in enumerate(self.angles)}

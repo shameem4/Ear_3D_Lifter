@@ -52,6 +52,29 @@ from inference import (                                           # noqa: E402
 from inspect import signature  # noqa: E402
 
 
+def landmarker_checkpoint(cfg=None):
+    """The 2D checkpoint to load, as a path. One rule for every caller:
+
+      env EAR3D_CKPT  -- a .ckpt path or a run name; pins the model for a
+                         measurement or an A/B without editing Ear_Landmarker
+      cfg["ckpt"]     -- a path
+      cfg["run"]      -- a run name (best checkpoint in that run)
+      otherwise       -- Ear_Landmarker's SHIPPED_RUN, the default policy
+
+    Callers record the returned path with their results: the default follows
+    the 2D repository's working tree live, so without it a result cannot say
+    which model produced it.
+    """
+    cfg = cfg or {}
+    env = os.environ.get("EAR3D_CKPT")
+    if env:
+        return pathlib.Path(env) if env.endswith(".ckpt") else find_best_checkpoint(env)
+    if cfg.get("ckpt"):
+        return pathlib.Path(cfg["ckpt"])
+    # NO argument = their SHIPPED_RUN; passing None would search every run
+    return find_best_checkpoint(cfg["run"]) if cfg.get("run") else find_best_checkpoint()
+
+
 def make_pipeline(cfg, run=None):
     """The shipped 2D pipeline, configured for RENDERS the way cfg says.
 
@@ -75,9 +98,7 @@ def make_pipeline(cfg, run=None):
     # find_best_checkpoint() with NO argument uses their SHIPPED_RUN; passing
     # None explicitly makes it search every run, whose scores are not
     # comparable. So the no-run case has to call it with nothing at all.
-    name = run or cfg.get("run")
-    ck = cfg.get("ckpt") or (find_best_checkpoint(name) if name
-                             else find_best_checkpoint())
+    ck = landmarker_checkpoint(dict(cfg, run=run or cfg.get("run")))
     # smooth=False: the tracker is for video. On a single still it would smooth
     # a one-frame track against wall-clock time and shift the landmarks.
     # THE 2D REPO'S DEFAULTS ARE INHERITED, NOT RESTATED. cfg["flip_fusion"]
@@ -115,6 +136,6 @@ def make_pipeline(cfg, run=None):
 
 
 __all__ = ["make_pipeline", "EAR_LANDMARKER", "CHECKPOINTS", "BLAZEEAR_DIR",
-           "DETECTOR_WEIGHTS", "DETECTOR_INPUT_SIZE", "EarDetector",
+           "DETECTOR_WEIGHTS", "DETECTOR_INPUT_SIZE", "EarDetector", "landmarker_checkpoint",
            "EarLandmarkerPipeline", "LandmarkPredictor",
            "find_best_checkpoint"]
