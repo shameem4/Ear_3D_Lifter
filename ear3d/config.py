@@ -12,6 +12,7 @@ import os
 import tempfile
 from pathlib import Path
 
+from . import corpus as _corpus
 from .camera import cone_angles
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -173,15 +174,18 @@ DEFAULTS = dict(
                             # colour with it and skips the synthetic skins.
                             # Off: on the one textured scan tried (2026-10-17)
                             # the synthetic-skin result looked better.
-    gt_lm3d="lm3d_v9_canonical_mm.npz",  # the REFERENCE 3D landmarks, in
+    gt_lm3d=_corpus.get("gt_lm3d"),  # the REFERENCE 3D landmarks of the corpus
+                            # generation (ear3d/corpus.py; lmw: lm3d_v11, marks
+                            # re-derived on the landmark-posed fits). Was, in
                             # wrap_work/templates. v9 (2026-10-17, user's
                             # choice): curves from the shipped landmarker run
                             # multiview on ear_mean_v4, every strip re-spaced to
                             # the spacing it uses on real ears (80 HUTUBS ears);
                             # canal 39 unchanged. Model-derived, so the report
                             # also scores against the alternates below.
-    gt_lm3d_also=("lm3d_v7_canonical_mm.npz",           # human curves (v6_spacing)
-                  "lm3d_v8_corpus_canonical_mm.npz"),   # median real-ear predictions
+    gt_lm3d_also=(() if _corpus.CURRENT == "lmw" else   # v7/v8/v9 address the OLD fits:
+                  ("lm3d_v7_canonical_mm.npz",          # human curves (v6_spacing)
+                   "lm3d_v8_corpus_canonical_mm.npz")), # median real-ear predictions
     multiview_light_dir=(0.6, -0.4, -1.0),  # the sun for the 25-view orbit
                             # (scripts/multiview_collect_rays.py), fixed to the
                             # head. 80 ears vs light_dir: table best-8 + re-seat

@@ -48,10 +48,11 @@ for i, hd in enumerate(sample[WK::NW]):
     rec = {"Rr": Rr}
     for sd in "LR":
         rec[f"pred_{sd}"] = res[sd] if res and res[sd] is not None else np.full((55, 3), np.nan)
-        nm = f"{hd}_{'left' if sd == 'L' else 'right'}"; T = g["inv"](f"{hd}_left") @ np.linalg.inv(g["inv"](nm))
+        nm = f"{hd}_{'left' if sd == 'L' else 'right'}"; T = g["inv"](f"{hd}_left") @ np.linalg.inv(g["inv_gt"](nm))
         for fn, (lmz, nms) in refs.items():
             P = lmz["landmarks"][nms.index(nm)][:55]; P = (np.c_[P, np.ones(55)] @ T.T)[:, :3]
             rec[f"gt_{sd}_{fn.split('_canonical')[0]}"] = P @ Rr.T
     np.savez(dst, **rec)
-    e = {sd: np.nanmedian(np.linalg.norm(rec[f"pred_{sd}"] - rec[f"gt_{sd}_lm3d_v9"], axis=1)) for sd in "LR"}
-    print(hd, "face" if res else "NO FACE", f"L {e['L']:.2f} R {e['R']:.2f} mm vs v9", flush=True)
+    k0 = DEFAULTS["gt_lm3d"].split("_canonical")[0]
+    e = {sd: np.nanmedian(np.linalg.norm(rec[f"pred_{sd}"] - rec[f"gt_{sd}_{k0}"], axis=1)) for sd in "LR"}
+    print(hd, "face" if res else "NO FACE", f"L {e['L']:.2f} R {e['R']:.2f} mm vs {k0}", flush=True)

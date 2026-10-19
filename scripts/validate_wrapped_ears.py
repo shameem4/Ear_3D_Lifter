@@ -45,10 +45,12 @@ for fn in (DEFAULTS["gt_lm3d"], *DEFAULTS.get("gt_lm3d_also", ())):
 
 pipe = Pipeline(cfg={"ear_detector": os.environ.get("EAR_DETECTOR", DEFAULTS["ear_detector"])})
 c = pipe.cfg
-files = sorted(glob.glob(str(WRAP / "corpus/canonical_esc" / ds / "*.obj")))
+from ear3d import corpus as _corpus
+K0 = DEFAULTS["gt_lm3d"].split("_canonical")[0]
+files = sorted(glob.glob(str(WRAP / _corpus.get("canonical") / ds / "*.obj")))
 for f in files[WK::NW]:
     nm = pathlib.Path(f).stem; dst = out / f"{nm}.npz"
-    if dst.exists() or nm not in refs["lm3d_v9"][1]:
+    if dst.exists() or nm not in refs[K0][1]:
         continue
     m = o3d.io.read_triangle_mesh(f); V = np.asarray(m.vertices); c0 = V.mean(0)
     m = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector((V - c0) @ A.T), m.triangles)
@@ -73,5 +75,5 @@ for f in files[WK::NW]:
     for k, (L, names) in refs.items():
         rec[f"gt_{k}"] = L[names.index(nm)][:55]
     np.savez(dst, **rec)
-    e = np.nanmedian(np.linalg.norm(P - rec["gt_lm3d_v9"], axis=1)) if v is not None else np.nan
-    print(nm, "ear" if v is not None else "NO EAR", f"{e:.2f} mm vs v9", flush=True)
+    e = np.nanmedian(np.linalg.norm(P - rec[f"gt_{K0}"], axis=1)) if v is not None else np.nan
+    print(nm, "ear" if v is not None else "NO EAR", f"{e:.2f} mm vs {K0}", flush=True)

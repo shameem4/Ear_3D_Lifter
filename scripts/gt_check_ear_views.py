@@ -22,10 +22,11 @@ def _load(fn): z = np.load(WRAP / "templates" / fn, allow_pickle=True); return z
 # the frame they were built in -- the old canon2scan of the subject's left ear.
 import os
 GT_FILE = os.environ.get("GT_LM3D", DEFAULTS["gt_lm3d"])
-GT_C2S = os.environ.get("GT_CANON2SCAN", "corpus/canon2scan")
+from ear3d import corpus as _corpus
+GT_C2S = os.environ.get("GT_CANON2SCAN", _corpus.get("canon2scan"))
 LM, NAMES = _load(GT_FILE)
 ALSO = {fn: _load(fn) for fn in DEFAULTS.get("gt_lm3d_also", ())}
-def inv(name): return np.load(WRAP / "corpus/canon2scan" / f"{name}.npz", allow_pickle=True)["inverse"]
+def inv(name): return np.load(WRAP / _corpus.get("canon2scan", _corpus.CACHE) / f"{name}.npz", allow_pickle=True)["inverse"]   # cache frame: pinned
 def inv_gt(name): return np.load(WRAP / GT_C2S / f"{name}.npz", allow_pickle=True)["inverse"]
 
 def gt_in_cache(hd, side, head, ref=None):

@@ -129,7 +129,8 @@ def gt_landmarks(dataset, subject, ear, n_points, verify=True, marks=None):
 
     name = f"{subject}_{ear}"
     tri, bary, _ = read_marks(marks or DEFAULT_MARKS)
-    gp = WRAP / f"corpus/canonical_esc/{dataset}/{name}.obj"
+    from ear3d import corpus as _corpus
+    gp = WRAP / _corpus.get("canonical") / dataset / f"{name}.obj"
     if not gp.exists():
         sys.exit(f"{gp} not found")
     m = o3d.io.read_triangle_mesh(str(gp))
@@ -139,7 +140,7 @@ def gt_landmarks(dataset, subject, ear, n_points, verify=True, marks=None):
                  f"{len(F)} -- wrong template topology")
     L = np.einsum("ij,ijk->ik", bary, V[F[tri]])
 
-    tp = WRAP / f"corpus/canon2scan/{name}.npz"
+    tp = WRAP / _corpus.get("canon2scan") / f"{name}.npz"
     if not tp.exists():
         sys.exit(f"{tp} not found -- run scripts/canonical_to_scan.py")
     t = np.load(tp, allow_pickle=True)

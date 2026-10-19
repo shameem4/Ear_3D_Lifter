@@ -131,7 +131,10 @@ def load_ear(name, dataset="hutubs", cfg=None):
     views where the detector coped with a bad one -- a biased sample.
     """
     cfg = cfg or DEFAULTS
-    tp = WRAP / "corpus/canon2scan" / f"{name}.npz"
+    # PINNED to the cache generation: load_ear BUILDS the head caches, and its
+    # mesh, transform and landmarks must be one set (ear3d/corpus.py, CACHE).
+    from ear3d import corpus as _corpus
+    tp = WRAP / _corpus.get("canon2scan", _corpus.CACHE) / f"{name}.npz"
     if not tp.exists():
         raise FileNotFoundError(f"{tp} not found -- run scripts/canonical_to_scan.py")
     z = np.load(tp, allow_pickle=True)
@@ -139,7 +142,7 @@ def load_ear(name, dataset="hutubs", cfg=None):
         raise ValueError(f"{name} is {str(z['dataset'])!r}, not {dataset!r}")
 
     ear = o3d.io.read_triangle_mesh(
-        str(WRAP / "corpus/canonical_esc" / dataset / f"{name}.obj"))
+        str(WRAP / _corpus.get("canonical", _corpus.CACHE) / dataset / f"{name}.obj"))
     if len(ear.vertices) == 0:
         raise FileNotFoundError(f"no fitted ear for {name}")
     ear.compute_vertex_normals()
@@ -196,7 +199,7 @@ def load_ear(name, dataset="hutubs", cfg=None):
             np.asarray(head.triangles)[:, ::-1].copy())
     head.compute_vertex_normals()
 
-    lm = np.load(WRAP / "templates" / (cfg or DEFAULTS).get("gt_lm3d", DEFAULTS["gt_lm3d"]), allow_pickle=True)
+    lm = np.load(WRAP / "templates" / _corpus.get("gt_lm3d", _corpus.CACHE), allow_pickle=True)   # same generation as tp
     names = [str(x) for x in lm["names"]]
     if name not in names:
         raise KeyError(f"{name} has no stored landmarks in the reference lm3d")

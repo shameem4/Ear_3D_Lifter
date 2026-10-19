@@ -32,7 +32,9 @@ for fn in (DEFAULTS["gt_lm3d"], *DEFAULTS.get("gt_lm3d_also", ())):
     z = np.load(WRAP / "templates" / fn, allow_pickle=True)
     refs[fn.split("_canonical")[0]] = (z["landmarks"], [str(x) for x in z["names"]])
 
-ears = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz")
+from ear3d import corpus as _corpus
+C2S = WRAP / _corpus.get("canon2scan")      # pairs with DEFAULTS["gt_lm3d"]
+ears = sorted(f.stem for f in C2S.glob("*.npz")
               if str(np.load(f, allow_pickle=True)["dataset"]) == ds)
 subjects = sorted({e.rsplit("_", 1)[0] for e in ears})
 sample = sorted(np.random.default_rng(seed).choice(subjects, min(n, len(subjects)), replace=False).tolist())
@@ -51,7 +53,7 @@ for sub in sample[WK::NW]:
         nm = f"{sub}_{word}"; dst = out / f"{nm}.npz"
         if dst.exists() or nm not in ears:
             continue
-        z = np.load(WRAP / "corpus/canon2scan" / f"{nm}.npz", allow_pickle=True)
+        z = np.load(C2S / f"{nm}.npz", allow_pickle=True)
         scan = str(z["scan"])
         if scan not in cache:                      # HUTUBS: both ears share one head
             cache.clear()
@@ -68,5 +70,6 @@ for sub in sample[WK::NW]:
             P = L[names.index(nm)][:55]
             rec[f"gt_{k}"] = (np.c_[P, np.ones(55)] @ T.T)[:, :3] @ Rr.T
         np.savez(dst, **rec)
-        e = np.nanmedian(np.linalg.norm(rec["pred"] - rec["gt_lm3d_v9"], axis=1)) if np.isfinite(rec["pred"]).any() else np.nan
-        print(nm, "face" if res else "NO FACE", f"{e:.2f} mm vs v9", flush=True)
+        k0 = DEFAULTS["gt_lm3d"].split("_canonical")[0]
+        e = np.nanmedian(np.linalg.norm(rec["pred"] - rec[f"gt_{k0}"], axis=1)) if np.isfinite(rec["pred"]).any() else np.nan
+        print(nm, "face" if res else "NO FACE", f"{e:.2f} mm vs {k0}", flush=True)

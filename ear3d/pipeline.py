@@ -42,7 +42,8 @@ from .frames import in_frame, normalize_head
 from .render import render, side_light
 from .triangulate import ransac_point
 
-TABLE = pathlib.Path(__file__).with_name("view_table_v9.npz")
+from . import corpus as _corpus
+TABLE = pathlib.Path(__file__).with_name(_corpus.get("view_table"))   # EAR3D_CORPUS selects
 TEXTURE_MIN_SD = 0.02
 FACE_RETRIES = 4             # extra face searches on the mesh turned by a fixed rotation
 # FRAME CHECKS, independent of FaceMesh. On SONICOM (cut at neck and crown)
