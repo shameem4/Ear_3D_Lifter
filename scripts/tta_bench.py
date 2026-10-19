@@ -316,7 +316,7 @@ def main():
     print(f"landmarker {ck.name}  "
           f"heatmap head: {hasattr(pipe.landmarker.model, 'heatmaps')}")
 
-    ears = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("pp*.npz"))[:a.ears]
+    ears = sorted(f.stem for f in (WRAP / __import__("ear3d.corpus", fromlist=["get"]).get("canon2scan")).glob("pp*.npz"))[:a.ears]
     g = int(a.grid // a.grid_step)
     angles = [(y * a.grid_step, p_ * a.grid_step)
               for y in range(-g, g + 1) for p_ in range(-g, g + 1)]

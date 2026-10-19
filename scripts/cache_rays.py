@@ -71,7 +71,7 @@ def main():
     angles = [(float(y), float(q))
               for y in np.arange(-g, g + 1e-9, a.grid_step)
               for q in np.arange(-g, g + 1e-9, a.grid_step)]
-    names = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz")
+    names = sorted(f.stem for f in (WRAP / __import__("ear3d.corpus", fromlist=["get"]).get("canon2scan")).glob("*.npz")
                    if str(np.load(f, allow_pickle=True)["dataset"]) == a.dataset)[:a.ears]
     FR = np.load(a.frames) if a.frames else None
     out = pathlib.Path(a.out); out.mkdir(parents=True, exist_ok=True)

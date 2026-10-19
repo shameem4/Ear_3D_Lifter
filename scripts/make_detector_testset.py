@@ -102,7 +102,7 @@ def main():
 
     out = pathlib.Path(a.out)
     (out / "images").mkdir(parents=True, exist_ok=True)
-    names = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("pp*.npz"))[:a.ears]
+    names = sorted(f.stem for f in (WRAP / __import__("ear3d.corpus", fromlist=["get"]).get("canon2scan")).glob("pp*.npz"))[:a.ears]
 
     rows = []
     for i, name in enumerate(names):

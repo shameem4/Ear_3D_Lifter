@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw
 import open3d as o3d
 out, rot_seed, WK, NW = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
 cfg = dict(DEFAULTS)
-names = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz") if str(np.load(f, allow_pickle=True)["dataset"]) == "hutubs")
+names = sorted(f.stem for f in (WRAP / __import__("ear3d.corpus", fromlist=["get"]).get("canon2scan")).glob("*.npz") if str(np.load(f, allow_pickle=True)["dataset"]) == "hutubs")
 heads = sorted({n.rsplit("_", 1)[0] for n in names})
 ALLS = sorted(np.random.default_rng(0).choice(heads, 20, replace=False).tolist())
 def random_rotation(seed):

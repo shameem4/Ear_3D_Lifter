@@ -369,7 +369,7 @@ def main():
         return
     out = pathlib.Path(a.table_only or a.out)
     if a.table_only is None:
-        ears = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("pp*.npz"))[:a.ears]
+        ears = sorted(f.stem for f in (WRAP / __import__("ear3d.corpus", fromlist=["get"]).get("canon2scan")).glob("pp*.npz"))[:a.ears]
         run_cells(out, ears, a.grid, a.grid_step)
     table(out, a.gate)
 

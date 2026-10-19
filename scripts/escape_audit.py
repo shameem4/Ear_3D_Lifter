@@ -111,7 +111,7 @@ THRESHOLDS_MM = (2.0, 5.0, 10.0, 20.0)
 _SKIN_CACHE = {}
 
 
-def load_ear(name, dataset="hutubs", cfg=None):
+def load_ear(name, dataset="hutubs", cfg=None, version=None):
     """Head, fitted ear and landmarks for one ear, all in canonical millimetres.
 
     The head is the only thing transformed: corpus/canon2scan's `inverse` takes
@@ -131,10 +131,12 @@ def load_ear(name, dataset="hutubs", cfg=None):
     views where the detector coped with a bad one -- a biased sample.
     """
     cfg = cfg or DEFAULTS
-    # PINNED to the cache generation: load_ear BUILDS the head caches, and its
-    # mesh, transform and landmarks must be one set (ear3d/corpus.py, CACHE).
+    # One generation for mesh, transform and landmarks (ear3d/corpus.py):
+    # `version`, default the current one. load_ear BUILDS the head caches, which
+    # record it, so a cache and its GT always pair up.
     from ear3d import corpus as _corpus
-    tp = WRAP / _corpus.get("canon2scan", _corpus.CACHE) / f"{name}.npz"
+    version = version or _corpus.CURRENT
+    tp = WRAP / _corpus.get("canon2scan", version) / f"{name}.npz"
     if not tp.exists():
         raise FileNotFoundError(f"{tp} not found -- run scripts/canonical_to_scan.py")
     z = np.load(tp, allow_pickle=True)
@@ -142,7 +144,7 @@ def load_ear(name, dataset="hutubs", cfg=None):
         raise ValueError(f"{name} is {str(z['dataset'])!r}, not {dataset!r}")
 
     ear = o3d.io.read_triangle_mesh(
-        str(WRAP / _corpus.get("canonical", _corpus.CACHE) / dataset / f"{name}.obj"))
+        str(WRAP / _corpus.get("canonical", version) / dataset / f"{name}.obj"))
     if len(ear.vertices) == 0:
         raise FileNotFoundError(f"no fitted ear for {name}")
     ear.compute_vertex_normals()
@@ -199,7 +201,7 @@ def load_ear(name, dataset="hutubs", cfg=None):
             np.asarray(head.triangles)[:, ::-1].copy())
     head.compute_vertex_normals()
 
-    lm = np.load(WRAP / "templates" / _corpus.get("gt_lm3d", _corpus.CACHE), allow_pickle=True)   # same generation as tp
+    lm = np.load(WRAP / "templates" / _corpus.get("gt_lm3d", version), allow_pickle=True)   # same generation as tp
     names = [str(x) for x in lm["names"]]
     if name not in names:
         raise KeyError(f"{name} has no stored landmarks in the reference lm3d")
@@ -341,7 +343,7 @@ def landmark_view(img, cfg, pipe, mode, hw):
                 confidence=(float(a["confidence"]) + float(b["confidence"])) / 2.0)
 
 
-def is_reflected(name, dataset="hutubs"):
+def is_reflected(name, dataset="hutubs", version=None):
     """Did this ear reach the canonical frame through a REFLECTION?
 
     Right ears mirror about Z to get there, so their surface is handed the
@@ -351,7 +353,8 @@ def is_reflected(name, dataset="hutubs"):
     the stored matrix rather than the "_right" suffix, because the determinant
     is the invariant and the naming is a convention.
     """
-    z = np.load(WRAP / "corpus/canon2scan" / f"{name}.npz", allow_pickle=True)
+    from ear3d import corpus as _corpus
+    z = np.load(WRAP / _corpus.get("canon2scan", version) / f"{name}.npz", allow_pickle=True)
     return bool(np.linalg.det(np.asarray(z["inverse"], float)[:3, :3]) < 0)
 
 
@@ -372,11 +375,11 @@ def is_reflected(name, dataset="hutubs"):
 LIGHT_ANCHORS = ("anatomy", "opposite", "frame")
 
 
-def light_mirror_for(name, anchor, dataset="hutubs"):
+def light_mirror_for(name, anchor, dataset="hutubs", version=None):
     """Should this ear's sun have its x flipped, under this anchor?"""
     if anchor == "frame":
         return False
-    refl = is_reflected(name, dataset)
+    refl = is_reflected(name, dataset, version)
     return refl if anchor == "anatomy" else (not refl)
 
 
@@ -695,7 +698,7 @@ def main():
     ears = a.ears
     if a.all:
         ears = sorted(
-            f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz")
+            f.stem for f in (WRAP / __import__("ear3d.corpus", fromlist=["get"]).get("canon2scan")).glob("*.npz")
             if str(np.load(f, allow_pickle=True)["dataset"]) == a.dataset)
 
     from ear3d.twod import make_pipeline                                   # noqa

@@ -134,7 +134,7 @@ def main():
     angles = [(float(y), float(q))
               for y in np.arange(-g, g + 1e-9, a.grid_step)
               for q in np.arange(-g, g + 1e-9, a.grid_step)]
-    names = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz")
+    names = sorted(f.stem for f in (WRAP / __import__("ear3d.corpus", fromlist=["get"]).get("canon2scan")).glob("*.npz")
                    if str(np.load(f, allow_pickle=True)["dataset"]) == a.dataset)[:a.ears]
     print(f"{ck.parent.name}/{ck.name}   {len(names)} ears x {len(angles)} views "
           f"-> one fused point per landmark\n")

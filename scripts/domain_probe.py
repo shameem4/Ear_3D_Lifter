@@ -102,7 +102,7 @@ def main():
     angles = [(float(y), float(q))
               for y in np.arange(-g, g + 1e-9, a.grid_step)
               for q in np.arange(-g, g + 1e-9, a.grid_step)]
-    names = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("pp*.npz"))[:a.ears]
+    names = sorted(f.stem for f in (WRAP / __import__("ear3d.corpus", fromlist=["get"]).get("canon2scan")).glob("pp*.npz"))[:a.ears]
     acc = {k: {"e": [], "c": [], "j": []} for k in VARIANTS}
 
     for i, nm in enumerate(names):

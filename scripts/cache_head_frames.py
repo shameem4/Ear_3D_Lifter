@@ -21,7 +21,8 @@ import open3d as o3d
 
 out, rot_seed, n_heads, WK, NW = pathlib.Path(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5])
 out.mkdir(parents=True, exist_ok=True)
-names = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz") if str(np.load(f, allow_pickle=True)["dataset"]) == "hutubs")
+from ear3d import corpus as _corpus
+names = sorted(f.stem for f in (WRAP / _corpus.get("canon2scan")).glob("*.npz") if str(np.load(f, allow_pickle=True)["dataset"]) == "hutubs")
 heads = sorted({n.rsplit("_", 1)[0] for n in names})
 ss = int(sys.argv[6]) if len(sys.argv) > 6 else 0
 ALLS = sorted(np.random.default_rng(0).choice(heads, n_heads, replace=False).tolist())
@@ -46,5 +47,6 @@ for hd in ALLS[WK::NW]:
     if nh is None: print(hd, "NO FACE", flush=True); continue
     m, R_head, centre, nose = nh
     np.savez(out / f"{hd}.npz", V=np.asarray(m.vertices), F=np.asarray(m.triangles), C=np.asarray(m.vertex_colors),
-             R_head=R_head, centre=centre, nose=nose, Rr=Rr, light_mirror=c["light_mirror"])
+             R_head=R_head, centre=centre, nose=nose, Rr=Rr, light_mirror=c["light_mirror"],
+             corpus=_corpus.CURRENT)
     print(hd, "cached", flush=True)

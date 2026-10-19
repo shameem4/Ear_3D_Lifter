@@ -347,7 +347,7 @@ def main():
 
     TBL = None
     if a.table:
-        names_eval = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz")
+        names_eval = sorted(f.stem for f in (WRAP / __import__("ear3d.corpus", fromlist=["get"]).get("canon2scan")).glob("*.npz")
                             if str(np.load(f, allow_pickle=True)["dataset"])
                             == a.dataset)[:a.ears]
         TBL = build_table(a.table, {n.rsplit("_", 1)[0] for n in names_eval})
@@ -864,7 +864,7 @@ def main():
               f"{res['margin']:.3f}, {res['nlm']}/55 landmarks")
         return
 
-    names = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz")
+    names = sorted(f.stem for f in (WRAP / __import__("ear3d.corpus", fromlist=["get"]).get("canon2scan")).glob("*.npz")
                    if str(np.load(f, allow_pickle=True)["dataset"]) == a.dataset)[:a.ears]
     names_all = list(names)
     if a.only:

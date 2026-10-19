@@ -26,7 +26,7 @@ from ear3d import corpus as _corpus
 GT_C2S = os.environ.get("GT_CANON2SCAN", _corpus.get("canon2scan"))
 LM, NAMES = _load(GT_FILE)
 ALSO = {fn: _load(fn) for fn in DEFAULTS.get("gt_lm3d_also", ())}
-def inv(name): return np.load(WRAP / _corpus.get("canon2scan", _corpus.CACHE) / f"{name}.npz", allow_pickle=True)["inverse"]   # cache frame: pinned
+def inv(name, version=_corpus.LEGACY): return np.load(WRAP / _corpus.get("canon2scan", version) / f"{name}.npz", allow_pickle=True)["inverse"]   # a cache frame: pass the cache's generation
 def inv_gt(name): return np.load(WRAP / GT_C2S / f"{name}.npz", allow_pickle=True)["inverse"]
 
 def gt_in_cache(hd, side, head, ref=None):
@@ -35,7 +35,7 @@ def gt_in_cache(hd, side, head, ref=None):
     nm = f"{hd}_{'left' if side == 'L' else 'right'}"
     P = lmz["landmarks"][names.index(nm)][:55]
     # ear's canonical -> scan mm -> the _left canonical the head cache was built in
-    T = inv(f"{hd}_left") @ np.linalg.inv(inv_gt(nm))
+    T = inv(f"{hd}_left", _corpus.cache_version(head)) @ np.linalg.inv(inv_gt(nm))
     P = (np.c_[P, np.ones(len(P))] @ T.T)[:, :3]
     return (P @ head["Rr"].T - head["centre"]) @ head["R_head"].T
 

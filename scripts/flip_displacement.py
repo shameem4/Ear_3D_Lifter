@@ -137,7 +137,7 @@ def main():
         print(f"sun {cfg['light_dir']}  (x overridden)")
     pipe, _ck = make_pipeline(cfg)
     _orig_detect = pipe.detector.detect
-    names = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("pp*.npz"))[:a.ears]
+    names = sorted(f.stem for f in (WRAP / __import__("ear3d.corpus", fromlist=["get"]).get("canon2scan")).glob("pp*.npz"))[:a.ears]
     g, st = a.grid, a.grid_step
     angles = [(y, pi) for y in np.arange(-g, g + 1e-9, st)
               for pi in np.arange(-g, g + 1e-9, st)]

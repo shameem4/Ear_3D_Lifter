@@ -12,11 +12,11 @@ fit, and fits of different generations slide 2-5 mm along the helix
 
 EAR3D_CORPUS selects one; the default is lmw.
 
-CACHE is pinned, not selected. runs/cache/* head caches (and the rays in
-runs/mvcache) were rendered in the frame of the OLD canon2scan of each
-subject's left ear, and a cache file does not record which transform made it.
-Anything that maps into or out of a cache frame must use CACHE's transforms,
-whatever the current generation is.
+CACHES RECORD THEIR GENERATION. A head cache (runs/cache/<tag>/<head>.npz) is
+rendered in the canonical frame of its subject's left ear, which differs per
+generation; scripts/cache_head_frames.py stores `corpus` in it. Caches made
+before that key existed (v4_s0/s1, ears_v3, the mvcache rays) are esc:
+cache_version() returns LEGACY for them.
 """
 import os
 
@@ -28,10 +28,15 @@ VERSIONS = {
                 gt_lm3d="lm3d_v11_canonical_mm.npz", view_table="view_table_v11.npz",
                 mean="ear_mean_v5.obj"),
 }
-CACHE = "esc"
+LEGACY = "esc"            # generation of any cache without a `corpus` key
 CURRENT = os.environ.get("EAR3D_CORPUS", "lmw")
 if CURRENT not in VERSIONS:
     raise ValueError(f"EAR3D_CORPUS={CURRENT!r}; known: {sorted(VERSIONS)}")
+
+
+def cache_version(head):
+    """Generation a loaded head-cache npz was built in."""
+    return str(head["corpus"]) if "corpus" in getattr(head, "files", head) else LEGACY
 
 
 def get(key, version=None):

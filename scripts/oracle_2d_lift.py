@@ -63,7 +63,7 @@ from ear3d.twod import make_pipeline
 cfg = dict(DEFAULTS)
 pipe, ck = make_pipeline(cfg)
 WRAP = ROOT.parent / "wrap_work"
-ears = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("pp*.npz"))[:40]
+ears = sorted(f.stem for f in (WRAP / __import__("ear3d.corpus", fromlist=["get"]).get("canon2scan")).glob("pp*.npz"))[:40]
 ANG = [(y, p) for y in (-30, -15, 0, 15, 30) for p in (-30, -15, 0, 15, 30)]
 
 acc = {k: [] for k in ("oracle_raw", "oracle_snap", "det_snap", "flip_snap")}

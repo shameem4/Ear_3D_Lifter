@@ -21,7 +21,7 @@ g = {}; exec(open(R0 / "scripts/gt_check_ear_views.py").read().split("out = sys.
 
 out, ss, n, WK, NW = pathlib.Path(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5])
 out.mkdir(parents=True, exist_ok=True)
-names = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("*.npz") if str(np.load(f, allow_pickle=True)["dataset"]) == "hutubs")
+names = sorted(f.stem for f in (WRAP / __import__("ear3d.corpus", fromlist=["get"]).get("canon2scan")).glob("*.npz") if str(np.load(f, allow_pickle=True)["dataset"]) == "hutubs")
 heads = sorted({x.rsplit("_", 1)[0] for x in names})
 seed0 = sorted(np.random.default_rng(0).choice(heads, 20, replace=False).tolist())
 seed1 = sorted(np.random.default_rng(1).choice(sorted(set(heads) - set(seed0)), 20, replace=False).tolist())
@@ -48,7 +48,7 @@ for i, hd in enumerate(sample[WK::NW]):
     rec = {"Rr": Rr}
     for sd in "LR":
         rec[f"pred_{sd}"] = res[sd] if res and res[sd] is not None else np.full((55, 3), np.nan)
-        nm = f"{hd}_{'left' if sd == 'L' else 'right'}"; T = g["inv"](f"{hd}_left") @ np.linalg.inv(g["inv_gt"](nm))
+        nm = f"{hd}_{'left' if sd == 'L' else 'right'}"; T = g["inv"](f"{hd}_left", g["_corpus"].CURRENT) @ np.linalg.inv(g["inv_gt"](nm))   # load_ear built the head in CURRENT
         for fn, (lmz, nms) in refs.items():
             P = lmz["landmarks"][nms.index(nm)][:55]; P = (np.c_[P, np.ones(55)] @ T.T)[:, :3]
             rec[f"gt_{sd}_{fn.split('_canonical')[0]}"] = P @ Rr.T

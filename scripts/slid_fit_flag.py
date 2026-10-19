@@ -3,7 +3,7 @@ block, so a single rigid move explains most of the pipeline's disagreement.
 
 Usage: slid_fit_flag.py OUT_CSV RUN_DIR [RUN_DIR...]
 
-Reads per-ear npz files with `pred` and `gt_lm3d_v9` (validate_scans.py,
+Reads per-ear npz files with `pred` and a `gt_lm3d_*` reference (validate_scans.py,
 validate_wrapped_ears.py). For each ear: the median error, then the
 prediction rigidly aligned to the reference (Kabsch, no scale): `move` is
 the median distance that rigid move carries the points, `resid` what is
@@ -34,6 +34,17 @@ def rigid(P, G):
     return R, a, b
 
 
+def gt_key(z):
+    """The reference a run stored: the current generation's (ear3d/corpus.py)
+    if present, else lm3d_v9 -- runs made before the switch stored only that."""
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+    from ear3d import corpus
+    for k in (f"gt_{corpus.get('gt_lm3d').split('_canonical')[0]}", "gt_lm3d_v9"):
+        if k in z.files:
+            return k
+    raise KeyError(f"no gt_lm3d_* reference in {sorted(z.files)}")
+
+
 def score(P, G):
     ok = np.isfinite(P).all(1)
     e = np.linalg.norm(P - G, axis=1)
@@ -53,7 +64,7 @@ if __name__ == "__main__":
             z = np.load(f)
             if "pred" not in z or not np.isfinite(z["pred"]).any():
                 continue
-            rows.append(dict(ear=pathlib.Path(f).stem, run=pathlib.Path(d).name, **score(z["pred"], z["gt_lm3d_v9"])))
+            rows.append(dict(ear=pathlib.Path(f).stem, run=pathlib.Path(d).name, gt=gt_key(z), **score(z["pred"], z[gt_key(z)])))
     with open(sys.argv[1], "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=list(rows[0])); w.writeheader(); w.writerows(rows)
     fl = [r for r in rows if r["slid"]]

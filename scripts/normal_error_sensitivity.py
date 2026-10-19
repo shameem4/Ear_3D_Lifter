@@ -125,7 +125,7 @@ def main():
 
     ears = a.ears
     if a.all:
-        ears = sorted(f.stem for f in (WRAP / "corpus/canon2scan").glob("pp*.npz"))
+        ears = sorted(f.stem for f in (WRAP / __import__("ear3d.corpus", fromlist=["get"]).get("canon2scan")).glob("pp*.npz"))
 
     from ear3d.twod import make_pipeline                             # noqa
     pipe, ck = make_pipeline(cfg)
