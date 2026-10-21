@@ -14,7 +14,7 @@ LICENCE IS AN INPUT, not an afterthought. HUTUBS and AudioEar3D are CC BY;
 SONICOM is CC BY-SA, which a model built from it inherits. --note records what
 went in so a released file says what it is.
 
-    python scripts/build_ear_pca.py --fits corpus/faceform2_hutubs \\
+    python scripts/corpus/08_build_ear_pca.py --fits corpus/faceform2_hutubs \\
         --template templates/ear_mean.obj --out ear_pca.npz --note "..."
 """
 import argparse
@@ -23,7 +23,7 @@ import sys
 
 import numpy as np
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from ear3d.wrap import base_topology, load_mesh, rigid_fit   # noqa: E402

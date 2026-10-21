@@ -9,16 +9,16 @@ Per ear writes OUT/<ear>.npz: angles (V,2), uv (V,55,2), o/d (V,55,3) rays in
 head mm, gt (55,3) head mm, p0 (55,3) face-on snapped back-projection, side.
 """
 import sys, glob, pathlib, numpy as np
-R0 = pathlib.Path("/mnt/14BE47C2BE479ADE/Code/ear_stuff/Ear_3D_Lifter"); sys.path.insert(0, str(R0)); sys.path.insert(0, str(R0 / "scripts"))
+R0 = pathlib.Path(__file__).resolve().parents[2]; sys.path.insert(0, str(R0))
 import open3d as o3d
-from escape_audit import DEFAULTS
-from skin import apply_skin
+from ear3d.config import DEFAULTS
+from ear3d.skin import apply_skin
 from ear3d.camera import orbit_extrinsic
 from ear3d.frames import in_frame
 from ear3d.render import render
 from ear3d.backproject import backproject_snapped
 from ear3d.twod import LandmarkPredictor, landmarker_checkpoint
-g = {}; exec(open(R0 / "scripts/gt_check_ear_views.py").read().split("out = sys.argv[1]")[0], g)
+from ear3d.gt import gt_in_cache
 
 tag, out, LIGHT, WK, NW = sys.argv[1], pathlib.Path(sys.argv[2]), sys.argv[3], int(sys.argv[4]), int(sys.argv[5])
 LIMIT = int(sys.argv[6]) if len(sys.argv) > 6 and sys.argv[6] != "-" else None
@@ -56,6 +56,6 @@ for f in fs[WK::NW]:
         if (yw, pt) == (0.0, 0.0):
             P, hit, _ = backproject_snapped(depth, lm, cam, DEFAULTS)
             p0 = np.where(hit[:, None], P * s @ R + c0, np.nan)
-    gt = g["gt_in_cache"](hd, side, head)
+    gt = gt_in_cache(hd, side, head)
     np.savez(dst, angles=np.array(ANG), uv=uv, o=O, d=D, gt=gt, p0=p0, side=side, head=hp, ckpt=CKPT)
     print(stem, "ok", flush=True)

@@ -25,7 +25,7 @@ WHAT A COEFFICIENT MEANS: one standard deviation of that mode, so a unit
 gaussian prior is the right one. The per-mode sd is printed; far from 1 means
 the basis and the corpus do not match.
 
-    python scripts/build_gt_coeffs.py --pca ear_pca_v5_all_mm.npz \
+    python scripts/corpus/10_build_gt_coeffs.py --pca ear_pca_v5_all_mm.npz \
         --fits corpus/canonical_esc/sonicom ... --out gt_coeffs_v7_mm.npz
 """
 import argparse
@@ -34,7 +34,7 @@ import sys
 
 import numpy as np
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from ear3d.wrap import base_topology, load_mesh, rigid_fit      # noqa: E402

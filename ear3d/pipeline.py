@@ -22,21 +22,20 @@ Stages, each the one measured best on 2026-10-17 (80 HUTUBS ears):
      the head (config multiview_light_dir, x mirrored for the right ear),
      shipped 2D landmarker on the whole frame (flip fusion = its default).
   4. per landmark, RANSAC over its best 8 views by view_table_v9.npz
-     (scripts/build_view_table.py), 1 mm threshold.
+     (scripts/caches/4_build_view_table.py), 1 mm threshold.
   5. re-seat each point onto the head surface.
 
 Against lm3d_v9 this is 1.46 mm median on those 80 ears (2.29 vs v7).
 """
 from __future__ import annotations
 
-import importlib.util
 import pathlib
 
 import numpy as np
 import open3d as o3d
 
 from .camera import orbit_extrinsic
-from .config import DEFAULTS, ROOT
+from .config import DEFAULTS
 from .ear_view import ear_score, ear_view, load_detector, side_frame
 from .frames import in_frame, normalize_head
 from .render import render, side_light
@@ -72,11 +71,8 @@ RANSAC_MM = 1.0
 
 
 def _apply_skin():
-    # skin.py lives in scripts/ and is shared with the training-image
-    # generators; load it by path rather than move it.
-    spec = importlib.util.spec_from_file_location("skin", ROOT / "scripts" / "skin.py")
-    mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
-    return mod.apply_skin
+    from .skin import apply_skin
+    return apply_skin
 
 
 def mesh_texture(mesh):

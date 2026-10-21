@@ -31,7 +31,7 @@ divides by its largest centred coordinate, and against the raw vertices for
 sonicom. A matrix that inverts the cut perfectly -- those files all carry
 verified_gap ~1e-17 -- still lands 450 mm away if this is skipped.
 
-    python scripts/canonical_to_scan.py --dataset hutubs --out corpus/canon2scan
+    python scripts/corpus/06_canonical_to_scan.py --dataset hutubs --out corpus/canon2scan
 """
 import argparse
 import csv
@@ -40,8 +40,8 @@ import sys
 
 import numpy as np
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-WRAP = ROOT.parent / "wrap_work"
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+WRAP = ROOT.parent / "wrap_work"   # == ear3d.corpus.WRAP
 
 # How cut_ears.py had normalised the scan when it saved the cut's matrix. The
 # names are the two branches of its own verification, kept verbatim so the

@@ -20,7 +20,7 @@ THE RECIPE, as v9 (wrap_work/templates/v9_provenance):
 SCORED SPLIT-HALF BY SUBJECT: marks learned on one half, scored on the other,
 so no ear is scored against marks its own subject helped make.
 
-    python scripts/remark_from_predictions.py --canonical corpus/canonical_lmw \\
+    python scripts/corpus/11_remark_from_predictions.py --canonical corpus/canonical_lmw \\
         --canon2scan corpus/canon2scan_lmw --preds DIR_OF_NPZ_WITH_P \\
         --template templates/ear_mean_v5.obj --out templates/mark_mean_v10_55.npz
 """
@@ -33,11 +33,11 @@ import zlib
 import numpy as np
 import open3d as o3d
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from ear3d.wrap import load_mesh                                   # noqa: E402
 
-WRAP = ROOT.parent / "wrap_work"
+WRAP = ROOT.parent / "wrap_work"   # == ear3d.corpus.WRAP
 STRIPS = ((0, 20), (20, 35), (35, 39), (40, 50), (50, 55))        # canal 39 is its own point
 RED_SRC = WRAP / "templates/v9_provenance/tpl_marks.npz"           # all_25: xyz on ear_mean_v4
 RED_TPL = WRAP / "templates/ear_mean_v4.obj"

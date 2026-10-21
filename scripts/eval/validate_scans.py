@@ -19,9 +19,11 @@ import sys
 import numpy as np
 import open3d as o3d
 
-R0 = pathlib.Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(R0), str(R0 / "scripts")]
-from escape_audit import DEFAULTS, HUTUBS_TO_MM, WRAP
+R0 = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(R0))
+from ear3d.config import DEFAULTS
+from ear3d.corpus import WRAP
+from ear3d.data import HUTUBS_TO_MM
 from ear3d.pipeline import Pipeline
 
 out, ds, n, seed, WK, NW = (pathlib.Path(sys.argv[1]), sys.argv[2], int(sys.argv[3]),

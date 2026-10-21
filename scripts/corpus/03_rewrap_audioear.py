@@ -25,11 +25,11 @@ import numpy as np
 import open3d as o3d
 import trimesh
 
-R0 = pathlib.Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(R0), str(R0 / "scripts")]
+R0 = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(R0))
 from ear3d.ear_view import PAD, side_frame                         # noqa: E402
 from ear3d.pipeline import Pipeline                                # noqa: E402
-from wrap_from_landmarks import wrap_ear, robust_inliers, TEMPLATE                 # noqa: E402
+from ear3d.faceform import wrap_ear, robust_inliers, TEMPLATE                      # noqa: E402
 
 A3D = pathlib.Path("/mnt/14BE47C2BE479ADE/Code/ear_stuff/clean_3d_data/AudioEar3D")
 CORP = pathlib.Path("/mnt/14BE47C2BE479ADE/Code/ear_stuff/wrap_work/corpus")

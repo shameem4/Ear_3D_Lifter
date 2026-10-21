@@ -7,37 +7,15 @@ sits 2.0 mm off in-plane but 12.5 mm too deep unsnapped; snapped, 4.2 mm.
 Usage: gt_check_ear_views.py OUT_PREFIX EAR_TAG [EAR_TAG...]   (tags: ears_v2c10, ears_v2c5, ears_v1)
 """
 import sys, glob, pathlib, numpy as np
-R0 = pathlib.Path("/mnt/14BE47C2BE479ADE/Code/ear_stuff/Ear_3D_Lifter")
-sys.path.insert(0, str(R0)); sys.path.insert(0, str(R0 / "scripts"))
+R0 = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(R0))
 from PIL import Image, ImageDraw
-from escape_audit import WRAP
 from ear3d import Camera
 from ear3d.backproject import backproject_snapped
-from escape_audit import DEFAULTS
+from ear3d.config import DEFAULTS
+from ear3d.gt import ALSO, gt_in_cache
 
-# The reference is config's gt_lm3d (v9); gt_lm3d_also are scored alongside.
-def _load(fn): z = np.load(WRAP / "templates" / fn, allow_pickle=True); return z, [str(x) for x in z["names"]]
-# GT_LM3D / GT_CANON2SCAN rebase the REFERENCE on another corpus generation
-# (e.g. lm3d_v11 on canonical_lmw with canon2scan_lmw). The head caches stay in
-# the frame they were built in -- the old canon2scan of the subject's left ear.
-import os
-GT_FILE = os.environ.get("GT_LM3D", DEFAULTS["gt_lm3d"])
-from ear3d import corpus as _corpus
-GT_C2S = os.environ.get("GT_CANON2SCAN", _corpus.get("canon2scan"))
-LM, NAMES = _load(GT_FILE)
-ALSO = {fn: _load(fn) for fn in DEFAULTS.get("gt_lm3d_also", ())}
-def inv(name, version=_corpus.LEGACY): return np.load(WRAP / _corpus.get("canon2scan", version) / f"{name}.npz", allow_pickle=True)["inverse"]   # a cache frame: pass the cache's generation
-def inv_gt(name): return np.load(WRAP / GT_C2S / f"{name}.npz", allow_pickle=True)["inverse"]
-
-def gt_in_cache(hd, side, head, ref=None):
-    """Reference landmarks of this ear in the cached normalised head frame (mm)."""
-    lmz, names = ref or (LM, NAMES)
-    nm = f"{hd}_{'left' if side == 'L' else 'right'}"
-    P = lmz["landmarks"][names.index(nm)][:55]
-    # ear's canonical -> scan mm -> the _left canonical the head cache was built in
-    T = inv(f"{hd}_left", _corpus.cache_version(head)) @ np.linalg.inv(inv_gt(nm))
-    P = (np.c_[P, np.ones(len(P))] @ T.T)[:, :3]
-    return (P @ head["Rr"].T - head["centre"]) @ head["R_head"].T
+# Reference, transforms and gt_in_cache: ear3d/gt.py (GT_LM3D / GT_CANON2SCAN rebase it).
 
 out = sys.argv[1]
 for tag in sys.argv[2:]:

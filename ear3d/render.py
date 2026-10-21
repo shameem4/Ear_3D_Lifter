@@ -55,7 +55,7 @@ def sun_world(cfg, E):
 
     THIS IS NOT COSMETIC, AND IT IS THE LARGEST EFFECT IN THE PIPELINE.
     Measured over 40 ears x 25 views x 55 points on CORRECTED renders
-    (scripts/sun_sweep.py), moving only the sun's x component moves the rate of
+    (archive/scripts/sun_sweep.py), moving only the sun's x component moves the rate of
     landmarks that land more than 10 mm off the ear:
 
         sun x    all     left    right

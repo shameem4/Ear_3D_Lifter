@@ -15,7 +15,7 @@ cheap fix for a unit trap is to make the wrong name impossible rather than to
 document it. `ear_size` carries the mean ear's height in the PCA's own units
 (mm, for the canonical corpus), so the scale is recoverable -- multiply by it.
 
-    python scripts/build_landmark_basis.py --pca ear_pca_v6_all_mm.npz \\
+    python scripts/corpus/09_build_landmark_basis.py --pca ear_pca_v6_all_mm.npz \\
         --marks mean_v5_marks.npz --template ear_mean.obj \\
         --out lm_basis_v6_95_unitheight.npz
 """
@@ -26,7 +26,7 @@ import sys
 
 import numpy as np
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from ear3d.wrap import load_mesh                      # noqa: E402

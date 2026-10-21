@@ -14,8 +14,10 @@ Rr that was applied. Same head sample and rotations as review_head_sides.
 Lives under runs/ (gitignored): it holds scan geometry.
 """
 import sys, pathlib, numpy as np
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1])); sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from escape_audit import DEFAULTS, WRAP, load_ear, light_mirror_for
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
+from ear3d.config import DEFAULTS
+from ear3d.corpus import WRAP
+from ear3d.data import load_ear, light_mirror_for
 from ear3d.frames import normalize_head
 import open3d as o3d
 

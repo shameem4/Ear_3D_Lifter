@@ -37,7 +37,7 @@ def rigid(P, G):
 def gt_key(z):
     """The reference a run stored: the current generation's (ear3d/corpus.py)
     if present, else lm3d_v9 -- runs made before the switch stored only that."""
-    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
     from ear3d import corpus
     for k in (f"gt_{corpus.get('gt_lm3d').split('_canonical')[0]}", "gt_lm3d_v9"):
         if k in z.files:

@@ -1,78 +1,104 @@
 # Ear 3D Lifter
 
-Take 2D ear landmarks and put them in 3D.
+Head mesh in, 55 ear landmarks per ear out, in 3D.
 
-The 55-point ear scheme is annotated on photographs, and a 2D detector
+The 55-point ear scheme is annotated on photographs, and a 2D model
 ([Ear_Landmarker](https://github.com/shameem4/Ear_Landmarker)) finds those
-points reliably. This repository is about the next step: recovering where
-those points sit in space — depth, pose, and a surface that agrees with them.
+points in images. This repository puts them on a head scan: it renders the
+ears, reads them with the 2D model from many views, and triangulates.
 
-## End-to-end: head mesh in, 3D ear landmarks out
+## Use it
 
     python scripts/run_pipeline.py head.obj [out.npz]
 
 or `from ear3d.pipeline import Pipeline; Pipeline().run(mesh)`.
 
-- **Input:** a head scan in millimetres (it refuses a mesh whose longest side
-  is outside 100-600 units), any orientation; colour is ignored by default.
-- **Output:** `L` and `R`, each 55 x 3, in the input mesh's own coordinates;
-  NaN where an ear or a landmark could not be found. `L` is the subject's left.
-- **No fit, no ground truth** at inference: FaceMesh orients the head, a BlazeEar
-  box frames each ear, the 2D landmarker reads 25 rendered views, and
-  each landmark is triangulated from its best 8 views (`ear3d/view_table_v9.npz`,
-  a 25x55 table of numbers learned on HUTUBS ears) and re-seated on the head.
-  `ear3d/pipeline.py` lists the stages and why each setting was chosen.
+- **Input:** a head scan in millimetres, any orientation. Colour is ignored:
+  the pipeline re-skins every mesh, which is what the 2D model reads best.
+- **Output:** `L`, `R` (55 x 3 each) in the input mesh's own coordinates,
+  NaN where an ear or landmark was not found (`L` is the subject's left),
+  and `ckpt`, the 2D checkpoint used.
+- **Accuracy:** median **1.58 mm** per ear on 16 HUTUBS heads used nowhere in
+  building it, each randomly rotated; 4.0% of points beyond 5 mm, mostly on
+  the upper helix. About 15 s per head on one GPU. Validated only on HUTUBS
+  and SONICOM scans (no hair); one real scan looked right.
 
-Measured on 16 HUTUBS heads used nowhere in building it, randomly rotated:
-all faces and all 32 ears found; median error 1.7 mm against the reference
-landmarks (`lm3d_v9`), 2.6 mm against the human-drawn v7 marks, 3.8% of
-points beyond 5 mm. About 15 s per head on one GPU.
-
-Needs, besides this repository: `Ear_Landmarker` beside it (or
-`$EAR_LANDMARKER`) for the 2D model; `BlazeEar` beside it (or `$BLAZEEAR`) for
-the ear detector (`model_weights/BlazeEar_best_256px.pth`); a MediaPipe `face_landmarker.task`
+Environment: the `mocap` conda env
+(`/home/shameem/.conda/envs/mocap/bin/python`). Also needed: `Ear_Landmarker`
+beside this repo (or `$EAR_LANDMARKER`), `BlazeEar` beside it (or
+`$BLAZEEAR`) for the ear box, and a MediaPipe `face_landmarker.task`
 (`$FACE_LANDMARKER_TASK`).
 
-**Licences.** The default ear box is BlazeEar (Apache-2.0). An Ultralytics
-YOLO ear box is available with `ear_detector="yolo"` (1.6 mm, slightly better)
-but Ultralytics is AGPL-3.0: use it locally only, not in anything
-redistributed or offered as a service. The view table is
-derived from HUTUBS (CC BY 4.0) and is credited as such.
+## How it works
 
-Limits: validated only on HUTUBS scans (no hair, one scanner); the view table
-must be rebuilt (`scripts/build_view_table.py`) if the 2D model or the view
-grid changes; a mesh's own texture can be used (`use_mesh_texture=True`) but
-is off, since synthetic skin looked better on the one real scan tried.
+    head scan
+      -> orient: FaceMesh face frame, checked (skull above neck, symmetry,
+         nose-ear distance), retried turned if a check fails
+      -> per ear: BlazeEar box, 25 rendered views on a yaw x pitch grid
+      -> 2D landmarks in every view (Ear_Landmarker)
+      -> each landmark triangulated from its best 8 views (the view table),
+         RANSAC, then re-seated on the head surface
 
-## Prior research
+`ear3d/pipeline.py` lists each stage with the measurement behind its setting.
 
-A 3D effort preceded this repository. `RESEARCH_BRIEF.md` records what it
-measured — the data and templates that exist, the depth and pose results, the
-wrap pipeline's behaviour, and the claims that were later withdrawn.
-`RESULTS_inherited.md` is the long form, chronological.
-
-It is a research record to consult, not a settled plan. The headline is that
-learned depth from an image never transferred to real photographs across five
-attempts, while a geometric solve and a general-purpose depth model did; the
-brief gives the measurements behind that, and what was never established.
+The view table and the reference landmarks it is scored against both come
+from a **corpus**: 476 head ears (HUTUBS, SONICOM) and 112 AudioEar3D ears,
+each fitted with one ear template so that every landmark has a place on every
+fit. Building it is `scripts/corpus` (12 numbered steps); rendering the views
+and learning the table is `scripts/caches` (4 steps). Each folder's README is
+the runbook.
 
 ## Layout
 
-    ear3d/      camera, back-projection, triangulation, frames, render, wrap
-    model/      the depth, lifter and shape heads (kept for the record)
-    scripts/    wrap and template pipeline, depth experiments, evaluation
-    data/       depth dataset and the render-to-photo augmentation
+    ear3d/              the library
+      pipeline.py         head mesh -> landmarks
+      twod.py             the only coupling to Ear_Landmarker
+      frames, render, ear_view, backproject, triangulate, label, camera
+      corpus.py           corpus generations and where their files live
+      data.py, gt.py      corpus ears and reference landmarks, for scripts
+      faceform.py         Faceform Wrap: landmark-posed template fitting
+      wrap.py, marks.py   mesh helpers, template marks
+      skin.py             procedural skin for renders
+    scripts/
+      run_pipeline.py
+      corpus/   01-12     build a corpus generation
+      caches/   1-4       render caches -> view table
+      eval/               validate_pipeline (held-out), score_heldout,
+                          validate_scans, validate_wrapped_ears,
+                          escape_audit, gt_check_ear_views, slid_fit_flag
+    tests/
+    archive/            finished or failed experiments, frozen; see its README
 
-`ear3d/scheme.py` is the 55-point convention, held by copy in both
-repositories. It is constants only; if the convention changes it changes in
-both.
+## Things that change results without changing this code
 
-Eight scripts need to run the 2D model to produce landmarks to lift. They
-reach it through `ear3d/twod.py`, the single coupling point to
-Ear_Landmarker, which resolves that repository as a sibling or from
-`$EAR_LANDMARKER`. Everything else stands alone.
+- **The 2D model.** By default the pipeline follows Ear_Landmarker's
+  `SHIPPED_RUN`, from its working tree, live. `EAR3D_CKPT=<run or .ckpt>`
+  pins the checkpoint (results record it), but not their inference code:
+  their 2026-10-20 changes moved one held-out ear by up to 9 mm with the same
+  checkpoint. Re-measure after pulling their changes.
+- **The corpus generation.** `EAR3D_CORPUS=lmw` (default) or `esc` chooses
+  fits, transforms, reference landmarks and view table together. Never mix
+  them: the reference marks are tied to the fits.
+- **The reference.** Compare models against one reference (`lm3d_v11`);
+  switching it moved the score more than most model changes do.
 
-## Data
+## Prior research
 
-No corpus is committed. Scans, fitted meshes and photographs stay local and
-gitignored, and the licence terms they arrived under travel with them.
+`RESEARCH_BRIEF.md` records what the inherited 3D effort measured, including
+the claims later withdrawn; `RESULTS_inherited.md` is the long form. Learned
+depth from images never transferred to photographs across five attempts; a
+geometric solve and a general depth model (MoGe-2) did. That code is in
+`archive/`.
+
+## Licences and data
+
+No data is committed. Scans, fits and photographs stay local and gitignored,
+and their licences travel with them.
+
+- The default ear box is BlazeEar (Apache-2.0). An Ultralytics YOLO box
+  (`ear_detector="yolo"`) is AGPL-3.0: local use only.
+- The view table is derived from HUTUBS (CC BY 4.0) and credited as such.
+  Anything released uses the HUTUBS-only (`ccby`) shape model.
+- Anything built on the U-Net or its outputs credits SaifulULL (CC BY 4.0).
+- The Faceform Wrap EULA forbids decompiling or reverse engineering it;
+  `ear3d/faceform.py` only edits project files and runs its CLI.

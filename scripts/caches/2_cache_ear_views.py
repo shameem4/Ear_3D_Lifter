@@ -20,12 +20,11 @@ import sys
 
 import numpy as np
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 import open3d as o3d
 
-from escape_audit import DEFAULTS
-from skin import apply_skin
+from ear3d.config import DEFAULTS
+from ear3d.skin import apply_skin
 from ear3d.ear_view import ear_view, load_yolo
 
 cache, out, WK, NW = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])

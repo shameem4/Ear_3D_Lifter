@@ -21,12 +21,11 @@ import argparse, glob, pathlib, sys
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from ear3d.wrap import load_mesh                                   # noqa: E402
-from landmark_template import replay                               # noqa: E402
+from ear3d.marks import replay                                    # noqa: E402
 
-WRAP = pathlib.Path("/mnt/14BE47C2BE479ADE/Code/ear_stuff/wrap_work")
+from ear3d.corpus import WRAP                                       # noqa: E402
 
 
 def _load(f):

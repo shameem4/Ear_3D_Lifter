@@ -13,11 +13,13 @@ import sys
 import numpy as np
 import open3d as o3d
 
-R0 = pathlib.Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(R0), str(R0 / "scripts")]
-from escape_audit import DEFAULTS, WRAP, load_ear
+R0 = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(R0))
+from ear3d import corpus, gt
+from ear3d.config import DEFAULTS
+from ear3d.corpus import WRAP
+from ear3d.data import load_ear
 from ear3d.pipeline import Pipeline
-g = {}; exec(open(R0 / "scripts/gt_check_ear_views.py").read().split("out = sys.argv[1]")[0], g)
 
 out, ss, n, WK, NW = pathlib.Path(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5])
 out.mkdir(parents=True, exist_ok=True)
@@ -35,7 +37,7 @@ def rot(seed):
     q = np.random.default_rng(seed).normal(size=4); q /= np.linalg.norm(q); w, x, y, z = q
     return np.array([[1-2*(y*y+z*z), 2*(x*y-z*w), 2*(x*z+y*w)], [2*(x*y+z*w), 1-2*(x*x+z*z), 2*(y*z-x*w)], [2*(x*z-y*w), 2*(y*z+x*w), 1-2*(x*x+y*y)]])
 
-refs = {DEFAULTS["gt_lm3d"]: (g["LM"], g["NAMES"]), **g["ALSO"]}
+refs = {DEFAULTS["gt_lm3d"]: (gt.LM, gt.NAMES), **gt.ALSO}
 import os
 pipe = Pipeline(cfg={"ear_detector": os.environ.get("EAR_DETECTOR", DEFAULTS["ear_detector"])})
 for i, hd in enumerate(sample[WK::NW]):
@@ -48,7 +50,7 @@ for i, hd in enumerate(sample[WK::NW]):
     rec = {"Rr": Rr, "ckpt": pipe.ckpt}
     for sd in "LR":
         rec[f"pred_{sd}"] = res[sd] if res and res[sd] is not None else np.full((55, 3), np.nan)
-        nm = f"{hd}_{'left' if sd == 'L' else 'right'}"; T = g["inv"](f"{hd}_left", g["_corpus"].CURRENT) @ np.linalg.inv(g["inv_gt"](nm))   # load_ear built the head in CURRENT
+        nm = f"{hd}_{'left' if sd == 'L' else 'right'}"; T = gt.inv(f"{hd}_left", corpus.CURRENT) @ np.linalg.inv(gt.inv_gt(nm))   # load_ear built the head in CURRENT
         for fn, (lmz, nms) in refs.items():
             P = lmz["landmarks"][nms.index(nm)][:55]; P = (np.c_[P, np.ones(55)] @ T.T)[:, :3]
             rec[f"gt_{sd}_{fn.split('_canonical')[0]}"] = P @ Rr.T

@@ -12,7 +12,7 @@ Replaces wrap_work/templates/v9_provenance/build_lm3d.py, which hard-coded the
 OLD corpus/canonical (588 ears) while canonical_esc, canon2scan and the PCA
 used another generation.
 
-    python scripts/build_lm3d.py --canonical corpus/canonical_lmw \\
+    python scripts/corpus/12_build_lm3d.py --canonical corpus/canonical_lmw \\
         --definition templates/lm3d_v9_canonical_mm.npz \\
         --out templates/lm3d_v10_canonical_mm.npz
 """
@@ -23,11 +23,11 @@ import sys
 
 import numpy as np
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from ear3d.wrap import load_mesh                                   # noqa: E402
 
-WRAP = ROOT.parent / "wrap_work"
+WRAP = ROOT.parent / "wrap_work"   # == ear3d.corpus.WRAP
 
 
 def main():

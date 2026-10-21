@@ -1,6 +1,6 @@
 """The renderer and the back-projection must not be able to disagree.
 
-scripts/view_backprojection.py defines its camera ONCE, as (K, E), and hands
+archive/scripts/view_backprojection.py defines its camera ONCE, as (K, E), and hands
 those same arrays both to Filament's setup_camera and to the Camera that
 projects and back-projects. These tests pin that down, because the failure mode
 is silent: a camera mismatch does not raise, it just puts every 3D landmark in

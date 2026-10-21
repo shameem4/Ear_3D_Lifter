@@ -1,7 +1,7 @@
 """The 3D path: camera, renderer, back-projection, framing, labelling.
 
-Single source. scripts/view_backprojection.py is the interactive viewer over
-this package and scripts/ingest_render3d.py is the batch driver over it;
+Single source. archive/scripts/view_backprojection.py is the interactive viewer over
+this package and archive/scripts/ingest_render3d.py is the batch driver over it;
 neither keeps geometry of its own. Anything added to the 3D path belongs in a
 module here, so both inherit it.
 """

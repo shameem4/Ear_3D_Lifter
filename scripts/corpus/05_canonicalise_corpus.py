@@ -42,7 +42,7 @@ the same fits give 1.012 +- 0.029 of d5 landmark-to-landmark. `ear_mm` is
 still reported, because it is the number every earlier manifest carries,
 but `pinna_mm` is what the check gates on.
 
-    python scripts/canonicalise_corpus.py
+    python scripts/corpus/05_canonicalise_corpus.py
 """
 import argparse
 import csv
@@ -52,14 +52,13 @@ import sys
 
 import numpy as np
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from ear3d.wrap import base_topology, load_mesh, rigid_fit     # noqa: E402
 from ear3d.scheme import GROUPS, GROUP_NAMES                   # noqa: E402
-from gt_landmark_check import DEFAULT_MARKS, read_marks        # noqa: E402
+from ear3d.marks import DEFAULT_MARKS, read_marks              # noqa: E402
 
 TPL = pathlib.Path("/mnt/14BE47C2BE479ADE/Code/ear_stuff/wrap_work/templates")
 CORPUS = pathlib.Path("/mnt/14BE47C2BE479ADE/Code/ear_stuff/wrap_work/corpus")

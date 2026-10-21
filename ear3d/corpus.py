@@ -14,11 +14,15 @@ EAR3D_CORPUS selects one; the default is lmw.
 
 CACHES RECORD THEIR GENERATION. A head cache (runs/cache/<tag>/<head>.npz) is
 rendered in the canonical frame of its subject's left ear, which differs per
-generation; scripts/cache_head_frames.py stores `corpus` in it. Caches made
+generation; scripts/caches/1_cache_head_frames.py stores `corpus` in it. Caches made
 before that key existed (v4_s0/s1, ears_v3, the mvcache rays) are esc:
 cache_version() returns LEGACY for them.
 """
 import os
+import pathlib
+
+# wrap_work: corpora, templates and the fitted meshes, a sibling of this repo.
+WRAP = pathlib.Path(__file__).resolve().parents[2] / "wrap_work"
 
 VERSIONS = {
     "esc": dict(canonical="corpus/canonical_esc", canon2scan="corpus/canon2scan",

@@ -43,8 +43,8 @@ DEFAULTS = dict(
     # photographs. They live here because this config is the render path.
     #
     # Ground truth for all of it: 168 renders with boxes projected from
-    # wrap-fitted 3D landmarks (scripts/make_detector_testset.py), plus 112
-    # ears x 49 views scored against the wrap (scripts/escape_audit.py).
+    # wrap-fitted 3D landmarks (archive/scripts/make_detector_testset.py), plus 112
+    # ears x 49 views scored against the wrap (scripts/eval/escape_audit.py).
     #
     #   config                              detect@IoU>=0.3   @0.5
     #   two-stage, shipped threshold              56.5%      54.8%
@@ -107,11 +107,11 @@ DEFAULTS = dict(
         "/mnt/14BE47C2BE479ADE/Code/landmarking_stuff/landmarker/face_landmarker.task"),
 
     # --- appearance ---------------------------------------------------------
-    skin=True,              # colour the mesh with scripts/skin.py before rendering
+    skin=True,              # colour the mesh with ear3d/skin.py before rendering
     tone=10,                # tone index; None draws a random Fitzpatrick I-VI.
                             # 10 is deeper than real skin and is there because the
                             # landmarker reads the ear most cleanly on it -- see
-                            # EXTRA_TONES in scripts/skin.py. Fine here, where the
+                            # EXTRA_TONES in ear3d/skin.py. Fine here, where the
                             # point is to inspect landmarks; ingest renders its
                             # training images with a realistic tone instead.
     skin_seed=0,            # also drives the blotching and grain
@@ -141,7 +141,7 @@ DEFAULTS = dict(
                             # detector is presentation-sensitive on renders --
                             # without the union the chosen box moves a median
                             # 54 px on the same frame and the same ear
-                            # (scripts/check_detector_symmetry.py). A union
+                            # (archive/scripts/check_detector_symmetry.py). A union
                             # through NMS is symmetric, so it is in the class
                             # a single-presentation corpus cannot flatter.
                             # CONFIRMED at this sun, which was the open
@@ -189,7 +189,7 @@ DEFAULTS = dict(
                   ("lm3d_v7_canonical_mm.npz",          # human curves (v6_spacing)
                    "lm3d_v8_corpus_canonical_mm.npz")), # median real-ear predictions
     multiview_light_dir=(0.6, -0.4, -1.0),  # the sun for the 25-view orbit
-                            # (scripts/multiview_collect_rays.py), fixed to the
+                            # (scripts/caches/3_multiview_collect_rays.py), fixed to the
                             # head. 80 ears vs light_dir: table best-8 + re-seat
                             # 2.29 vs 2.39 mm, better on 51/80 (p=6e-3); >10 mm
                             # 0.2% vs 0.6%. NOT for the single face-on view,
