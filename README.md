@@ -18,7 +18,7 @@ or `from ear3d.pipeline import Pipeline; Pipeline().run(mesh)`.
 - **Output:** `L`, `R` (55 x 3 each) in the input mesh's own coordinates,
   NaN where an ear or landmark was not found (`L` is the subject's left),
   and `ckpt`, the 2D checkpoint used.
-- **Accuracy:** median **1.56 mm** per ear (vs lm3d_v12) on 16 HUTUBS heads used nowhere in
+- **Accuracy:** median **1.46 mm** per ear (vs lm3d_v12) on 16 HUTUBS heads used nowhere in
   building it, each randomly rotated; 4.4% of points beyond 5 mm, mostly on
   the upper helix. About 15 s per head on one GPU. Validated only on HUTUBS
   and SONICOM scans (no hair); one real scan looked right.

@@ -13,11 +13,13 @@ were measured against, because both have changed.
 
 ## Where it stands (2026-10-20)
 
-- **Held-out accuracy: 1.56 mm** median per ear vs lm3d_v12, 16 HUTUBS heads
+- **Held-out accuracy: 1.46 mm** median per ear vs lm3d_v12 (view_table_v12;
+  1.56 with v11's table), 16 HUTUBS heads
   used in no table or reference, each randomly rotated and unskinned; p95
-  2.16 mm; 4.38% of points beyond 5 mm, concentrated on the upper helix (0-8)
+  2.09 mm; 4.38% of points beyond 5 mm, concentrated on the upper helix (0-8)
   and the lobe (15-19). 2D checkpoint v4_fc05_s42 epoch 434 (2026-10-21).
-  Against the hand-marked lm3d_v7: 3.080 mm. The previous model,
+  Against the hand-marked lm3d_v7: 3.070 mm (3.080 with v11's table; the
+  table's gain on v7 is across-contour, 21/32 ears, upper helix and lobe). The previous model,
   fixed_conv_s42, scores 1.574 vs lm3d_v11, 1.679 vs v12 and 3.099 vs v7.
   `scripts/eval/validate_pipeline.py OUT 2 16 w N`, then `score_heldout.py`.
 - **The reference is coupled to the 2D model, not just the fits** (2026-10-21).

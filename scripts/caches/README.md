@@ -22,6 +22,12 @@ As run for lmw (2026-10-18/19), 40 heads in two 20-head samples:
 The table built this way matches the shipped `view_table_v11` (median cell
 1.97 vs 1.96 mm, best-8 overlap 7.4/8), which was kept.
 
+- **view_table_v12** (2026-10-21): step 3 re-run with v4_fc05_s42 on the
+  same 80 cached ears (`runs/mvcache/sun_0.6_-0.4_-1_head_lmw_v4fc05`), scored
+  against lm3d_v12. Median cell 1.72 mm (v11: 1.96); best-8 overlap with v11
+  6.0/8. Held-out: 1.561 -> 1.459 mm vs v12; vs hand-marked v7, 3.080 -> 3.070,
+  across-contour better on 21/32 ears (-0.05 mm), upper helix 2.28 -> 2.05,
+  lobe 3.09 -> 2.61.
 - A head the plain face search misses is retried on fresh rotations (pp95
   needs a second draw). Frames are stored with the rotation, so this is safe.
 - Caches record which corpus generation and 2D checkpoint made them
