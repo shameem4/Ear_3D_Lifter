@@ -23,8 +23,8 @@ shared key (`GUARD_RUN_KEY=<script>`). Python is the `mocap` env.
 | 8 | `08_build_ear_pca.py` | steps 5, 7 | `ear_pca_v8_{all,ccby}_mm` |
 | 9 | `09_build_landmark_basis.py` | step 8 | `lm_basis_v9_*` |
 | 10 | `10_build_gt_coeffs.py` | steps 5, 8 | `gt_coeffs_v8_mm` |
-| 11 | `11_remark_from_predictions.py` | steps 2, 5, 6 | `mark_mean_v10_55` |
-| 12 | `12_build_lm3d.py --marks` | steps 5, 11 | `lm3d_v11_canonical_mm` (the reference) |
+| 11 | `11_remark_from_predictions.py` | steps 2, 5, 6 | `mark_mean_v12_55` (11a: `tpl_curves_v12`) |
+| 12 | `12_build_lm3d.py --marks` | steps 5, 11 | `lm3d_v12_canonical_mm` (the reference) |
 
 Then `../caches` (head frames, ear views, rays, view table), and add the
 generation to `ear3d/corpus.py`.
@@ -47,10 +47,21 @@ The commands as run (`$W` = wrap_work/corpus, `$T` = wrap_work/templates):
         --template $T/ear_mean_v5.obj --out $T/lm_basis_v9_${v}_${n}_unitheight.npz
     10_build_gt_coeffs.py --pca $T/ear_pca_v8_all_mm.npz --fits $K/hutubs $K/sonicom $K/audioear \
         --template $T/ear_mean_v5.obj --out $T/gt_coeffs_v8_mm.npz
+    01_predict_heads.py corpus/lmwrap_v1/preds_v4fc05 W N        # the current 2D model; <=~120 scans per process
+    11a_template_curves.py templates/ear_mean_v5.obj templates/tpl_curves_v12.npz
     11_remark_from_predictions.py --canonical corpus/canonical_lmw --canon2scan corpus/canon2scan_lmw \
-        --preds $FITS --template templates/ear_mean_v5.obj --out templates/mark_mean_v10_55.npz
+        --preds corpus/lmwrap_v1/preds_v4fc05 --template templates/ear_mean_v5.obj \
+        --red templates/tpl_curves_v12.npz --red-template templates/ear_mean_v5.obj \
+        --out templates/mark_mean_v12_55.npz
     12_build_lm3d.py --canonical corpus/canonical_lmw --definition templates/lm3d_v9_canonical_mm.npz \
-        --marks templates/mark_mean_v10_55.npz --out templates/lm3d_v11_canonical_mm.npz
+        --marks templates/mark_mean_v12_55.npz --out templates/lm3d_v12_canonical_mm.npz
+
+The reference is coupled to the 2D model as well as the fits: 11a (curve shape)
+and 01 + 11 (spacing) read the current model's contours. Re-run 01, 11a, 11, 12
+when the model changes how it traces them. v11 (mark_mean_v10_55) was built
+from fixed_conv_s42; v12 from v4_fc05_s42 (2026-10-21). Filament panics after
+~130-150 scans in one process (empty predictions first, then a crash; earlier
+output verified unaffected); 01 resumes, so just re-run until all are written.
 
 (`$K` = `$W/canonical_lmw`. lmw's as-run step 2 outputs, with the step 1
 predictions in each `P`, are kept in `corpus/lmwrap_v1/asrun/`; step 11 reads

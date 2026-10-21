@@ -94,16 +94,18 @@ def main():
     p.add_argument("--compare", nargs="*", default=[],
                    help="lm3d files to score the same predictions against (old corpora use canon2scan)")
     p.add_argument("--out", required=True)
+    p.add_argument("--red", default=str(RED_SRC), help="step 11a output (all_25); default: the old model's curves (v9/v11)")
+    p.add_argument("--red-template", default=str(RED_TPL), help="the mesh --red was made on")
     a = p.parse_args()
     res = lambda s: pathlib.Path(s) if pathlib.Path(s).is_absolute() else WRAP / s
     can, c2s = res(a.canonical), res(a.canon2scan)
     TV, TF = (np.asarray(x) for x in load_mesh(str(res(a.template))))
     tsc = scene(TV, TF)
 
-    # 1. RED carried from ear_mean_v4 to the new template by address
-    RV, RF = (np.asarray(x) for x in load_mesh(str(RED_TPL)))
+    # 1. RED (curve shape, step 11a) carried to the new template by address
+    RV, RF = (np.asarray(x) for x in load_mesh(str(res(a.red_template))))
     assert (RF == TF).all(), "RED needs the template connectivity"
-    red = at(TV, TF, *address(scene(RV, RF), np.load(RED_SRC)["all_25"]))
+    red = at(TV, TF, *address(scene(RV, RF), np.load(res(a.red))["all_25"]))
 
     # 2. per-ear template positions of the final predictions
     ears = {}
@@ -153,7 +155,7 @@ def main():
     print("pipeline predictions vs each reference, per-ear median over 55 landmarks:")
     for lab, rows in D.items():
         R = np.array(rows); m = np.nanmedian(R, axis=1)
-        print(f"  {lab:40s} median {np.median(m):.3f} mm  p95 {np.percentile(m, 95):.2f}  "
+        print(f"  {lab:40s} median {np.nanmedian(m):.3f} mm  p95 {np.nanpercentile(m, 95):.2f}  "
               f"helix {np.nanmedian(R[:, :35]):.2f}  rest {np.nanmedian(R[:, 35:]):.2f}")
 
     # 4. final marks from every ear

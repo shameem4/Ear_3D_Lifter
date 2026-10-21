@@ -177,7 +177,7 @@ DEFAULTS = dict(
                             # Off: on the one textured scan tried (2026-10-17)
                             # the synthetic-skin result looked better.
     gt_lm3d=_corpus.get("gt_lm3d"),  # the REFERENCE 3D landmarks of the corpus
-                            # generation (ear3d/corpus.py; lmw: lm3d_v11, marks
+                            # generation (ear3d/corpus.py; lmw: lm3d_v12, marks
                             # re-derived on the landmark-posed fits). Was, in
                             # wrap_work/templates. v9 (2026-10-17, user's
                             # choice): curves from the shipped landmarker run

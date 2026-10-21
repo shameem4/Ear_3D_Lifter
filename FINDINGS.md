@@ -13,14 +13,29 @@ were measured against, because both have changed.
 
 ## Where it stands (2026-10-20)
 
-- **Held-out accuracy: 1.58 mm** median per ear, 16 HUTUBS heads used in no
-  table or reference, each randomly rotated and unskinned; p95 2.46 mm; 4.03%
-  of points beyond 5 mm, concentrated on the upper helix (points 0-8) and the
-  lobe (15-19). Reference lm3d_v11; 2D checkpoint fixed_conv_s42 epoch 433.
+- **Held-out accuracy: 1.56 mm** median per ear vs lm3d_v12, 16 HUTUBS heads
+  used in no table or reference, each randomly rotated and unskinned; p95
+  2.16 mm; 4.38% of points beyond 5 mm, concentrated on the upper helix (0-8)
+  and the lobe (15-19). 2D checkpoint v4_fc05_s42 epoch 434 (2026-10-21).
+  Against the hand-marked lm3d_v7: 3.080 mm. The previous model,
+  fixed_conv_s42, scores 1.574 vs lm3d_v11, 1.679 vs v12 and 3.099 vs v7.
   `scripts/eval/validate_pipeline.py OUT 2 16 w N`, then `score_heldout.py`.
-- **That baseline predates Ear_Landmarker's 2026-10-20 inference changes**,
-  which moved one held-out ear by up to 9.2 mm with the same checkpoint.
-  Re-run it on their next shipped default before comparing anything to it.
+- **The reference is coupled to the 2D model, not just the fits** (2026-10-21).
+  lm3d_v11's curve shape and spacing came from fixed_conv_s42; the new model
+  follows the lobe and helix rim more closely, and v11 charged it for that
+  (+0.15 mm). lm3d_v12 re-derives both from v4_fc05_s42 (`scripts/corpus` 01,
+  11a, 11, 12). Each model wins on the reference built from its own
+  predictions and they tie on v7, so a model-derived reference cannot rank
+  models: rank on v7 and by eye. On the lobes v12 moves about halfway from v11
+  toward the new predictions; it is a corpus median and does not follow single
+  ears. v12 vs v11 on the template: median 1.1 mm, max 2.7 mm.
+- **Run-to-run noise.** The same ear re-predicted under heavy GPU load moved
+  0.10 mm median per ear, with single landmarks jumping a few mm (RANSAC
+  inlier flips); serial and concurrent reruns are otherwise bit-identical.
+  Model differences of a few hundredths of a mm are inside this.
+- **Filament panics on long runs** ("uniform baseColor not found") after
+  ~130-150 scans per process, writing all-NaN predictions first. Earlier
+  output in the same process re-predicts bit-identically. Re-run; 01 resumes.
 - **The remaining error is the 2D model, not the lift.** Fed the ground
   truth's own pixels, the lift is 0.36 mm median and never past 20 mm;
   detected 2D gives 3.73 mm and 6.15% past 20 mm (40 ears x 25 views).

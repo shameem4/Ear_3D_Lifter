@@ -8,7 +8,7 @@ fit, and fits of different generations slide 2-5 mm along the helix
 (memory: marks-are-fit-coupled).
 
   esc  escalated_v1 heads + ae3d_v2, canonical_esc, lm3d_v9      (to 2026-10-18)
-  lmw  landmark-posed rewrap (lmwrap_v1) + ae3d_v3, canonical_lmw, lm3d_v11
+  lmw  landmark-posed rewrap (lmwrap_v1) + ae3d_v3, canonical_lmw, lm3d_v12 (was v11)
 
 EAR3D_CORPUS selects one; the default is lmw.
 
@@ -29,7 +29,7 @@ VERSIONS = {
                 gt_lm3d="lm3d_v9_canonical_mm.npz", view_table="view_table_v9.npz",
                 mean="ear_mean_v4.obj"),
     "lmw": dict(canonical="corpus/canonical_lmw", canon2scan="corpus/canon2scan_lmw",
-                gt_lm3d="lm3d_v11_canonical_mm.npz", view_table="view_table_v11.npz",
+                gt_lm3d="lm3d_v12_canonical_mm.npz", view_table="view_table_v11.npz",
                 mean="ear_mean_v5.obj"),
 }
 LEGACY = "esc"            # generation of any cache without a `corpus` key

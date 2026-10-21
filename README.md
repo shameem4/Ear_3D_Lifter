@@ -18,8 +18,8 @@ or `from ear3d.pipeline import Pipeline; Pipeline().run(mesh)`.
 - **Output:** `L`, `R` (55 x 3 each) in the input mesh's own coordinates,
   NaN where an ear or landmark was not found (`L` is the subject's left),
   and `ckpt`, the 2D checkpoint used.
-- **Accuracy:** median **1.58 mm** per ear on 16 HUTUBS heads used nowhere in
-  building it, each randomly rotated; 4.0% of points beyond 5 mm, mostly on
+- **Accuracy:** median **1.56 mm** per ear (vs lm3d_v12) on 16 HUTUBS heads used nowhere in
+  building it, each randomly rotated; 4.4% of points beyond 5 mm, mostly on
   the upper helix. About 15 s per head on one GPU. Validated only on HUTUBS
   and SONICOM scans (no hair); one real scan looked right.
 
@@ -79,7 +79,8 @@ the runbook.
 - **The corpus generation.** `EAR3D_CORPUS=lmw` (default) or `esc` chooses
   fits, transforms, reference landmarks and view table together. Never mix
   them: the reference marks are tied to the fits.
-- **The reference.** Compare models against one reference (`lm3d_v11`);
+- **The reference.** Compare models against one reference (`lm3d_v12`, built
+  from the current 2D model's contours, so it favours that model; quote `lm3d_v7`, hand marks, beside it);
   switching it moved the score more than most model changes do.
 
 ## Findings and prior research
