@@ -82,7 +82,11 @@ the runbook.
 - **The reference.** Compare models against one reference (`lm3d_v11`);
   switching it moved the score more than most model changes do.
 
-## Prior research
+## Findings and prior research
+
+`FINDINGS.md` is this project's record: why each pipeline stage is built the
+way it is, how the ground truth is made, the measurement mistakes that
+produced wrong answers and the rule each left, and what is closed or open.
 
 `RESEARCH_BRIEF.md` records what the inherited 3D effort measured, including
 the claims later withdrawn; `RESULTS_inherited.md` is the long form. Learned

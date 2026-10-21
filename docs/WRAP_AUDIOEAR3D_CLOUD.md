@@ -6,6 +6,15 @@ need meshes) do not apply. Written 2026-10-18 from `ear3d/wrap.py`,
 `archive/scripts/wrap_cloud.py` and `archive/scripts/wrap_cloud_adaptive.py`. Numbers are
 measured on this project; hypotheses are marked.
 
+> **Status in this repo (2026-10-20).** This NICP method made `ae3d_v2`, the
+> AudioEar fits of the previous corpus generation (esc). The current ones,
+> `ae3d_v3`, come from a different route: Poisson-mesh the cloud, run the
+> landmark pipeline on that mesh, pose the template from those landmarks and
+> let Faceform Wrap fit it (`scripts/corpus/03_rewrap_audioear.py`), keeping the
+> old fit when the landmarks collapse or the new fit fails its gates (cloud
+> coverage among them). The write-up stands as
+> a guide to fitting clouds without a commercial wrapper.
+
 ## 1. The problem
 
 AudioEar3D gives ear-only point clouds with per-point normals: front shells,

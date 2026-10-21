@@ -27,16 +27,19 @@ Prefer GPU, and parallelise on CPU where the GPU is idle.
 
 ## The 2D dependency
 
-Eight scripts need to run the 2D model rather than read landmarks from a
-file. That coupling lives in exactly one module, `ear3d/twod.py`. Import the
-2D pipeline from there, never with `from inference import ...` — that was the
-old pattern and it meant eight copies of the same sys.path surgery.
+The pipeline and the ray collector run the 2D model rather than read
+landmarks from a file. That coupling lives in exactly one module,
+`ear3d/twod.py`. Import the 2D pipeline from there, never with
+`from inference import ...` — that was the old pattern and it meant eight
+copies of the same sys.path surgery.
 
-    from ear3d.twod import LandmarkPredictor, CHECKPOINTS
+    from ear3d.twod import LandmarkPredictor, landmarker_checkpoint
 
 It resolves `Ear_Landmarker` as a sibling directory, or `$EAR_LANDMARKER`.
-Checkpoints come from there too, which is where `run="manual_occ_s42"` in
-`ear3d/config.py` resolves.
+The checkpoint follows their `SHIPPED_RUN` by default; `EAR3D_CKPT=<run or
+.ckpt>` pins it, and results record it as `ckpt`. Pinning the checkpoint does
+not pin their inference code, which changes under us: re-run a baseline
+before comparing results from different days.
 
 **Do not vendor the 2D model.** It is under active development; a copied
 definition would drift and then produce landmarks that silently disagree
@@ -67,6 +70,32 @@ engineering it — that is off the table, not a challenge.
 Accepting licence terms, including gated HuggingFace repos, is the user's
 action and never Claude's.
 
+## Layout, and where new code goes
+
+- `ear3d/` is the library. Anything two scripts share lives here, imported
+  normally: never load a script by path or `exec` part of one.
+- `scripts/run_pipeline.py`, then `scripts/corpus/` (01-12, build a corpus
+  generation), `scripts/caches/` (1-4, render caches and the view table),
+  `scripts/eval/` (held-out runs and scoring). Each stage folder's README is
+  its runbook, with the commands as run.
+- Experiments start in scratch (`/var/tmp/claude/ear3d/<date-task>/`). One
+  that becomes a step others depend on moves into a stage folder; one that is
+  finished goes to `archive/` with a line in its README, and its result goes
+  in `FINDINGS.md`. Don't add experiments to `scripts/` directly.
+- `EAR3D_CORPUS` selects a corpus generation (default `lmw`); fits, transforms,
+  reference landmarks and view table change together. New fits mean
+  re-deriving the reference marks (`scripts/corpus/11-12`).
+
+## Docs
+
+- `README.md`: what it does, how to run it, layout.
+- `FINDINGS.md`: what this project established since 2026-10-13, the
+  measurement mistakes and the rules they left, what is closed and open.
+- `scripts/{corpus,caches}/README.md`: runbooks.
+- `RESEARCH_BRIEF.md`, `RESULTS_inherited.md`: the inherited effort.
+- `docs/`: write-ups for other agents (AudioEar3D cloud wrapping).
+- `archive/README.md`: index of frozen experiments.
+
 ## Prior research
 
 `RESEARCH_BRIEF.md` is the inherited research record: what the previous effort
@@ -80,8 +109,8 @@ as closed looks worth reopening, the brief gives the evidence to argue with.
 
 Two things in it are conventions rather than findings, and breaking them
 silently corrupts stored data: right ears mirror about **Z**, not X, and
-`lm_basis_*` files are unit-height, not millimetres (`UNITS.md` has the
-measured table).
+`lm_basis_*` files are unit-height, not millimetres
+(`../wrap_work/templates/UNITS.md` has the measured table).
 
 ## Working style
 

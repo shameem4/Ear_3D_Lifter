@@ -91,7 +91,7 @@ photographs every one lost to simply predicting z = 0. Head 1, the best in
 domain, is ~5.1× worse on photographs than on renders; framing was ruled out
 as the cause.
 
-**A geometric solve did transfer.** `scripts/fit_photo_depth.py` recovers
+**A geometric solve did transfer.** `archive/scripts/fit_photo_depth.py` recovers
 depth to 0.0120 on renders using **scaled orthography, not PnP**, and taking
 the sign from the canonical axis rather than from anatomy. Fitting a mean ear
 to the 2D landmarks beat the regressed depth head by ~0.4 skill at 0.053 ms.
@@ -145,7 +145,7 @@ the scan centroid.
 Fitting behaviour, as found:
 
 - Every fit folds to some degree. No single parameter fixes it; per-ear
-  escalation does (`scripts/wrap_refit_adaptive.py`). The ladder clears 77 of
+  escalation does (`archive/scripts/wrap_refit_adaptive.py`). The ladder clears 77 of
   92 folded ears and takes the corpus to 96.8% fold-free. Its gain is
   concentrated in the >5-fold band — the median escalated ear loses about 1pp
   of coverage.
@@ -181,7 +181,7 @@ These were built for 2D annotation QA. That programme was closed on
 bought no accuracy). The instruments themselves still work, and some are
 relevant to 3D:
 
-- **SAM 2.1 silhouette check** (`scripts/check_helix_silhouette.py`): outer
+- **SAM 2.1 silhouette check** (`archive/scripts/check_helix_silhouette.py`): outer
   points sit 1.2–1.5% of ear height from the mask boundary, interior points
   6–7× deeper. Apache 2.0 for code *and* checkpoints.
 - **SAM 3 mask deficit** as a free per-row occlusion score: deep deficit marks
