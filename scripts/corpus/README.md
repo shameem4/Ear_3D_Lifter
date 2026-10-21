@@ -52,7 +52,9 @@ The commands as run (`$W` = wrap_work/corpus, `$T` = wrap_work/templates):
     12_build_lm3d.py --canonical corpus/canonical_lmw --definition templates/lm3d_v9_canonical_mm.npz \
         --marks templates/mark_mean_v10_55.npz --out templates/lm3d_v11_canonical_mm.npz
 
-(`$K` = `$W/canonical_lmw`.)
+(`$K` = `$W/canonical_lmw`. lmw's as-run step 2 outputs, with the step 1
+predictions in each `P`, are kept in `corpus/lmwrap_v1/asrun/`; step 11 reads
+them as `$FITS`.)
 
 ## What to know before rebuilding
 
