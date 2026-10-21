@@ -52,6 +52,14 @@ were measured against, because both have changed.
   the ear skin (0.75 -> 1.0), tried for the same lobe, changed nothing either
   way. Attached lobes are common in photos and v4 handles them there
   (Ear_Landmarker), so pp16 is a render-domain miss.
+- **Attached lobes are a known miss** (pp16 left; pp72 left in the low view).
+  With no free lobe edge, the 2D model continues the rim onto the cheek at
+  every angle used, most visibly from below (view 4, yaw -30 pitch +30). The
+  view table already keeps the low views out of the lobe's best 8, so
+  excluding them by hand changes nothing, and stronger crease AO did nothing.
+  Ear_Landmarker: v4 handles attached lobes in eye-level photos; the gap is
+  viewpoint, and fixing it needs render labels neither reference provides
+  (v12 is model-derived, v7 sits inside the rim).
 - **Run-to-run noise.** The same ear re-predicted under heavy GPU load moved
   0.10 mm median per ear, with single landmarks jumping a few mm (RANSAC
   inlier flips); serial and concurrent reruns are otherwise bit-identical.
