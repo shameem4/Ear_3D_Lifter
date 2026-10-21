@@ -31,6 +31,16 @@ were measured against, because both have changed.
   models: rank on v7 and by eye. On the lobes v12 moves about halfway from v11
   toward the new predictions; it is a corpus median and does not follow single
   ears. v12 vs v11 on the template: median 1.1 mm, max 2.7 mm.
+- **v7 sits inside the rim; the new model is on it** (2026-10-21, rendered
+  on 32 held-out ears). Against v7, v4_fc05_s42 is outward across the curve on
+  31/32 ears at 0-8 (+0.74 mm) and 29/32 at 15-19 (+0.92). The renders show
+  the model on the helix rim edge and lower lobe edge, v7 on the rim's face.
+  The user's rule: the placement that follows the anatomy wins. So v7
+  penalises an anatomically correct model, and no fully neutral reference
+  exists (v12 is model-derived). Cross-view agreement
+  (`scripts/eval/cross_view_agreement.py`, best 8): 0.770 -> 0.626 mm, >5 mm
+  0.88% -> 0.17%, lobe 5.6% -> 0.7%. The chosen views agree; the remaining
+  error is shared placement, not disagreement.
 - **Run-to-run noise.** The same ear re-predicted under heavy GPU load moved
   0.10 mm median per ear, with single landmarks jumping a few mm (RANSAC
   inlier flips); serial and concurrent reruns are otherwise bit-identical.
