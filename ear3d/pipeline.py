@@ -20,7 +20,8 @@ Stages, each the one measured best on 2026-10-17 (80 HUTUBS ears):
      pad, one zoom. Fixes each ear's frame (R, centre, scale).
   3. 25 views (+-30 deg, 15 deg steps) orbited about that frame, sun fixed to
      the head (config multiview_light_dir, x mirrored for the right ear),
-     shipped 2D landmarker on the whole frame (flip fusion = its default).
+     shipped 2D landmarker (bare LandmarkPredictor, no detector or ROI) on
+     the whole frame, flip fusion = its default.
   4. per landmark, RANSAC over its best 8 views by view_table_v9.npz
      (scripts/caches/4_build_view_table.py), 1 mm threshold.
   5. re-seat each point onto the head surface.

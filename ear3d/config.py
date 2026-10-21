@@ -131,6 +131,9 @@ DEFAULTS = dict(
     # the x-negated one, hard-coded, for every ear.
     # THE 2D PIPELINE'S OWN TEST-TIME AUGMENTATION. Both are Ear_Landmarker's
     # to own; None means "take their shipping default" and is the policy.
+    # These two reach only the EarLandmarkerPipeline path (label.py). The 3D
+    # pipeline's bare LandmarkPredictor takes their FLIP_FUSION_DEFAULT (on)
+    # and has no detector, so detector_frame_tta does not apply to it.
     # flip_fusion is left None deliberately -- they default it ON, and at the
     # new sun their in-pipeline fusion plus the flag below scores 1.290%,
     # identical to this project's own two-pass frame-level wrapper (p=0.76)
@@ -219,13 +222,14 @@ DEFAULTS = dict(
     eye_z=3.0,              # camera at (0, 0, eye_z) looking at the origin
     vfov=50.0,              # vertical field of view, degrees
 
-    # NOTE there is no crop setting here. The WHOLE render goes to
-    # EarLandmarkerPipeline, which runs the shipped detect -> ROI -> refine ->
-    # landmark path and hands back landmarks in full-frame pixels. That path
-    # already drives the ROI toward TRAIN_OCCUPANCY (ROI_OCC_TOL/ROI_SATURATED),
-    # so framing and occupancy are ITS business, not this script's -- which also
-    # means this viewer now shows what inference actually does, rather than what
-    # a hand-rolled crop here happened to do.
+    # NOTE there is no crop setting here, and the two 2D paths differ:
+    # - the 3D pipeline (pipeline._multiview) feeds the WHOLE render to a bare
+    #   LandmarkPredictor: no detector, no ROI, no occupancy step. Framing is
+    #   set once per ear by ear_view (BlazeEar box + ear_view.PAD) and the
+    #   orbit keeps it, so occupancy is ours: PAD 0.25 gives ~0.56 against the
+    #   model's TRAIN_OCCUPANCY 0.777 (Ear_Landmarker, 2026-10-21).
+    # - label.py (single-view viewer) uses EarLandmarkerPipeline, which runs
+    #   their detect -> ROI -> refine path and drives occupancy itself.
 
     # --- back-projection ----------------------------------------------------
     snap=True,              # place landmarks that sit behind a depth cliff onto
