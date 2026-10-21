@@ -5,7 +5,7 @@ what was tried stays findable; **not maintained and not expected to run**.
 Shared helpers they imported moved into `ear3d/` on 2026-10-20 (`data`, `gt`,
 `faceform`, `marks`, `skin`), so many of these now fail at import.
 
-The verdicts are recorded elsewhere, with their numbers: `RESEARCH_BRIEF.md`,
+The verdicts are recorded elsewhere, with their numbers: `FINDINGS.md`,
 `RESULTS_inherited.md`, and the project memory. Each line below is the file's
 own docstring, which says what it measured, not what it found.
 

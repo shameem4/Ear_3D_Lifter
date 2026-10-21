@@ -84,12 +84,11 @@ the runbook.
 
 ## Findings and prior research
 
-`FINDINGS.md` is this project's record: why each pipeline stage is built the
-way it is, how the ground truth is made, the measurement mistakes that
-produced wrong answers and the rule each left, and what is closed or open.
-
-`RESEARCH_BRIEF.md` records what the inherited 3D effort measured, including
-the claims later withdrawn; `RESULTS_inherited.md` is the long form. Learned
+`FINDINGS.md` is the research record, the inherited effort's and this
+project's: why each pipeline stage is built the way it is, how the ground
+truth is made, the measurement mistakes that produced wrong answers and the
+rule each left, the retractions, and what is closed or open.
+`RESULTS_inherited.md` is the inherited long form. Learned
 depth from images never transferred to photographs across five attempts; a
 geometric solve and a general depth model (MoGe-2) did. That code is in
 `archive/`.

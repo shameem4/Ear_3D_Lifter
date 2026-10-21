@@ -89,23 +89,26 @@ action and never Claude's.
 ## Docs
 
 - `README.md`: what it does, how to run it, layout.
-- `FINDINGS.md`: what this project established since 2026-10-13, the
-  measurement mistakes and the rules they left, what is closed and open.
+- `FINDINGS.md`: the research record, inherited and since 2026-10-13: the
+  pipeline's evidence, the ground truth, the measurement mistakes and the
+  rules they left, what is closed and open.
 - `scripts/{corpus,caches}/README.md`: runbooks.
-- `RESEARCH_BRIEF.md`, `RESULTS_inherited.md`: the inherited effort.
+- `RESULTS_inherited.md`: the inherited effort's long chronological log.
 - `docs/`: write-ups for other agents (AudioEar3D cloud wrapping).
 - `archive/README.md`: index of frozen experiments.
 
 ## Prior research
 
-`RESEARCH_BRIEF.md` is the inherited research record: what the previous effort
-measured, with its caveats and its retractions, plus where the corpora,
-templates and bases live. `RESULTS_inherited.md` is the long form.
+`FINDINGS.md` holds the inherited research record alongside this project's,
+items marked *(inherited)*: what the previous effort measured, with its
+caveats and retractions, plus where the corpora, templates and bases live.
+`RESULTS_inherited.md` is the long form.
 
-Read it as prior work, not as a decision already made for this project. It
-exists so results are not rediscovered by accident, and it is explicit about
-which findings are strong and which were withdrawn. If a direction it reports
-as closed looks worth reopening, the brief gives the evidence to argue with.
+Read inherited items as prior work, not as decisions already made for this
+project. They are there so results are not rediscovered by accident, and the
+record says which findings are strong and which were withdrawn. If a
+direction it reports as closed looks worth reopening, it gives the evidence
+to argue with.
 
 Two things in it are conventions rather than findings, and breaking them
 silently corrupts stored data: right ears mirror about **Z**, not X, and

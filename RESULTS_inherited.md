@@ -3,8 +3,8 @@
 > **Paths below are as they were when written.** Scripts named here now live in
 > `archive/scripts/` (or `scripts/<stage>/` if still in use; see the stage READMEs),
 > and `model/`, `data/` modules in `archive/`. Some files named here were never
-> brought across from Ear_Landmarker. This project's own findings since
-> 2026-10-13 are in `FINDINGS.md`.
+> brought across from Ear_Landmarker. The condensed record, inherited
+> and since 2026-10-13, is `FINDINGS.md`.
 
 Every number here is test-split (861 held-out real samples, touched once per run)
 unless it says otherwise. NME is mean L2 in normalised [0,1] ear-crop
