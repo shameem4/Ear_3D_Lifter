@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ear landmark fix</title>
+<style>
+  :root { --bg:#16181c; --panel:#1f2228; --text:#e6e6e6; --dim:#8a8f98; --sel:#ffd400; --done:#3fb950; --edit:#d29922; }
+  * { box-sizing:border-box; }
+  body { margin:0; display:flex; height:100vh; background:var(--bg); color:var(--text); font:13px system-ui, sans-serif; }
+  #side { width:250px; background:var(--panel); display:flex; flex-direction:column; border-right:1px solid #2c3038; }
+  #side h1 { font-size:14px; margin:10px 12px 4px; }
+  #count { color:var(--dim); margin:0 12px 8px; }
+  #list { overflow:auto; flex:1; }
+  .ear { padding:5px 12px; cursor:pointer; display:flex; justify-content:space-between; gap:6px; }
+  .ear:hover { background:#2a2e36; }
+  .ear.cur { background:#33405a; }
+  .ear .st { width:8px; height:8px; border-radius:50%; margin-top:4px; flex:none; background:#444; }
+  .ear.edited .st { background:var(--edit); } .ear.done .st { background:var(--done); }
+  .ear small { color:var(--dim); }
+  #main { flex:1; position:relative; }
+  #hud { position:absolute; top:8px; left:8px; right:8px; display:flex; gap:8px; flex-wrap:wrap; pointer-events:none; }
+  #hud > * { pointer-events:auto; }
+  .box { background:rgba(31,34,40,.92); padding:6px 9px; border-radius:6px; }
+  button { background:#2f3540; color:var(--text); border:1px solid #444b57; border-radius:5px; padding:4px 9px; cursor:pointer; font:inherit; }
+  button:hover { background:#3a4250; } button.primary { background:#2e6b3a; border-color:#3fb950; }
+  #help { position:absolute; bottom:8px; left:8px; color:var(--dim); line-height:1.5; }
+  #status { position:absolute; bottom:8px; right:8px; color:var(--dim); }
+  #label { position:absolute; pointer-events:none; color:var(--sel); font-weight:600; text-shadow:0 0 3px #000; }
+  textarea { width:240px; height:46px; background:#15171b; color:var(--text); border:1px solid #444b57; border-radius:5px; font:inherit; }
+  label { color:var(--dim); }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+               "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div id="side"><h1>Ears to fix</h1><div id="count"></div><div id="list"></div></div>
+<div id="main">
+  <div id="hud">
+    <div class="box" id="title">loading…</div>
+    <div class="box">
+      <label><input type="checkbox" id="showPred" checked> model (blue)</label>
+      <label><input type="checkbox" id="showRef"> original ref (grey)</label>
+      <label><input type="checkbox" id="showIdx"> all numbers</label>
+    </div>
+    <div class="box"><button id="undo">Undo</button> <button id="resetPt">Reset point</button> <button id="resetAll">Reset ear</button></div>
+    <div class="box"><textarea id="note" placeholder="note (optional)"></textarea></div>
+    <div class="box"><button class="primary" id="doneBtn">Mark done + next</button></div>
+  </div>
+  <div id="label"></div>
+  <div id="help">
+    Drag a coloured point: it slides on the scan surface. Or select a point, then <b>shift-click</b> the surface to drop it there.<br>
+    Orbit: left-drag empty space · pan: right-drag · zoom: wheel · <b>[ ]</b> select prev/next point · <b>f</b> face-on view · <b>z</b> undo · <b>n/p</b> next/prev ear · <b>d</b> done + next.<br>
+    Strips: <span style="color:#ff6b6b">helix 0-19</span> · <span style="color:#ffa94d">20-34</span> · <span style="color:#69db7c">35-38</span> · <span style="color:#fff">39 canal</span> · <span style="color:#4dabf7">40-49</span> · <span style="color:#da77f2">50-54</span>. Lobe = 15-19 (bigger).
+  </div>
+  <div id="status"></div>
+</div>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
+
+const STRIPS = [[0,20,0xff6b6b],[20,35,0xffa94d],[35,39,0x69db7c],[39,40,0xffffff],[40,50,0x4dabf7],[50,55,0xda77f2]];
+const colorOf = j => STRIPS.find(([a,b]) => j >= a && j < b)[2];
+const main = document.getElementById("main"), labelEl = document.getElementById("label");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(devicePixelRatio); main.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x16181c);
+const camera = new THREE.PerspectiveCamera(30, 1, 0.5, 2000);
+const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = false;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x404040, 1.1));
+const key = new THREE.DirectionalLight(0xffffff, 1.4); camera.add(key); key.position.set(0.4, 0.6, 1); scene.add(camera);
+
+let ears = [], cur = -1, data = null, mesh = null, pts = [], start = [], moved = new Set(), undo = [], sel = -1, dirty = false;
+const groups = { edit: new THREE.Group(), pred: new THREE.Group(), ref: new THREE.Group(), lines: new THREE.Group() };
+Object.values(groups).forEach(g => scene.add(g));
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
+let spheres = [], dragging = false, frame = null;
+
+function resize() { const w = main.clientWidth, h = main.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener("resize", resize); resize();
+
+async function loadList() {
+  ears = await (await fetch("/api/ears")).json();
+  const list = document.getElementById("list"); list.innerHTML = "";
+  ears.forEach((e, i) => {
+    const d = document.createElement("div");
+    d.className = "ear" + (e.done ? " done" : e.edited ? " edited" : "") + (i === cur ? " cur" : "");
+    d.innerHTML = `<span class="st"></span><span style="flex:1">${e.ear}${e.held_out ? " <small>(held-out)</small>" : ""}</span><small>${e.lobe_max.toFixed(1)}mm</small>`;
+    d.onclick = () => open(i); list.appendChild(d);
+  });
+  document.getElementById("count").textContent = `${ears.filter(e => e.done).length} done · ${ears.filter(e => e.edited && !e.done).length} started · ${ears.length} total`;
+}
+
+function clear(g) { while (g.children.length) { const c = g.children.pop(); c.geometry?.dispose(); } }
+
+async function open(i) {
+  if (dirty) await save(false);
+  cur = i; const e = ears[i];
+  data = await (await fetch(`/data/${e.ear}/points.json`)).json();
+  const adjR = await fetch(`/data/${e.ear}/adjusted.json`);
+  const adj = adjR.ok ? await adjR.json() : null;
+  start = data.start.map(p => new THREE.Vector3(...p));
+  pts = (adj ? adj.points : data.start).map(p => new THREE.Vector3(...p));
+  moved = new Set(adj ? adj.moved : []); undo = []; sel = -1; dirty = false;
+  document.getElementById("note").value = adj ? adj.note : "";
+  const geo = await new PLYLoader().loadAsync(`/data/${e.ear}/surface.ply`);
+  geo.computeVertexNormals();
+  if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); }
+  mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xd9a98a, roughness: 0.75, side: THREE.DoubleSide }));
+  scene.add(mesh);
+  build(); faceOn(); loadList();
+  document.getElementById("title").innerHTML = `<b>${e.ear}</b> · ${data.dataset}${data.held_out ? " · <b style='color:#d29922'>held-out: eval only, not for training</b>" : ""} · worst lobe ${data.lobe_max} mm${adj && adj.done ? " · <span style='color:#3fb950'>done</span>" : ""}`;
+}
+
+function build() {
+  ["edit", "pred", "ref", "lines"].forEach(k => clear(groups[k])); spheres = [];
+  const sg = new THREE.SphereGeometry(1, 16, 12);
+  pts.forEach((p, j) => {
+    const r = (j >= 15 && j < 20) ? 0.55 : 0.4;
+    const m = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: colorOf(j) }));
+    m.scale.setScalar(r); m.position.copy(p); m.userData.j = j; groups.edit.add(m); spheres.push(m);
+  });
+  data.pred.forEach(p => { const m = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.8 })); m.scale.setScalar(0.3); m.position.set(...p); groups.pred.add(m); });
+  start.forEach(p => { const m = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: 0x9aa0a6, transparent: true, opacity: 0.6 })); m.scale.setScalar(0.28); m.position.copy(p); groups.ref.add(m); });
+  lines(); highlight(); toggles();
+}
+
+function lines() {
+  clear(groups.lines);
+  for (const [a, b, c] of STRIPS) if (b - a > 1) {
+    groups.lines.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts.slice(a, b)), new THREE.LineBasicMaterial({ color: c, depthTest: false, transparent: true, opacity: 0.7 })));
+  }
+  const pl = []; for (const [a, b] of STRIPS) if (b - a > 1) pl.push(...data.pred.slice(a, b).map(p => new THREE.Vector3(...p)), null);
+  let seg = []; for (const p of pl) { if (p) seg.push(p); else { groups.lines.add(Object.assign(new THREE.Line(new THREE.BufferGeometry().setFromPoints(seg), new THREE.LineBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.5 })), { userData: { pred: true } })); seg = []; } }
+}
+
+function highlight() { spheres.forEach((m, j) => { m.material.color.set(j === sel ? 0xffd400 : colorOf(j)); m.scale.setScalar(j === sel ? 0.8 : (j >= 15 && j < 20 ? 0.55 : 0.4)); }); }
+
+function toggles() {
+  groups.pred.visible = document.getElementById("showPred").checked;
+  groups.lines.children.forEach(l => { if (l.userData.pred) l.visible = groups.pred.visible; });
+  groups.ref.visible = document.getElementById("showRef").checked;
+}
+["showPred", "showRef"].forEach(id => document.getElementById(id).onchange = toggles);
+
+function faceOn() {
+  const c = new THREE.Vector3(); pts.forEach(p => c.add(p)); c.divideScalar(pts.length);
+  // pinna plane normal by PCA of the points; outward = away from the bulk of the scan (the head)
+  const X = pts.map(p => p.clone().sub(c)); const C = [[0,0,0],[0,0,0],[0,0,0]];
+  X.forEach(v => { const a = [v.x, v.y, v.z]; for (let i = 0; i < 3; i++) for (let k = 0; k < 3; k++) C[i][k] += a[i] * a[k]; });
+  let n = smallestEig(C);
+  const pos = mesh.geometry.attributes.position; let s = 0;
+  for (let i = 0; i < pos.count; i += 7) s += Math.sign((pos.getX(i) - c.x) * n.x + (pos.getY(i) - c.y) * n.y + (pos.getZ(i) - c.z) * n.z);
+  if (s > 0) n.negate();
+  const top = new THREE.Vector3(); pts.slice(0, 9).forEach(p => top.add(p)); top.divideScalar(9);
+  const low = new THREE.Vector3(); pts.slice(15, 20).forEach(p => low.add(p)); low.divideScalar(5);
+  const up = top.sub(low); up.addScaledVector(n, -up.dot(n)).normalize();
+  frame = { c, n, up };
+  camera.up.copy(up); camera.position.copy(c).addScaledVector(n, 150); controls.target.copy(c); controls.update();
+}
+
+function smallestEig(C) {   // inverse power iteration on C + eps*I
+  const M = new THREE.Matrix3().set(C[0][0] + 1e-6, C[0][1], C[0][2], C[1][0], C[1][1] + 1e-6, C[1][2], C[2][0], C[2][1], C[2][2] + 1e-6).invert();
+  let v = new THREE.Vector3(0.3, 0.5, 0.8);
+  for (let i = 0; i < 60; i++) v.applyMatrix3(M).normalize();
+  return v;
+}
+
+function setMouse(ev) { const r = renderer.domElement.getBoundingClientRect(); mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(mouse, camera); }
+function surfaceHit() { const h = ray.intersectObject(mesh, false); return h.length ? h[0].point : null; }
+
+function place(j, p) {
+  undo.push([j, pts[j].clone(), moved.has(j)]); pts[j].copy(p); spheres[j].position.copy(p); moved.add(j); dirty = true; lines();
+}
+
+renderer.domElement.addEventListener("pointerdown", ev => {
+  if (ev.button !== 0 || !mesh) return;
+  setMouse(ev);
+  if (ev.shiftKey && sel >= 0) { const p = surfaceHit(); if (p) { place(sel, p); save(false); } return; }
+  const h = ray.intersectObjects(spheres, false);
+  if (h.length) { sel = h[0].object.userData.j; highlight(); dragging = true; controls.enabled = false; undo.push([sel, pts[sel].clone(), moved.has(sel)]); }
+});
+renderer.domElement.addEventListener("pointermove", ev => {
+  setMouse(ev);
+  if (dragging && sel >= 0) { const p = surfaceHit(); if (p) { pts[sel].copy(p); spheres[sel].position.copy(p); moved.add(sel); dirty = true; lines(); } }
+  const h = ray.intersectObjects(spheres, false);
+  const j = dragging ? sel : (h.length ? h[0].object.userData.j : sel);
+  if (j >= 0) { const v = pts[j].clone().project(camera); const r = renderer.domElement.getBoundingClientRect();
+    labelEl.style.left = (r.left - main.getBoundingClientRect().left + (v.x + 1) / 2 * r.width + 8) + "px";
+    labelEl.style.top = ((1 - v.y) / 2 * r.height - 18) + "px"; labelEl.textContent = j; } else labelEl.textContent = "";
+});
+addEventListener("pointerup", () => { if (dragging) { dragging = false; controls.enabled = true; save(false); } });
+
+function doUndo() { const u = undo.pop(); if (!u) return; const [j, p, was] = u; pts[j].copy(p); spheres[j].position.copy(p); if (!was) moved.delete(j); dirty = true; lines(); save(false); }
+document.getElementById("undo").onclick = doUndo;
+document.getElementById("resetPt").onclick = () => { if (sel >= 0) { place(sel, start[sel]); moved.delete(sel); save(false); } };
+document.getElementById("resetAll").onclick = () => { if (!confirm("Reset every point of this ear to the reference?")) return; pts.forEach((p, j) => { undo.push([j, p.clone(), moved.has(j)]); p.copy(start[j]); spheres[j].position.copy(start[j]); }); moved.clear(); dirty = true; lines(); save(false); };
+document.getElementById("doneBtn").onclick = async () => { await save(true); if (cur + 1 < ears.length) open(cur + 1); };
+document.getElementById("showIdx").onchange = () => {};
+
+async function save(done) {
+  if (cur < 0) return;
+  const prevDone = ears[cur].done;
+  const body = { points: pts.map(p => [p.x, p.y, p.z]), moved: [...moved], done: done || prevDone, note: document.getElementById("note").value };
+  const r = await fetch(`/api/save/${ears[cur].ear}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json(); dirty = false;
+  document.getElementById("status").textContent = r.ok ? `saved ${j.saved} · ${moved.size} point(s) moved` : `SAVE FAILED: ${j.error}`;
+  ears[cur].edited = true; ears[cur].done = body.done; if (done) loadList();
+}
+document.getElementById("note").onchange = () => save(false);
+
+addEventListener("keydown", ev => {
+  if (ev.target.tagName === "TEXTAREA") return;
+  if (ev.key === "]" || ev.key === "[") { sel = sel < 0 ? 0 : (sel + (ev.key === "]" ? 1 : 54)) % 55; highlight(); }
+  else if (ev.key === "z") doUndo();
+  else if (ev.key === "f") faceOn();
+  else if (ev.key === "n" && cur + 1 < ears.length) open(cur + 1);
+  else if (ev.key === "p" && cur > 0) open(cur - 1);
+  else if (ev.key === "d") document.getElementById("doneBtn").click();
+});
+
+// all-index labels, drawn each frame when ticked
+const idxLayer = document.createElement("div"); idxLayer.style.cssText = "position:absolute;inset:0;pointer-events:none"; main.appendChild(idxLayer);
+function drawIdx() {
+  if (!document.getElementById("showIdx").checked || !pts.length) { idxLayer.innerHTML = ""; return; }
+  const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
+  idxLayer.innerHTML = pts.map((p, j) => { const v = p.clone().project(camera); return `<span style="position:absolute;left:${(v.x + 1) / 2 * w + 5}px;top:${(1 - v.y) / 2 * h - 7}px;color:#fff;font-size:10px;text-shadow:0 0 2px #000">${j}</span>`; }).join("");
+}
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); drawIdx(); });
+await loadList(); if (ears.length) open(ears.findIndex(e => !e.done) >= 0 ? ears.findIndex(e => !e.done) : 0);
+</script>
+</body>
+</html>
