@@ -37,7 +37,7 @@ import open3d as o3d
 
 from .camera import orbit_extrinsic
 from .config import DEFAULTS
-from .ear_view import ear_score, ear_view, load_detector, side_frame
+from .ear_view import ear_score, ear_view, load_detector, occupancy_scale, side_frame
 from .frames import in_frame, normalize_head
 from .render import render, side_light
 from .triangulate import ransac_point
@@ -280,12 +280,14 @@ class Pipeline:
 
     def _multiview(self, ear, side, R, c0, s):
         c = self.cfg
-        g = in_frame(ear, R, c0, s)
         d0 = np.asarray(c["multiview_light_dir"], float) * ([-1.0, 1, 1] if side == "R" else 1.0)
+        cfg = dict(c, light_dir=tuple(d0), light_mirror=False, light_frame="world")
+        if c.get("target_occupancy"):                            # frame from the ear, not the box
+            s = occupancy_scale(ear, R, c0, s, c, cfg, self.pred, c["target_occupancy"])
+        g = in_frame(ear, R, c0, s)
         V = len(self.angles)
         O = np.full((V, 55, 3), np.nan); D = O.copy()
         for i, (yw, pt) in enumerate(self.angles):
-            cfg = dict(c, light_dir=tuple(d0), light_mirror=False, light_frame="world")
             img, _, cam = render(g, cfg, E=orbit_extrinsic(float(yw), float(pt), c))
             o, d = cam.rays(self.pred.predict(img))
             O[i], D[i] = o * s @ R + c0, d @ R

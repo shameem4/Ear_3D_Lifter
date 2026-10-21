@@ -18,8 +18,8 @@ or `from ear3d.pipeline import Pipeline; Pipeline().run(mesh)`.
 - **Output:** `L`, `R` (55 x 3 each) in the input mesh's own coordinates,
   NaN where an ear or landmark was not found (`L` is the subject's left),
   and `ckpt`, the 2D checkpoint used.
-- **Accuracy:** median **1.46 mm** per ear (vs lm3d_v12) on 16 HUTUBS heads used nowhere in
-  building it, each randomly rotated; 4.4% of points beyond 5 mm, mostly on
+- **Accuracy:** median **1.47 mm** per ear (vs lm3d_v12) on 16 HUTUBS heads used nowhere in
+  building it, each randomly rotated; 3.8% of points beyond 5 mm, mostly on
   the upper helix. About 15 s per head on one GPU. Validated only on HUTUBS
   and SONICOM scans (no hair); one real scan looked right.
 
@@ -34,7 +34,8 @@ beside this repo (or `$EAR_LANDMARKER`), `BlazeEar` beside it (or
     head scan
       -> orient: FaceMesh face frame, checked (skull above neck, symmetry,
          nose-ear distance), retried turned if a check fails
-      -> per ear: BlazeEar box, 25 rendered views on a yaw x pitch grid
+      -> per ear: BlazeEar box, re-sized so the ear fills the frame as in the
+         2D model's training (target_occupancy), 25 views on a yaw x pitch grid
       -> 2D landmarks in every view (Ear_Landmarker)
       -> each landmark triangulated from its best 8 views (the view table),
          RANSAC, then re-seated on the head surface

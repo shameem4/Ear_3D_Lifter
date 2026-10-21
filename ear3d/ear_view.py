@@ -149,3 +149,20 @@ def ear_view(mesh_c, side, cfg, yolo):
     img_z, depth_z, cam_z = render(in_frame(mesh_c, R, centre, scale), c)
     return dict(img=img_z, depth=depth_z, cam=cam_z, R=R, centre=centre,
                 scale=scale, box_mm=float(box_mm))
+
+
+def occupancy_scale(mesh, R, centre, scale, cfg, light_cfg, pred, target, iters=2):
+    """Re-size an ear frame so the 2D model's landmarks span `target` of the
+    frame side in the face-on orbit view (the model's own TRAIN_OCCUPANCY
+    definition: landmark extent over crop side). The BlazeEar box is larger
+    than the ear and varies with it, so PAD alone leaves occupancy at ~0.5-0.6.
+    The orbit keeps the returned scale for every view."""
+    from .camera import orbit_extrinsic
+    E = orbit_extrinsic(0.0, 0.0, cfg)
+    for _ in range(iters):
+        img, _, _ = render(in_frame(mesh, R, centre, scale), light_cfg, E=E)
+        occ = float(np.ptp(np.asarray(pred.predict(img)), axis=0).max()) / img.shape[1]
+        if not np.isfinite(occ) or occ <= 0:
+            break
+        scale *= occ / target
+    return scale

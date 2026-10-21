@@ -28,6 +28,11 @@ The table built this way matches the shipped `view_table_v11` (median cell
   6.0/8. Held-out: 1.561 -> 1.459 mm vs v12; vs hand-marked v7, 3.080 -> 3.070,
   across-contour better on 21/32 ears (-0.05 mm), upper helix 2.28 -> 2.05,
   lobe 3.09 -> 2.61.
+- **view_table_v13** (2026-10-21, the default): as v12 but rays collected at
+  `target_occupancy=0.75` (ear-sized framing; config default), in
+  `runs/mvcache/sun_0.6_-0.4_-1_head_lmw_v4fc05_occ75`. Step 3 applies the
+  config's target_occupancy itself, so a table always matches the framing it
+  was collected at; changing one means rebuilding the other.
 - A head the plain face search misses is retried on fresh rotations (pp95
   needs a second draw). Frames are stored with the rotation, so this is safe.
 - Caches record which corpus generation and 2D checkpoint made them

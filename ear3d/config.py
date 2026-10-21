@@ -172,6 +172,15 @@ DEFAULTS = dict(
                             # value today: 40 heads x 5 suns, this one gave
                             # the best face frames (median 5.1 deg vs scan,
                             # 40/40 found; a camera-axis sun lost 4).
+    target_occupancy=0.75,  # each ear's orbit is re-sized so the face-on
+                            # landmarks span this share of the frame (the
+                            # model's TRAIN_OCCUPANCY is 0.777; the BlazeEar box
+                            # + ear_view.PAD alone gives ~0.5-0.6). Default since
+                            # 2026-10-21 with view_table_v13, which was learned
+                            # at it: held-out parity overall (-0.004 mm vs v12,
+                            # p=0.92), pp16's attached lobe 9.7 -> 5.7 mm.
+                            # Without a matching table it is WORSE (v7 +0.14).
+                            # None restores box framing.
     ear_detector="blazeear",  # pipeline ear box: "blazeear" (Apache-2.0) or "yolo"
                               # (Ultralytics, AGPL-3.0; local use only). 16 held-out
                               # heads: 1.68 vs 1.61 mm median vs v9, 32/32 ears both.
@@ -225,9 +234,9 @@ DEFAULTS = dict(
     # NOTE there is no crop setting here, and the two 2D paths differ:
     # - the 3D pipeline (pipeline._multiview) feeds the WHOLE render to a bare
     #   LandmarkPredictor: no detector, no ROI, no occupancy step. Framing is
-    #   set once per ear by ear_view (BlazeEar box + ear_view.PAD) and the
-    #   orbit keeps it, so occupancy is ours: PAD 0.25 gives ~0.56 against the
-    #   model's TRAIN_OCCUPANCY 0.777 (Ear_Landmarker, 2026-10-21).
+    #   set once per ear by ear_view (BlazeEar box + ear_view.PAD, then
+    #   target_occupancy) and the
+    #   orbit keeps it, so occupancy is ours: target_occupancy below.
     # - label.py (single-view viewer) uses EarLandmarkerPipeline, which runs
     #   their detect -> ROI -> refine path and drives occupancy itself.
 

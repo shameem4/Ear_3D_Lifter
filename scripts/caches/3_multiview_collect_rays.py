@@ -14,6 +14,7 @@ import open3d as o3d
 from ear3d.config import DEFAULTS
 from ear3d.skin import apply_skin
 from ear3d.camera import orbit_extrinsic
+from ear3d.ear_view import occupancy_scale
 from ear3d.frames import in_frame
 from ear3d.render import render
 from ear3d.backproject import backproject_snapped
@@ -41,8 +42,11 @@ for f in fs[WK::NW]:
         skinned = {hp: m}
     m = skinned[hp]
     R, c0, s = z["R"], z["centre"], float(z["scale"])
-    gf = in_frame(m, R, c0, s)
     d0 = SUN * ([-1.0, 1, 1] if side == "R" else 1.0)          # side_light, applied by hand
+    if DEFAULTS.get("target_occupancy"):                       # as pipeline._multiview
+        s = occupancy_scale(m, R, c0, s, DEFAULTS, dict(DEFAULTS, light_dir=tuple(d0), light_mirror=False,
+                            light_frame="world"), pred, DEFAULTS["target_occupancy"])
+    gf = in_frame(m, R, c0, s)
     E0 = orbit_extrinsic(0, 0, DEFAULTS)
     uv = np.full((len(ANG), 55, 2), np.nan); O = np.full((len(ANG), 55, 3), np.nan); D = O.copy(); p0 = None
     for i, (yw, pt) in enumerate(ANG):

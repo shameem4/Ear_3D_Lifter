@@ -29,7 +29,7 @@ VERSIONS = {
                 gt_lm3d="lm3d_v9_canonical_mm.npz", view_table="view_table_v9.npz",
                 mean="ear_mean_v4.obj"),
     "lmw": dict(canonical="corpus/canonical_lmw", canon2scan="corpus/canon2scan_lmw",
-                gt_lm3d="lm3d_v12_canonical_mm.npz", view_table="view_table_v12.npz",
+                gt_lm3d="lm3d_v12_canonical_mm.npz", view_table="view_table_v13.npz",
                 mean="ear_mean_v5.obj"),
 }
 LEGACY = "esc"            # generation of any cache without a `corpus` key

@@ -41,6 +41,17 @@ were measured against, because both have changed.
   (`scripts/eval/cross_view_agreement.py`, best 8): 0.770 -> 0.626 mm, >5 mm
   0.88% -> 0.17%, lobe 5.6% -> 0.7%. The chosen views agree; the remaining
   error is shared placement, not disagreement.
+- **Framing to the model's training occupancy** (2026-10-21). The 3D
+  pipeline feeds whole renders to a bare LandmarkPredictor, so occupancy is
+  set by our framing: the BlazeEar box + PAD gave 0.50-0.62 landmark extent
+  against TRAIN_OCCUPANCY 0.777. Re-sizing each orbit to 0.75 is parity on the
+  held-out 16 WITH a table learned at it (vs v12 -0.004 mm p=0.92, vs v7
+  -0.010 p=0.89, >5 mm 4.38% -> 3.75% n.s.), and WORSE without one (v7 +0.136
+  p=0.004, >5 mm +2.8pp). It fixes most of pp16's attached lobe (point 19
+  9.7 -> 5.7 mm). Default since then, with view_table_v13. Stronger AO in
+  the ear skin (0.75 -> 1.0), tried for the same lobe, changed nothing either
+  way. Attached lobes are common in photos and v4 handles them there
+  (Ear_Landmarker), so pp16 is a render-domain miss.
 - **Run-to-run noise.** The same ear re-predicted under heavy GPU load moved
   0.10 mm median per ear, with single landmarks jumping a few mm (RANSAC
   inlier flips); serial and concurrent reruns are otherwise bit-identical.
