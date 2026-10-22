@@ -54,9 +54,10 @@ were measured against, because both have changed.
   (Ear_Landmarker), so pp16 is a render-domain miss.
 - **Attached lobes are a known miss** (pp16 left; pp72 left in the low view).
   With no free lobe edge, the 2D model continues the rim onto the cheek at
-  every angle used, most visibly from below (view 4, yaw -30 pitch +30). The
-  view table already keeps the low views out of the lobe's best 8, so
-  excluding them by hand changes nothing, and stronger crease AO did nothing.
+  every angle used, most visibly in view 4 (yaw -30, pitch +30, which is
+  from ABOVE: negative pitch is below). The view table already keeps view 4
+  out of the lobe's best 8, which it builds mostly from below (pitch -30..-15),
+  so excluding views by hand changes nothing, and stronger crease AO did nothing.
   Ear_Landmarker: v4 handles attached lobes in eye-level photos; the gap is
   viewpoint, and fixing it needs render labels neither reference provides
   (v12 is model-derived, v7 sits inside the rim).

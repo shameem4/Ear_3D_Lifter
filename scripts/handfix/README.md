@@ -42,7 +42,10 @@ The server binds 127.0.0.1 only.
   occupancy, licence, visible (55 0/1), trusted (55 0/1).
 - Naming: `syn_<dataset>_<subject>_<side>_<viewid>.png`.
 - ~40 views per ear: the 25 orbit views plus ~15 random poses (yaw ±45,
-  pitch -30..+45, roll ±15), a third of all views from below.
+  pitch -45..+30, roll ±15), ~40% of all views from below. Pitch sign:
+  NEGATIVE pitch is the camera below the ear (orbit_extrinsic: camera at
+  frame y = sin(pitch), +y toward the helix top). The agreed spec said
+  "pitch +15 or more" for below, copying a sign error of ours.
 - Right ears rendered as right ears, not mirrored. Vary skin, lighting and
   background.
 - Licence: SONICOM is CC BY-SA 3.0 per clean_3d_data/README.md. The user
