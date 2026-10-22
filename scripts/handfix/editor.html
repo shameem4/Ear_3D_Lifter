@@ -50,7 +50,7 @@
   </div>
   <div id="label"></div>
   <div id="help">
-    Drag a coloured point: it slides on the scan surface. Or select a point, then <b>shift-click</b> the surface to drop it there.<br>
+    Drag a coloured point: it slides on the scan surface. Faded points are behind the surface from this view (still draggable). Or select a point, then <b>shift-click</b> the surface to drop it there.<br>
     Orbit: left-drag empty space · pan: right-drag · zoom: wheel · <b>[ ]</b> select prev/next point · <b>f</b> face-on view · <b>z</b> undo · <b>n/p</b> next/prev ear · <b>d</b> done + next.<br>
     Strips: <span style="color:#ff6b6b">helix 0-19</span> · <span style="color:#ffa94d">20-34</span> · <span style="color:#69db7c">35-38</span> · <span style="color:#fff">39 canal</span> · <span style="color:#4dabf7">40-49</span> · <span style="color:#da77f2">50-54</span>. Lobe = 15-19 (bigger).
   </div>
@@ -119,12 +119,14 @@ function build() {
   const sg = new THREE.SphereGeometry(1, 16, 12);
   pts.forEach((p, j) => {
     const r = (j >= 15 && j < 20) ? 0.55 : 0.4;
-    const m = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: colorOf(j) }));
-    m.scale.setScalar(r); m.position.copy(p); m.userData.j = j; groups.edit.add(m); spheres.push(m);
+    // drawn over the surface: reference points sit a fraction of a mm off the
+    // scan (median 0.12, mostly beneath it), so depth-tested dots get buried
+    const m = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: colorOf(j), depthTest: false, transparent: true }));
+    m.renderOrder = 10; m.scale.setScalar(r); m.position.copy(p); m.userData.j = j; groups.edit.add(m); spheres.push(m);
   });
   data.pred.forEach(p => { const m = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.8 })); m.scale.setScalar(0.3); m.position.set(...p); groups.pred.add(m); });
   start.forEach(p => { const m = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: 0x9aa0a6, transparent: true, opacity: 0.6 })); m.scale.setScalar(0.28); m.position.copy(p); groups.ref.add(m); });
-  lines(); highlight(); toggles();
+  lines(); highlight(); toggles(); occlusion();
 }
 
 function lines() {
@@ -135,6 +137,19 @@ function lines() {
   const pl = []; for (const [a, b] of STRIPS) if (b - a > 1) pl.push(...data.pred.slice(a, b).map(p => new THREE.Vector3(...p)), null);
   let seg = []; for (const p of pl) { if (p) seg.push(p); else { groups.lines.add(Object.assign(new THREE.Line(new THREE.BufferGeometry().setFromPoints(seg), new THREE.LineBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.5 })), { userData: { pred: true } })); seg = []; } }
 }
+
+// dim points the surface hides from the current camera (still clickable)
+const occRay = new THREE.Raycaster();
+function occlusion() {
+  if (!mesh || !spheres.length) return;
+  spheres.forEach((m, j) => {
+    const to = pts[j].clone().sub(camera.position); const d = to.length();
+    occRay.set(camera.position, to.normalize()); occRay.far = d - 0.6;
+    const hidden = occRay.intersectObject(mesh, false).length > 0;
+    m.material.opacity = hidden ? 0.4 : 1.0;
+  });
+}
+controls.addEventListener("change", occlusion);
 
 function highlight() { spheres.forEach((m, j) => { m.material.color.set(j === sel ? 0xffd400 : colorOf(j)); m.scale.setScalar(j === sel ? 0.8 : (j >= 15 && j < 20 ? 0.55 : 0.4)); }); }
 
@@ -191,7 +206,7 @@ renderer.domElement.addEventListener("pointermove", ev => {
     labelEl.style.left = (r.left - main.getBoundingClientRect().left + (v.x + 1) / 2 * r.width + 8) + "px";
     labelEl.style.top = ((1 - v.y) / 2 * r.height - 18) + "px"; labelEl.textContent = j; } else labelEl.textContent = "";
 });
-addEventListener("pointerup", () => { if (dragging) { dragging = false; controls.enabled = true; save(false); } });
+addEventListener("pointerup", () => { if (dragging) { dragging = false; controls.enabled = true; occlusion(); save(false); } });
 
 function doUndo() { const u = undo.pop(); if (!u) return; const [j, p, was] = u; pts[j].copy(p); spheres[j].position.copy(p); if (!was) moved.delete(j); dirty = true; lines(); save(false); }
 document.getElementById("undo").onclick = doUndo;
