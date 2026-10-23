@@ -61,6 +61,18 @@ were measured against, because both have changed.
   Ear_Landmarker: v4 handles attached lobes in eye-level photos; the gap is
   viewpoint, and fixing it needs render labels neither reference provides
   (v12 is model-derived, v7 sits inside the rim).
+- **Hand-corrected held-out reference, and the first 2D model to beat v4 on
+  it** (2026-10-22). The user placed all 55 points on the 32 held-out ears
+  (`scripts/handfix`, scored by `scripts/eval/score_handfix.py`): the only
+  reference no 2D model shaped. Ear_Landmarker trained v5 on 68 hand-corrected
+  attached-lobe ears rendered as synthetic_v1. Paired vs v4 (view_table_v13):
+  v5syn25 (6% synthetic) -0.21 mm median (25/32, p=0.002), upper helix -0.61,
+  >5 mm 4.66% -> 1.53%; v5syn100 (21%) -0.33 (27/32). The lobe gain is not
+  significant: the batch was all attached lobes, and the models learned to run
+  point 19 down a ridge even on free lobes (pp33L), so a free-lobe batch
+  follows. Photo cost (Ear_Landmarker, 909 ears): +1.8% at 6%, +4.1% at 21%.
+  Anchoring favoured v4 (corrections started from v12, v4 shown), so the win
+  is if anything understated.
 - **Run-to-run noise.** The same ear re-predicted under heavy GPU load moved
   0.10 mm median per ear, with single landmarks jumping a few mm (RANSAC
   inlier flips); serial and concurrent reruns are otherwise bit-identical.
