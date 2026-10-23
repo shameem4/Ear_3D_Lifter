@@ -4,7 +4,7 @@
 Usage: 1_export_ears.py [--preds DIR] [--lobe-mm 5] [--out runs/handfix] [EAR ...]
 
 Picks every corpus ear whose worst lobe point (15-19) is more than --lobe-mm
-from the reference (lm3d_v12) in the 2D model's corpus predictions, plus any
+from the reference (--reference, default lm3d_v12) in the 2D model's corpus predictions, plus any
 EAR named. Per ear writes OUT/<ear>/:
   surface.ply   the scan around the ear, in the ear's canonical mm (right ears
                 mirrored, as stored), cropped to a sphere around the fit
@@ -40,8 +40,9 @@ def main():
     a.add_argument("--preds", default=str(WRAP / "corpus/lmwrap_v1/preds_v4fc05"))
     a.add_argument("--lobe-mm", type=float, default=5.0)
     a.add_argument("--out", default="runs/handfix")
+    a.add_argument("--reference", default="lm3d_v12_canonical_mm.npz", help="start points (templates/ lm3d file)")
     a = a.parse_args()
-    L, N = load_reference("lm3d_v12_canonical_mm.npz")
+    L, N = load_reference(a.reference)
     out = pathlib.Path(a.out); out.mkdir(parents=True, exist_ok=True)
     picked = {}
     for f in sorted(pathlib.Path(a.preds).glob("*.npz")):
@@ -65,7 +66,7 @@ def main():
         m = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(V[used]), o3d.utility.Vector3iVector(remap[T]))
         o3d.io.write_triangle_mesh(str(d / "surface.ply"), m, write_ascii=False)
         json.dump(dict(ear=nm, dataset=ds, held_out=nm.rsplit("_", 1)[0] in HELD_OUT,
-                       frame="canonical mm (right ears mirrored about z)", reference="lm3d_v12_canonical_mm.npz",
+                       frame="canonical mm (right ears mirrored about z)", reference=a.reference,
                        start=np.round(G, 4).tolist(), pred=np.round(P, 4).tolist(),
                        error=np.round(e, 3).tolist(), lobe_max=round(float(e[LOBE].max()), 2)),
                   open(d / "points.json", "w"))
