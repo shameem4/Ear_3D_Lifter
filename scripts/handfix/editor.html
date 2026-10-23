@@ -212,7 +212,7 @@ function doUndo() { const u = undo.pop(); if (!u) return; const [j, p, was] = u;
 document.getElementById("undo").onclick = doUndo;
 document.getElementById("resetPt").onclick = () => { if (sel >= 0) { place(sel, start[sel]); moved.delete(sel); save(false); } };
 document.getElementById("resetAll").onclick = () => { if (!confirm("Reset every point of this ear to the reference?")) return; pts.forEach((p, j) => { undo.push([j, p.clone(), moved.has(j)]); p.copy(start[j]); spheres[j].position.copy(start[j]); }); moved.clear(); dirty = true; lines(); save(false); };
-document.getElementById("doneBtn").onclick = async () => { await save(true); if (cur + 1 < ears.length) open(cur + 1); };
+document.getElementById("doneBtn").onclick = async () => { await save(true); const k = ears.findIndex(e => !e.done); if (k >= 0) open(k); };
 document.getElementById("showIdx").onchange = () => {};
 
 async function save(done) {
@@ -222,7 +222,8 @@ async function save(done) {
   const r = await fetch(`/api/save/${ears[cur].ear}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json(); dirty = false;
   document.getElementById("status").textContent = r.ok ? `saved ${j.saved} · ${moved.size} point(s) moved` : `SAVE FAILED: ${j.error}`;
-  ears[cur].edited = true; ears[cur].done = body.done; if (done) loadList();
+  ears[cur].edited = true; ears[cur].done = body.done;
+  if (done) { const n = ears[cur].ear; await loadList(); cur = ears.findIndex(e => e.ear === n); }   // the list reorders by status
 }
 document.getElementById("note").onchange = () => save(false);
 

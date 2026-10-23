@@ -49,7 +49,7 @@ def make_handler(root):
                     done = json.loads(adj.read_text()).get("done", False) if adj.is_file() else False
                     rows.append(dict(ear=d.name, dataset=pj["dataset"], held_out=pj["held_out"],
                                      lobe_max=pj["lobe_max"], edited=adj.is_file(), done=done))
-                return self._json(sorted(rows, key=lambda r: -r["lobe_max"]))
+                return self._json(sorted(rows, key=lambda r: (r["done"], not r["edited"], -r["lobe_max"])))  # started, untouched, done
             if len(parts) == 3 and parts[0] == "data" and NAME.match(parts[1]) and \
                     parts[2] in ("surface.ply", "points.json", "adjusted.json"):
                 ctype = "application/octet-stream" if parts[2].endswith(".ply") else "application/json"
