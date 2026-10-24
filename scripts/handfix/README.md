@@ -63,3 +63,10 @@ As run 2026-10-23: runs/synthetic_v3, 44,400 images, 444 ears (210 hand,
 234 v13), 222 subjects, 15 GB. Long processes start failing the face frame
 ("no face frame, skipped" and an empty _rows file): delete those and re-run;
 fresh processes render them.
+
+2026-10-23 revision: SONICOM STLs share no vertices, so v3's decimation and
+noise broke 8,850 images. Damage is now decimation only, on welded vertices
+(the user judged noise and holes unrealistic). `--jewellery 0.3
+--only-jewellery` renders the jewellery add-on set (ear3d.jewellery: lobe
+hoops and studs, helix hoops and studs, geometry only, labels unchanged).
+Outputs: runs/synthetic_v3r (replaces v3) and runs/synthetic_v3j.

@@ -6,6 +6,11 @@ draws from the heads in neither (16 of 56 HUTUBS heads), given a random 3-axis r
 the pipeline UNSKINNED -- exactly what a user would pass in. Output per head:
 OUT_DIR/<head>.npz with pred_L/R, gt_L/R under config gt_lm3d and its
 alternates, all in the rotated input frame.
+
+EAR3D_JEWELLERY=<seed> adds synthetic jewellery (ear3d.jewellery) to both
+ears of every head before it is turned, placed from the reference landmarks;
+the landmarks are unchanged. Held-out heads are never rendered for training,
+so this is a test condition only.
 """
 import pathlib
 import sys
@@ -19,6 +24,7 @@ from ear3d import corpus, gt
 from ear3d.config import DEFAULTS
 from ear3d.corpus import WRAP
 from ear3d.data import load_ear
+from ear3d.jewellery import add_jewellery
 from ear3d.pipeline import Pipeline
 
 out, ss, n, WK, NW = pathlib.Path(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5])
@@ -44,10 +50,17 @@ for i, hd in enumerate(sample[WK::NW]):
     dst = out / f"{hd}.npz"
     if dst.exists(): continue
     head, _, _ = load_ear(f"{hd}_left", "hutubs", dict(DEFAULTS, skin=False))
+    jew = {}
+    if os.environ.get("EAR3D_JEWELLERY"):
+        rj = np.random.default_rng([int(os.environ["EAR3D_JEWELLERY"]), 1000 + sample.index(hd)])
+        for sd in "LR":
+            nm = f"{hd}_{'left' if sd == 'L' else 'right'}"; T = gt.inv(f"{hd}_left", corpus.CURRENT) @ np.linalg.inv(gt.inv_gt(nm))
+            P = (np.c_[gt.LM["landmarks"][gt.NAMES.index(nm)][:55], np.ones(55)] @ T.T)[:, :3]
+            head, jew[sd] = add_jewellery(head, P, np.asarray(head.vertices).mean(0), rj)
     Rr = rot((ss, 1000 + sample.index(hd)))
     head.vertices = o3d.utility.Vector3dVector(np.asarray(head.vertices) @ Rr.T); head.vertex_colors = o3d.utility.Vector3dVector()
     res = pipe.run(head)
-    rec = {"Rr": Rr, "ckpt": pipe.ckpt}
+    rec = {"Rr": Rr, "ckpt": pipe.ckpt, "jewellery": str(jew)}
     for sd in "LR":
         rec[f"pred_{sd}"] = res[sd] if res and res[sd] is not None else np.full((55, 3), np.nan)
         nm = f"{hd}_{'left' if sd == 'L' else 'right'}"; T = gt.inv(f"{hd}_left", corpus.CURRENT) @ np.linalg.inv(gt.inv_gt(nm))   # load_ear built the head in CURRENT

@@ -19,8 +19,8 @@ inference. Format agreed with Ear_Landmarker (2026-10-22):
 
 Skin 0 is the pipeline's exact appearance (ear_tone, clean skin, its sun).
 Skins 1.. draw a Fitzpatrick tone, blotching, AO strength and a sun turned up
-to 30 deg from the pipeline's, and half of them damage the geometry
-(decimation, vertex noise or holes) for scans from the wild; light_id = skin_id.
+to 30 deg from the pipeline's, and half of them decimate the geometry
+(coarse scans from the wild); light_id = skin_id.
 
 Labels: the user's hand-corrected points where the ear is done in runs/handfix
 (label_source hand, trusted 1), else lm3d_v13 (label_source v13, trusted 0).
@@ -46,6 +46,7 @@ from ear3d.camera import orbit_extrinsic                             # noqa: E40
 from ear3d.corpus import WRAP                                        # noqa: E402
 from ear3d.ear_view import ear_view, occupancy_scale                 # noqa: E402
 from ear3d.frames import in_frame                                    # noqa: E402
+from ear3d.jewellery import add_jewellery                            # noqa: E402
 from ear3d.gt import load_reference                                  # noqa: E402
 from ear3d.pipeline import Pipeline                                  # noqa: E402
 from ear3d.render import render                                      # noqa: E402
@@ -56,7 +57,7 @@ LICENCE = {"hutubs": "CC BY 4.0 (HUTUBS)",
            "sonicom": "CC BY-SA 3.0 (SONICOM); renders used under the user's permissive reading, 2026-10-21"}
 VIS_MM = 2.0                        # depth-test slack: face-on, 1 mm hides ~5 rim points that are in plain view
 FIELDS = ["stem", "dataset", "subject", "side", "yaw", "pitch", "occupancy", "licence", "skin_id", "light_id",
-          "damage", "label_source", "visible", "trusted"]
+          "damage", "label_source", "visible", "trusted", "jewellery", "jewellery_params"]
 
 
 def rotation(seed):                                                  # step 01's, so the frames match it
@@ -76,21 +77,12 @@ def labels(handfix):
     return out
 
 
-def damage(mesh, near, rng):
-    """A copy with scan-like defects; returns (mesh, name). Vertex noise and holes stay near the ear."""
-    kind = rng.choice(["decimate", "noise", "holes"])
-    V, F = np.asarray(mesh.vertices).copy(), np.asarray(mesh.triangles).copy()
-    if kind == "decimate":
-        m = mesh.simplify_quadric_decimation(int(len(F) * rng.uniform(0.3, 0.7)))
-        return m, kind
-    if kind == "noise":
-        V += rng.normal(scale=rng.uniform(0.1, 0.3), size=V.shape)
-    else:
-        for _ in range(int(rng.integers(1, 4))):
-            c = near[rng.integers(len(near))] + rng.normal(scale=5.0, size=3)
-            gone = np.linalg.norm(V - c, axis=1) < rng.uniform(2.0, 6.0)
-            F = F[~gone[F].any(1)]
-    return o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(V), o3d.utility.Vector3iVector(F)), kind
+def damage(mesh, rng):
+    """A decimated copy, for coarse scans; returns (mesh, "decimate"). Vertex noise and holes were dropped
+    (2026-10-23): the user judged them unrealistic, crusty skin and bites out of the ear."""
+    mesh = o3d.geometry.TriangleMesh(mesh.vertices, mesh.triangles)
+    mesh.merge_close_vertices(1e-4)            # SONICOM STLs share no vertices: unwelded, decimation deletes triangles
+    return mesh.simplify_quadric_decimation(int(len(mesh.triangles) * rng.uniform(0.3, 0.7))), "decimate"
 
 
 def turn(d, deg, rng):
@@ -99,7 +91,7 @@ def turn(d, deg, rng):
     return tuple(d * np.cos(t) + a * np.sin(t))
 
 
-def render_scan(pipe, scan, ears, lab, out, n_skins, seed):
+def render_scan(pipe, scan, ears, lab, out, n_skins, seed, jewellery=0.0, only_jewellery=False):
     c = pipe.cfg
     m = o3d.io.read_triangle_mesh(scan); V = np.asarray(m.vertices)
     V = V * (1000.0 if np.ptp(V, 0).max() < 10 else 1.0)            # HUTUBS is metres
@@ -109,19 +101,25 @@ def render_scan(pipe, scan, ears, lab, out, n_skins, seed):
     if nh is None:
         print(f"{scan}: no face frame, skipped", flush=True); return [], []
     mesh_c, R_head, centre, _ = nh
-    ear0 = pipe._skinned(mesh_c, c["ear_tone"], c["ear_skin_noise"])
     rows, vis_all = [], []
     for nm in ears:
         side = "L" if nm.endswith("left") else "R"
         subject = nm.rsplit("_", 1)[0]; ds = "sonicom" if nm.startswith("P0") else "hutubs"
         assert subject not in HELD_OUT and "bj002" not in nm.lower() and "secret" not in scan.lower(), nm
-        v = ear_view(ear0, side, c, pipe.yolo)
-        if v is None:
-            print(f"{nm}: no ear view, skipped", flush=True); continue
         C2S = np.linalg.inv(np.load(WRAP / corpus.get("canon2scan") / f"{nm}.npz", allow_pickle=True)["inverse"])
         G, src = lab[nm]
         Xs = (np.c_[G, np.ones(55)] @ C2S.T)[:, :3]                  # canonical -> scan mm
         Pn = (Xs @ Rr.T - centre) @ R_head.T                          # -> the pipeline's normalised head
+        rj = np.random.default_rng([seed, zlib.crc32(nm.encode()), 7])
+        jew, jprm, head_c = "none", {}, mesh_c
+        if rj.random() < jewellery:                                   # geometry only, before skinning
+            head_c, jprm = add_jewellery(mesh_c, Pn, np.asarray(mesh_c.vertices).mean(0), rj); jew = jprm["kind"]
+        elif only_jewellery:
+            continue
+        ear0 = pipe._skinned(head_c, c["ear_tone"], c["ear_skin_noise"])
+        v = ear_view(ear0, side, c, pipe.yolo)
+        if v is None:
+            print(f"{nm}: no ear view, skipped", flush=True); continue
         d0 = np.asarray(c["multiview_light_dir"], float) * ([-1.0, 1, 1] if side == "R" else 1.0)
         light0 = dict(c, light_dir=tuple(d0), light_mirror=False, light_frame="world")
         s = occupancy_scale(ear0, v["R"], v["centre"], v["scale"], c, light0, pipe.pred, c["target_occupancy"])
@@ -132,9 +130,9 @@ def render_scan(pipe, scan, ears, lab, out, n_skins, seed):
             if k == 0:
                 g, light = ear0, light0
             else:
-                base = mesh_c
+                base = head_c
                 if rng.random() < 0.5:
-                    base, dmg = damage(mesh_c, Pn, rng)
+                    base, dmg = damage(head_c, rng)
                 pipe.cfg = dict(c, skin_seed=int(rng.integers(1 << 30)), ao_strength=float(rng.uniform(0.5, 0.9)))
                 try:
                     g = pipe._skinned(base, None, bool(rng.random() < 0.75))
@@ -153,7 +151,8 @@ def render_scan(pipe, scan, ears, lab, out, n_skins, seed):
                                  occupancy=round(float(np.ptp(uv, axis=0).max() / img.shape[1]), 3),
                                  licence=LICENCE[ds], skin_id=k, light_id=k, damage=dmg, label_source=src,
                                  visible="".join("1" if b else "0" for b in vis),
-                                 trusted=("1" if src == "hand" else "0") * 55))
+                                 trusted=("1" if src == "hand" else "0") * 55,
+                                 jewellery=jew, jewellery_params=json.dumps(jprm) if jprm else ""))
                 vis_all.append(vis)
         print(f"{nm}: {n_skins * len(pipe.angles)} views ({src})", flush=True)
     return rows, vis_all
@@ -164,6 +163,9 @@ def main():
     a.add_argument("out"); a.add_argument("worker", nargs="?", type=int, default=0); a.add_argument("n_workers", nargs="?", type=int, default=1)
     a.add_argument("--handfix", default="runs/handfix"); a.add_argument("--skins", type=int, default=4)
     a.add_argument("--seed", type=int, default=0); a.add_argument("--manifest", action="store_true")
+    a.add_argument("--jewellery", type=float, default=0.0, help="fraction of ears given synthetic jewellery (ear3d.jewellery)")
+    a.add_argument("--only-jewellery", action="store_true", help="render only the ears that get jewellery (an add-on set)")
+    a.add_argument("--ears", nargs="*", help="limit to these ears (tests)")
     a = a.parse_args()
     out = pathlib.Path(a.out); out.mkdir(parents=True, exist_ok=True)
     if a.manifest:
@@ -179,14 +181,14 @@ def main():
     lab = labels(a.handfix)
     by_scan = collections.defaultdict(list)
     for f in sorted((WRAP / corpus.get("canon2scan")).glob("*.npz")):
-        if f.stem.rsplit("_", 1)[0] not in HELD_OUT and f.stem in lab:
+        if f.stem.rsplit("_", 1)[0] not in HELD_OUT and f.stem in lab and (not a.ears or f.stem in a.ears):
             by_scan[str(np.load(f, allow_pickle=True)["scan"])].append(f.stem)
     pipe = Pipeline()
     for scan in sorted(by_scan)[a.worker::a.n_workers]:
         key = f"{pathlib.Path(scan).stem}_{zlib.crc32(scan.encode()):08x}"
         if (out / f"_rows_{key}.csv").is_file():
             continue
-        rows, vis = render_scan(pipe, scan, by_scan[scan], lab, out, a.skins, a.seed)
+        rows, vis = render_scan(pipe, scan, by_scan[scan], lab, out, a.skins, a.seed, a.jewellery, a.only_jewellery)
         np.savez(out / f"_rows_{key}.npz", stems=np.array([r["stem"] for r in rows]),
                  visible=np.array(vis, bool).reshape(-1, 55))
         with open(out / f"_rows_{key}.csv", "w", newline="") as f:      # last: marks the scan finished
