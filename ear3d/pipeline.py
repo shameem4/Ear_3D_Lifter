@@ -121,11 +121,13 @@ def _girth_ratio(mesh_c, nose):
 
 class Pipeline:
     def __init__(self, cfg=None, device="cuda"):
-        from .twod import LandmarkPredictor, landmarker_checkpoint
+        from .twod import LandmarkPredictor, render_checkpoint
         self.cfg = dict(DEFAULTS, **(cfg or {}))
         self.yolo = load_detector(self.cfg["ear_detector"])
-        self.ckpt = str(landmarker_checkpoint(self.cfg))     # record it with any result
-        self.pred = LandmarkPredictor(self.ckpt, device)
+        self.device = device
+        self.ckpt = str(render_checkpoint(self.cfg))          # record it with any result
+        self.pred = self.pred_render = LandmarkPredictor(self.ckpt, device)
+        self.pred_texture = None                             # the regular model, loaded on first textured mesh
         t = np.load(TABLE, allow_pickle=True)
         self.table, self.angles = t["table"], t["angles"]
         key = {tuple(a): i for i, a in enumerate(self.angles)}
@@ -161,6 +163,14 @@ class Pipeline:
             raise ValueError(f"mesh spans {ext:.3g} along its longest axis; the pipeline needs a head "
                              f"in MILLIMETRES (expected ~150-350). Metres? scale by 1000.")
         tex = mesh_texture(mesh) if c.get("use_mesh_texture", False) else None
+        from .twod import LandmarkPredictor, landmarker_checkpoint, render_checkpoint
+        if tex is not None:                                      # own texture: the regular model
+            if self.pred_texture is None:
+                self.ckpt_texture = str(landmarker_checkpoint(c))
+                self.pred_texture = LandmarkPredictor(self.ckpt_texture, self.device)
+            self.pred, self.ckpt = self.pred_texture, self.ckpt_texture
+        else:                                                    # synthetic skin: the render-only model
+            self.pred, self.ckpt = self.pred_render, str(render_checkpoint(c))
         if tex is not None:                                      # the mesh's own appearance
             face = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(np.asarray(mesh.vertices)),
                                              o3d.utility.Vector3iVector(np.asarray(mesh.triangles)))
@@ -248,12 +258,23 @@ class Pipeline:
         if sym > SYM_P90_MM:
             return False, f"asymmetric about the nose, p90 {sym:.1f} mm", sym / SYM_P90_MM
         ear = self._skinned(mesh_c, self.cfg["ear_tone"], self.cfg["ear_skin_noise"])
-        d = []
+        d = {}
         for side in "LR":
             v = ear_view(ear, side, self.cfg, self.yolo)
-            if v is None:
-                return False, f"no ear on side {side}", np.inf
-            d.append(float(np.linalg.norm(v["centre"] - t)))
+            if v is not None:
+                d[side] = float(np.linalg.norm(v["centre"] - t))
+        if not d:
+            return False, "no ear on either side", np.inf
+        if len(d) == 1:
+            # One ear unseen (a coarse or occluded side; SONICOM's graded meshes)
+            # in a frame that passed the face checks: still a rejection, but the
+            # mildest one. At inf it lost the fallback to an asymmetric frame,
+            # which put P0022_right's head on its side (2026-10-24).
+            (s, x), = d.items()
+            if x < NOSE_EAR_MIN_MM:
+                return False, f"nose-ear {x:.0f} mm (side {s})", NOSE_EAR_MIN_MM / x
+            return False, f"no ear on side {'R' if s == 'L' else 'L'}", 1.0
+        d = [d["L"], d["R"]]
         if min(d) < NOSE_EAR_MIN_MM or min(d) / max(d) < NOSE_EAR_BALANCE:
             return False, f"nose-ear {d[0]:.0f}/{d[1]:.0f} mm", max(NOSE_EAR_MIN_MM / min(d), NOSE_EAR_BALANCE * max(d) / min(d))
         return True, "", 0.0

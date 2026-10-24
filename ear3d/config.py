@@ -36,6 +36,13 @@ DEFAULTS = dict(
                             # EAR3D_CKPT (path or run; wins over both), when a
                             # measurement needs one model held still. See
                             # twod.landmarker_checkpoint; results record it.
+                            # This model is for a scan's OWN texture (photo-like).
+    render_run="r2j_s42",   # the model for SYNTHETIC-SKINNED renders, i.e. every
+                            # mesh without a texture (twod.render_checkpoint).
+                            # Render-only: trained on synthetic_v3r + the jewellery
+                            # set from v4; held-out 1.09 mm vs v4's 1.61 (user's
+                            # hand-corrected ears), +420% error on photographs, so
+                            # it must never see one. User's choice, 2026-10-24.
     device="cuda",
 
     # --- the 2D detector, on RENDERS ----------------------------------------
@@ -184,10 +191,13 @@ DEFAULTS = dict(
     ear_detector="blazeear",  # pipeline ear box: "blazeear" (Apache-2.0) or "yolo"
                               # (Ultralytics, AGPL-3.0; local use only). 16 held-out
                               # heads: 1.68 vs 1.61 mm median vs v9, 32/32 ears both.
-    use_mesh_texture=False, # pipeline: True renders a mesh that brings its own
-                            # colour with it and skips the synthetic skins.
-                            # Off: on the one textured scan tried (2026-10-17)
-                            # the synthetic-skin result looked better.
+    use_mesh_texture=True,  # pipeline: a mesh that brings its own colour is
+                            # rendered with it and read by the regular model
+                            # (run); one without gets the synthetic skins and
+                            # render_run. User's policy, 2026-10-24: "if actual
+                            # scan texture is available we will try regular
+                            # first". Was False: on the one textured scan tried
+                            # (2026-10-17, older models) synthetic skin looked better.
     gt_lm3d=_corpus.get("gt_lm3d"),  # the REFERENCE 3D landmarks of the corpus
                             # generation (ear3d/corpus.py; lmw: lm3d_v12, marks
                             # re-derived on the landmark-posed fits). Was, in

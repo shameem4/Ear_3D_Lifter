@@ -75,6 +75,15 @@ def landmarker_checkpoint(cfg=None):
     return find_best_checkpoint(cfg["run"]) if cfg.get("run") else find_best_checkpoint()
 
 
+def render_checkpoint(cfg=None):
+    """The checkpoint for SYNTHETIC-SKINNED renders: cfg["render_run"] (a
+    render-only model trained on this repo's own renders, which has forgotten
+    photographs), else the same rule as landmarker_checkpoint. EAR3D_CKPT still
+    pins both. Never hand this one a photograph or a scan's own texture."""
+    cfg = cfg or {}
+    return landmarker_checkpoint(dict(cfg, run=cfg.get("render_run") or cfg.get("run")))
+
+
 def make_pipeline(cfg, run=None):
     """The shipped 2D pipeline, configured for RENDERS the way cfg says.
 
@@ -136,6 +145,6 @@ def make_pipeline(cfg, run=None):
 
 
 __all__ = ["make_pipeline", "EAR_LANDMARKER", "CHECKPOINTS", "BLAZEEAR_DIR",
-           "DETECTOR_WEIGHTS", "DETECTOR_INPUT_SIZE", "EarDetector", "landmarker_checkpoint",
+           "DETECTOR_WEIGHTS", "DETECTOR_INPUT_SIZE", "EarDetector", "landmarker_checkpoint", "render_checkpoint",
            "EarLandmarkerPipeline", "LandmarkPredictor",
            "find_best_checkpoint"]

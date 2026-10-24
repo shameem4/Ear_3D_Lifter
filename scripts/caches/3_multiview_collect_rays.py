@@ -18,7 +18,7 @@ from ear3d.ear_view import occupancy_scale
 from ear3d.frames import in_frame
 from ear3d.render import render
 from ear3d.backproject import backproject_snapped
-from ear3d.twod import LandmarkPredictor, landmarker_checkpoint
+from ear3d.twod import LandmarkPredictor, render_checkpoint
 from ear3d.gt import gt_in_cache
 
 tag, out, LIGHT, WK, NW = sys.argv[1], pathlib.Path(sys.argv[2]), sys.argv[3], int(sys.argv[4]), int(sys.argv[5])
@@ -26,7 +26,7 @@ LIMIT = int(sys.argv[6]) if len(sys.argv) > 6 and sys.argv[6] != "-" else None
 SUN = np.array([float(x) for x in sys.argv[7].split(",")]) if len(sys.argv) > 7 else np.asarray(DEFAULTS["multiview_light_dir"], float)
 out.mkdir(parents=True, exist_ok=True)
 ANG = [(float(y), float(p)) for y in range(-30, 31, 15) for p in range(-30, 31, 15)]
-CKPT = str(landmarker_checkpoint(DEFAULTS)); pred = LandmarkPredictor(CKPT, "cuda")
+CKPT = str(render_checkpoint(DEFAULTS)); pred = LandmarkPredictor(CKPT, "cuda")
 fs = sorted(glob.glob(str(R0 / f"runs/cache/{tag}_s*/*_[LR].npz")))
 if LIMIT: fs = fs[::max(1, len(fs) // LIMIT)][:LIMIT]
 skinned = {}

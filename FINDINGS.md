@@ -11,7 +11,32 @@ The long form of the inherited work is `RESULTS_inherited.md` (chronological,
 with its retractions; grep it). Numbers carry the date and the reference they
 were measured against, because both have changed.
 
-## Where it stands (2026-10-20)
+## Where it stands (2026-10-24)
+
+- **Render-only 2D model r2j_s42 is the 3D path's model** (user's choice).
+  On the user's 32 hand-corrected held-out ears (16 heads), end to end, view_table_v13:
+  - medians: v4 1.613, v5syn25 1.412, r1 (render-only) 1.045, r2j 1.089 mm;
+  - share of points beyond 5 mm: v4 4.66%, r2j 0.85%;
+  - with synthetic jewellery on every ear: r1 1.112, r2j 1.061 mm;
+  - r2j vs r1 on the lobe: -0.21 clean (p=0.034), -0.42 with jewellery (p=0.001);
+  - pp21_left's real hoop: worst point 7.6 -> 3.3 mm.
+  The control r2 (same recipe without the jewellery set) does not fix the hoop (2D: +7% on hoop renders), so the gain is the jewellery data.
+  r2j is +420% on photographs: textured scans go to the regular model (`use_mesh_texture`, user's policy).
+  The reference is one annotator's placement, which r2j trained toward.
+- **Pooled jewellery deltas hide the effect; stratify by kind.**
+  r1 under synthetic jewellery looked flat pooled (p=0.72), but on the 15 lobe-hoop ears lobe error rose on 12, up to 14.2 mm, all on points 16-19 (slid onto the hoop).
+  Studs and helix piercings: no effect.
+- **synthetic_v3 shipped 8,850 broken images (2026-10-23).**
+  SONICOM STLs share no vertices, so decimation deleted triangles and vertex noise cracked the surface.
+  r1 trained on them. Rule: weld before any mesh edit, and look at every damage mode on every dataset before a bulk render.
+  The user then judged noise and holes unrealistic; damage is now decimation only (synthetic_v3r).
+- **Orientation fallback (2026-10-24).** When no face search passes, the least-bad frame is kept.
+  A missing ear scored inf, so on P0022_right (SONICOM graded: the far ear is never detected) an asymmetric, sideways frame won.
+  The ear was rendered on its side and the prediction missed by a median of 34 mm. A single missing ear now scores 1.0, the mildest rejection.
+  P0022_right goes 33.8 -> 1.15 mm; the other fallback scans in the corpus are bit-identical.
+  No held-out head used the missing-ear path.
+
+## Where it stood (2026-10-20)
 
 - **Held-out accuracy: 1.46 mm** median per ear vs lm3d_v12 (view_table_v12;
   1.56 with v11's table), 16 HUTUBS heads

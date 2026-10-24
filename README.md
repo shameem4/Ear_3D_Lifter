@@ -13,14 +13,21 @@ ears, reads them with the 2D model from many views, and triangulates.
 
 or `from ear3d.pipeline import Pipeline; Pipeline().run(mesh)`.
 
-- **Input:** a head scan in millimetres, any orientation. Colour is ignored:
-  the pipeline re-skins every mesh, which is what the 2D model reads best.
+- **Input:** a head scan in millimetres, any orientation.
+- **Two 2D models, chosen by texture.** A mesh without colour gets synthetic
+  skin and is read by the render-only model `r2j_s42` (config `render_run`).
+  A scan with its own texture (vertex colours or UV texture) is rendered with
+  it and read by Ear_Landmarker's regular `SHIPPED_RUN`. `r2j` was trained
+  only on this repo's renders and is 420% worse on photographs: never point it
+  at a photo or a real texture.
 - **Output:** `L`, `R` (55 x 3 each) in the input mesh's own coordinates,
   NaN where an ear or landmark was not found (`L` is the subject's left),
   and `ckpt`, the 2D checkpoint used.
-- **Accuracy:** median **1.47 mm** per ear (vs lm3d_v12) on 16 HUTUBS heads used nowhere in
-  building it, each randomly rotated; 3.8% of points beyond 5 mm, mostly on
-  the upper helix. About 15 s per head on one GPU. Validated only on HUTUBS
+- **Accuracy (untextured, r2j):** median **1.09 mm** per ear against the
+  user's hand-corrected landmarks on 16 HUTUBS heads used nowhere in building
+  it (32 ears), each randomly rotated; 0.85% of points beyond 5 mm (v4 was
+  1.61 mm and 4.7%). The reference is one annotator's placement, which r2j was
+  trained toward. With synthetic earrings added, 1.06 mm. About 15 s per head on one GPU. Validated only on HUTUBS
   and SONICOM scans (no hair); one real scan looked right.
 
 Environment: the `mocap` conda env
@@ -72,8 +79,8 @@ the runbook.
 
 ## Things that change results without changing this code
 
-- **The 2D model.** By default the pipeline follows Ear_Landmarker's
-  `SHIPPED_RUN`, from its working tree, live. `EAR3D_CKPT=<run or .ckpt>`
+- **The 2D model.** Untextured meshes use `render_run` (`r2j_s42`); textured
+  scans follow Ear_Landmarker's `SHIPPED_RUN`, from its working tree, live. `EAR3D_CKPT=<run or .ckpt>`
   pins the checkpoint (results record it), but not their inference code:
   their 2026-10-20 changes moved one held-out ear by up to 9 mm with the same
   checkpoint. Re-measure after pulling their changes.

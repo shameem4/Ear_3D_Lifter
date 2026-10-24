@@ -32,7 +32,7 @@ from ear3d.frames import frame_from, in_frame, plane_normal          # noqa: E40
 from ear3d.render import render                                      # noqa: E402
 from ear3d.skin import apply_skin                                    # noqa: E402
 from ear3d.triangulate import ransac_point                           # noqa: E402
-from ear3d.twod import LandmarkPredictor, landmarker_checkpoint      # noqa: E402
+from ear3d.twod import LandmarkPredictor, render_checkpoint      # noqa: E402
 from ear3d.wrap import load_mesh                                     # noqa: E402
 
 ANG = [(float(y), float(p)) for y in range(-30, 31, 15) for p in range(-30, 31, 15)]   # the pipeline's grid
@@ -55,7 +55,7 @@ def main():
     g = in_frame(m, R, c, s)
     light = dict(DEFAULTS, light_dir=tuple(np.asarray(DEFAULTS["multiview_light_dir"], float)), light_mirror=False, light_frame="world")
 
-    ck = str(landmarker_checkpoint(DEFAULTS)); pred = LandmarkPredictor(ck, "cuda")
+    ck = str(render_checkpoint(DEFAULTS)); pred = LandmarkPredictor(ck, "cuda")
     O = np.full((len(ANG), 55, 3), np.nan); D = O.copy()
     for i, (yw, pt) in enumerate(ANG):
         img, _, cam = render(g, light, E=orbit_extrinsic(yw, pt, DEFAULTS))
