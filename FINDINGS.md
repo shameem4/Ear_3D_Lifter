@@ -21,7 +21,10 @@ were measured against, because both have changed.
   - r2j vs r1 on the lobe: -0.21 clean (p=0.034), -0.42 with jewellery (p=0.001);
   - pp21_left's real hoop: worst point 7.6 -> 3.3 mm.
   The control r2 (same recipe without the jewellery set) does not fix the hoop (2D: +7% on hoop renders), so the gain is the jewellery data.
-  r2j is +420% on photographs: textured scans go to the regular model (`use_mesh_texture`, user's policy).
+  r2j is +420% on photographs, so it must never read a real texture.
+- **Re-skin every scan, textured or not (2026-10-24).**
+  Three Artec textured heads (BJ030, CD022, CD048), 4 orientations each: the synthetic-skin + r2j route spread p95 0.13-0.33 mm, their own texture + v4 0.35-1.55 mm (2-9x).
+  The two routes sit 1.1-1.9 mm apart (median); no ground truth, so this is stability, not accuracy. User chose synthetic for all after the overlays; `use_mesh_texture=False`.
   The reference is one annotator's placement, which r2j trained toward.
 - **Pooled jewellery deltas hide the effect; stratify by kind.**
   r1 under synthetic jewellery looked flat pooled (p=0.72), but on the 15 lobe-hoop ears lobe error rose on 12, up to 14.2 mm, all on points 16-19 (slid onto the hoop).

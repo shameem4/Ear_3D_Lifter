@@ -20,12 +20,12 @@ or `from ear3d.pipeline import Pipeline; Pipeline().run(mesh)`.
   side filled. Held-out ears with the head cut away: 1.50 mm, side right
   32/32; noisy AudioEar3D clouds: orientation within 15 deg on 18/20, one
   wrong side.
-- **Two 2D models, chosen by texture.** A mesh without colour gets synthetic
-  skin and is read by the render-only model `r2j_s42` (config `render_run`).
-  A scan with its own texture (vertex colours or UV texture) is rendered with
-  it and read by Ear_Landmarker's regular `SHIPPED_RUN`. `r2j` was trained
-  only on this repo's renders and is 420% worse on photographs: never point it
-  at a photo or a real texture.
+- **2D model.** Every mesh is re-skinned and read by the render-only model
+  `r2j_s42` (config `render_run`); a scan's own texture is ignored by default.
+  `use_mesh_texture=True` reads the texture with Ear_Landmarker's regular
+  `SHIPPED_RUN` instead; on three real textured heads it was 2-9x less stable.
+  `r2j` was trained only on this repo's renders and is 420% worse on
+  photographs: never point it at a photo or a real texture.
 - **Output:** `L`, `R` (55 x 3 each) in the input mesh's own coordinates,
   NaN where an ear or landmark was not found (`L` is the subject's left),
   and `ckpt`, the 2D checkpoint used.
@@ -85,8 +85,9 @@ the runbook.
 
 ## Things that change results without changing this code
 
-- **The 2D model.** Untextured meshes use `render_run` (`r2j_s42`); textured
-  scans follow Ear_Landmarker's `SHIPPED_RUN`, from its working tree, live. `EAR3D_CKPT=<run or .ckpt>`
+- **The 2D model.** `render_run` (`r2j_s42`) for every re-skinned mesh;
+  Ear_Landmarker's `SHIPPED_RUN` (live, from its working tree) only with
+  `use_mesh_texture=True`. `EAR3D_CKPT=<run or .ckpt>`
   pins the checkpoint (results record it), but not their inference code:
   their 2026-10-20 changes moved one held-out ear by up to 9 mm with the same
   checkpoint. Re-measure after pulling their changes.

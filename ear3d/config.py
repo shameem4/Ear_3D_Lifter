@@ -191,13 +191,13 @@ DEFAULTS = dict(
     ear_detector="blazeear",  # pipeline ear box: "blazeear" (Apache-2.0) or "yolo"
                               # (Ultralytics, AGPL-3.0; local use only). 16 held-out
                               # heads: 1.68 vs 1.61 mm median vs v9, 32/32 ears both.
-    use_mesh_texture=True,  # pipeline: a mesh that brings its own colour is
-                            # rendered with it and read by the regular model
-                            # (run); one without gets the synthetic skins and
-                            # render_run. User's policy, 2026-10-24: "if actual
-                            # scan texture is available we will try regular
-                            # first". Was False: on the one textured scan tried
-                            # (2026-10-17, older models) synthetic skin looked better.
+    use_mesh_texture=False, # pipeline: True renders a scan's own texture and reads
+                            # it with the regular model (run); False re-skins every
+                            # mesh and uses render_run. False since 2026-10-24: on
+                            # three Artec textured heads (BJ030, CD022, CD048) the
+                            # synthetic route was 2-9x steadier across 4 orientations
+                            # (p95 spread 0.13-0.33 vs 0.35-1.55 mm), routes 1.1-1.9 mm
+                            # apart; user's call after looking at the overlays.
     gt_lm3d=_corpus.get("gt_lm3d"),  # the REFERENCE 3D landmarks of the corpus
                             # generation (ear3d/corpus.py; lmw: lm3d_v12, marks
                             # re-derived on the landmark-posed fits). Was, in
