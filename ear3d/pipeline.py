@@ -159,9 +159,17 @@ class Pipeline:
     def run(self, mesh, return_debug=False):
         c = self.cfg
         ext = float(np.ptp(np.asarray(mesh.vertices), axis=0).max())
-        if not 100.0 <= ext <= 600.0:
+        if not 25.0 <= ext <= 600.0:
             raise ValueError(f"mesh spans {ext:.3g} along its longest axis; the pipeline needs a head "
-                             f"in MILLIMETRES (expected ~150-350). Metres? scale by 1000.")
+                             f"(~150-350) or an ear (~40-90) in MILLIMETRES. Metres? scale by 1000.")
+        from . import ear_only                                   # FLOW-GATE: too small to be a head
+        if ext < ear_only.HEAD_MIN_MM:                           # -> no face stage; pose from the ear's shape
+            from .twod import render_checkpoint
+            self.pred, self.ckpt = self.pred_render, str(render_checkpoint(c))
+            P, side, res = ear_only.landmarks(self, mesh)
+            print(f"pipeline: ear-only scan ({ext:.0f} mm): {side} ear, template fit residual {res:.2f}")
+            out = {"L": None, "R": None}; out[side] = P
+            return (out, {"ear_only": True, "fit_residual": res}) if return_debug else out
         tex = mesh_texture(mesh) if c.get("use_mesh_texture", False) else None
         from .twod import LandmarkPredictor, landmarker_checkpoint, render_checkpoint
         if tex is not None:                                      # own texture: the regular model

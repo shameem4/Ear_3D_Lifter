@@ -13,7 +13,13 @@ ears, reads them with the 2D model from many views, and triangulates.
 
 or `from ear3d.pipeline import Pipeline; Pipeline().run(mesh)`.
 
-- **Input:** a head scan in millimetres, any orientation.
+- **Input:** a head scan in millimetres, any orientation, or an ear-only scan.
+  Flow-gate: a mesh under 100 mm on its longest side is treated as one ear
+  (`ear3d.ear_only`): no face stage; its pose and side come from fitting the
+  mean ear template, then the same 25-view landmarking. Output has only that
+  side filled. Held-out ears with the head cut away: 1.50 mm, side right
+  32/32; noisy AudioEar3D clouds: orientation within 15 deg on 18/20, one
+  wrong side.
 - **Two 2D models, chosen by texture.** A mesh without colour gets synthetic
   skin and is read by the render-only model `r2j_s42` (config `render_run`).
   A scan with its own texture (vertex colours or UV texture) is rendered with
