@@ -77,12 +77,14 @@ function colourMesh(C) {
   const k = 0.45 / Math.max(mean, 1e-3), c = new Float32Array(C.length);
   for (let i = 0; i < C.length; i++) c[i] = Math.min(1, C[i] * k);
   meshObj.geometry.setAttribute("color", new THREE.BufferAttribute(c, 3));
-  showSkin();
+  showSkin(true);                                      // while the pipeline runs, show what it renders
 }
-// the pipeline's synthetic skin on the displayed mesh, or plain grey (the default)
-function showSkin() {
+// The pipeline's synthetic skin on the displayed mesh, or the plain mesh. The
+// skin shows during a run; once the landmarks are in, the "synthetic skin"
+// checkbox decides (off by default).
+function showSkin(on = $("showSkin").checked) {
   if (!meshObj) return;
-  const on = $("showSkin").checked && !!meshObj.geometry.attributes.color;
+  on = on && !!meshObj.geometry.attributes.color;
   meshObj.material.vertexColors = on; meshObj.material.color.set(on ? 0xffffff : 0xd8d4cc); meshObj.material.needsUpdate = true;
 }
 
@@ -373,6 +375,7 @@ $("run").onclick = async () => {
   try {
     const o = await runInWorker(dh, [current.V, current.F, assets.cfg, assets.table, assets.angles, assets.template, assets.canon, assets.anchors]);
     showResult(o, (performance.now() - t0) / 1000);
+    showSkin();
   } catch (err) {
     console.error(err); status(`The pipeline failed: ${err.message || err}`);
     $("result").innerHTML = `<span class="err">Failed: ${String(err.message || err)}</span>`;
@@ -420,7 +423,7 @@ function showResult(o, secs) {
 
 $("showCams").onchange = (e) => { camGroup.visible = e.target.checked; };
 $("showTri").onchange = (e) => { triGroup.visible = e.target.checked; };
-$("showSkin").onchange = showSkin;
+$("showSkin").onchange = () => showSkin();
 $("tabHeads").onclick = () => { tab = "heads"; renderList(); };
 $("tabEars").onclick = () => { tab = "ears"; renderList(); };
 $("spin").onclick = () => { controls.autoRotate = !controls.autoRotate; $("spin").className = controls.autoRotate ? "on" : ""; };
