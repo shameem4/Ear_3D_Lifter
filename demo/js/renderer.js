@@ -1,5 +1,5 @@
 // The browser renderer: draws what Open3D/Filament draws for the pipeline,
-// closely enough that FaceMesh, BlazeEar and r2j see the same picture.
+// closely enough that FaceMesh, BlazeEar and the render landmarker see the same picture.
 //
 // Filament is not available here in the version Open3D uses, so its output is
 // reproduced by a fitted model (shading.json, fitted to 530k Filament pixels of

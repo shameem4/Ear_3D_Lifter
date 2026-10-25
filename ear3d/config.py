@@ -9,7 +9,6 @@ result down; no module reads it directly.
 from __future__ import annotations
 
 import os
-import tempfile
 from pathlib import Path
 
 from . import corpus as _corpus
@@ -53,7 +52,7 @@ DEFAULTS = dict(
     # photographs. They live here because this config is the render path.
     #
     # Ground truth for all of it: 168 renders with boxes projected from
-    # wrap-fitted 3D landmarks (archive/scripts/make_detector_testset.py), plus 112
+    # wrap-fitted 3D landmarks (archive-final:archive/scripts/make_detector_testset.py), plus 112
     # ears x 49 views scored against the wrap (scripts/eval/escape_audit.py).
     #
     #   config                              detect@IoU>=0.3   @0.5
@@ -110,8 +109,6 @@ DEFAULTS = dict(
                             # frames the ear centrally on purpose.
 
     # --- head pose ----------------------------------------------------------
-    use_mediapipe=True,     # derive the face-on direction from a FaceMesh head
-                            # frame instead of the ear detector's 6-view sweep
     face_task=os.environ.get(
         "FACE_LANDMARKER_TASK",
         "/mnt/14BE47C2BE479ADE/Code/landmarking_stuff/landmarker/face_landmarker.task"),
@@ -154,7 +151,7 @@ DEFAULTS = dict(
                             # detector is presentation-sensitive on renders --
                             # without the union the chosen box moves a median
                             # 54 px on the same frame and the same ear
-                            # (archive/scripts/check_detector_symmetry.py). A union
+                            # (archive-final:archive/scripts/check_detector_symmetry.py). A union
                             # through NMS is symmetric, so it is in the class
                             # a single-presentation corpus cannot flatter.
                             # CONFIRMED at this sun, which was the open
@@ -278,76 +275,13 @@ DEFAULTS = dict(
                             # the wrong anatomy at roughly the right depth. It
                             # cannot separate these radii on placement; nothing
                             # here can yet.
-    # --- triangulation (--triangulate) --------------------------------------
-    triangulate=True,       # build each landmark by intersecting the rays from
-                            # several views instead of lifting one view through
-                            # its depth buffer. Off by default only because it
-                            # costs a render and a pipeline call per view --
-                            # about 12 seconds at the default 12 views.
-                            #
-                            # ON by default. It was briefly turned on WITH the
-                            # old bidirectional re-seat and the result was visibly
-                            # worse -- outer_helix landmarks flung onto the cheek,
-                            # z spanning -0.916 to +0.194. That damage was the
-                            # re-seat, not this: with the re-seat corrected to
-                            # pull only buried points, triangulation alone gives
-                            # -0.190 to +0.207, against -0.060 to +0.111 from the
-                            # single lift.
-                            #
-                            # On held-out reprojection it wins clearly, 4.23 px
-                            # against 6.92. Read that with care, though: every
-                            # view is landmarked by the same model, so a 2D error
-                            # is shared, the rays agree on it, and it reprojects
-                            # well into held-out views carrying the same error.
-                            # Reprojection rewards self-consistency. Judge it on
-                            # the rendered ear as well.
-                            #
-                            # VIEWS ARE SYNTHETIC, SO THEY ARE CHEAP, AND MORE OF
-                            # THEM HELP. Reprojection into a FIXED held-out set of
-                            # 8 views, so only the fit changes with N (px, ear
-                            # ~430 px, 4 heads):
-                            #     views      4     8    15    30    60   100   190
-                            #     ray fit 18.69 12.72 11.34 10.68  9.97  9.52  8.89
-                            #     face-on 13.46 (constant, by construction)
-                            # Below ~8 views the fit is WORSE than the single
-                            # face-on lift -- too few rays across a narrow
-                            # baseline. It passes face-on at 8 and keeps improving
-                            # with diminishing returns, 34% better at 190.
+    # --- triangulation -----------------------------------------------
     tri_angles=tuple(cone_angles(24, 45.0)),
                             # 24 views, not 12. The view COUNT is what carries
                             # the placement: at a fixed cone, going 12 -> 24 buys
                             # about as much as widening 20 -> 45 does, and at 55
                             # deg with only 12 views the inner helix sinks into
                             # the head again. --tri-views N overrides it.
-    tri_cone=45.0,          # HALF-ANGLE OF THE VIEW CONE.
-                            # 20 deg here until it was judged by the wrong thing.
-                            # Reprojection into a fixed held-out set prefers 20
-                            # (4.58 px, +36.8% over face-on; 40 deg gives up half
-                            # that gain) -- but reprojection rewards the lateral
-                            # agreement the fit already optimises and is BLIND TO
-                            # DEPTH, which is the error you can see.
-                            #
-                            # Measured instead by distance from the surface along
-                            # the view ray, which is what the eye objects to
-                            # (median, as % of ear extent):
-                            #   cone/views   20d/12  20d/24  40d/24  45d/24  55d/12
-                            #   off-surface   3.95    3.71    3.26    3.48    3.38
-                            # and visibly: at 20d/12 the inner helix is buried
-                            # inside the head and the outer helix floats off the
-                            # rim; at 45d/24 all 55 land on the ear.
-                            #
-                            # Why a narrow cone cannot work: the detector asserts
-                            # a RAY, and over a cone of half-angle t a lateral
-                            # error of e px becomes a depth error of about
-                            # e/tan(t) -- 2.7x at 20 deg, against an ear only ~90
-                            # px thick. The detector's own cross-view
-                            # disagreement is median 6.7 px (p90 19.5) on a
-                            # ~430 px ear, so 20 deg cannot place depth at all.
-                            # Widening does not pay what the geometry promises,
-                            # because that disagreement itself grows with angle
-                            # (5.7 px at 6 deg off-axis, 14.1 px at 20), which is
-                            # why the table above improves so much less than
-                            # 2.7x. More views is the part that pays.
     tri_thresh=0.03,        # RANSAC inlier distance, as a fraction of ear extent.
                             # It was multiplied by a hardcoded 1.0 rather than the
                             # measured extent until this was fixed, so it did not
@@ -375,39 +309,6 @@ DEFAULTS = dict(
                             # pipeline never builds that failure: the cone is
                             # bounded where everything stays visible, and a view
                             # with no detection is dropped rather than guessed.
-
-    # --- partial re-seat (--reseat) -----------------------------------------
-    reseat=False,           # pull triangulated points that sit far off the drawn
-                            # surface back onto it, along the viewing axis.
-                            #
-                            # A triangulated landmark is a free 3D point -- the
-                            # rays place it and nothing requires it to lie on the
-                            # ear. Measured over four heads the median lands on
-                            # the surface (+0.33% of ear extent, 47% inside /
-                            # 53% outside, so no systematic push) but the p90 is
-                            # 22%, and those outliers cluster on the helix rim.
-                            #
-                            # THERE IS NO FREE LUNCH, which is why this is off:
-                            #   tol    reproj px   off-surf p90   points moved
-                            #   none      4.23        22.06%          0
-                            #   0.20      5.32        10.53%          4.8
-                            #   0.12      5.97         7.24%         10.0
-                            #   0.08      6.21         6.40%         13.5
-                            #   0.05      6.52         3.91%         21.5
-                            #   0.03      6.76         2.35%         32.0
-                            # Every threshold costs reprojection, monotonically,
-                            # and even moving 5 points of 55 costs 26%. The two
-                            # measures genuinely disagree: reprojection cannot see
-                            # the surface prior, and the surface prior cannot see
-                            # which pixel a label has to land in. Pick by use --
-                            # On by default in the VIEWER, where what is being
-                            # looked at is 3D geometry and a landmark buried in
-                            # the skull is simply wrong. ingest overrides both the
-                            # switch and the tolerance, because its visibility
-                            # mask drops anything off the surface -- see the note
-                            # in its main().
-    reseat_tol=0.15,        # move a point only if it is this far off, as a
-                            # fraction of ear extent. "Only where large."
 
     # --- multi-view agreement (--multiview) ---------------------------------
     mv_angles=((0, 0), (-25, 0), (25, 0), (-12, -12), (12, 12), (0, -20), (0, 20)),
@@ -447,10 +348,5 @@ DEFAULTS = dict(
 
     # --- display ------------------------------------------------------------
     sphere_frac=0.022,      # landmark sphere radius, in mesh units (ear spans ~1)
-    show_2d=True,           # pop the landmark overlay in its own window
-    show_rays=False,        # draw the camera ray to each landmark
-    # these derive from third-party 3D data, so they default OUTSIDE the repo
-    snapshot_png=str(Path(tempfile.gettempdir()) / "backprojection_snapshot.png"),
-    overlay_png=str(Path(tempfile.gettempdir()) / "backprojection_overlay.png"),
     interactive=True,
 )

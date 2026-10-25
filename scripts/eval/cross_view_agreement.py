@@ -2,7 +2,7 @@
 """Rank 2D checkpoints by how well their views AGREE in 3D -- no labels needed.
 
 Usage: cross_view_agreement.py CACHE_DIR [CACHE_DIR...] [--thresh 1.0]
-                                [--table ear3d/view_table_v12.npz --k 8]
+                                [--table ear3d/view_table_v13.npz --k 8]
 
 Each CACHE_DIR is a runs/mvcache/<tag>/ produced by
 scripts/caches/3_multiview_collect_rays.py: per ear, the 2D model's

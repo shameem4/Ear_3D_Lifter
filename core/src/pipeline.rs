@@ -79,8 +79,6 @@ pub struct Assets {
     pub anchors: Vec<[f64; 4]>,  // BlazeEar anchors (cx, cy, w, h), normalised
 }
 
-pub struct EarOut { pub p: Vec<V3> }
-
 pub struct Output {
     pub left: Option<Vec<V3>>,
     pub right: Option<Vec<V3>>,

@@ -81,12 +81,6 @@ def wrap_barycentric(V, F, tri, u, v):
     return (w * c).sum(axis=-2)
 
 
-def wrap_barycentric_inverse(V, F, tri, bary):
-    """trimesh barycentric (b0, b1, b2) -> the (u, v) Wrap wants to store."""
-    bary = np.asarray(bary, float)
-    return bary[..., 0], bary[..., 1]
-
-
 def bary_to_xyz(V, F, pts):
     """Barycentric picks [(triangle, u, v), ...] -> 3D, the way Wrap stores them.
 

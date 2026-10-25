@@ -35,10 +35,6 @@ def _template():
     return _TPL
 
 
-def is_ear_only(mesh):
-    return float(np.ptp(np.asarray(mesh.vertices), axis=0).max()) < HEAD_MIN_MM
-
-
 def _mirror_z(V, F):
     return V * [1.0, 1.0, -1.0], F[:, ::-1]                          # flip winding too, or it renders inside out
 

@@ -20,8 +20,8 @@ could see. One source of truth, located at import time.
     export EAR_LANDMARKER=/path/to/Ear_Landmarker   # if not a sibling
 
 Checkpoints come from that repository too: CHECKPOINTS is its
-runs/checkpoints, which is where `run="manual_occ_s42"` in config.py
-resolves.
+runs/checkpoints, which is where config.py's `render_run` (and `run`, when
+set) resolves.
 """
 from __future__ import annotations
 

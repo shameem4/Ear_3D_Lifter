@@ -536,24 +536,3 @@ def normalize_head(mesh, cfg):
     nose_c = (np.asarray(hp[4], float) - centre) @ R_head.T
     return mesh_c, R_head, centre, nose_c
 
-
-def mirror_x(mesh):
-    """The mesh reflected about the sagittal plane (x -> -x) with the
-    triangle winding reversed, so normals and shading stay outward.
-
-    Every right ear in the corpus is mirrored into left form before the
-    detector sees it, and the detector has only been exercised on left-form
-    ears here: on a 20-head review sheet it boxed 20/20 left ears and about
-    half the right ones (cheek, neck, nose, or a patch inside the concha).
-    In the canonical head frame handedness is just the sign of x, so the
-    production path mirrors the -x side, runs the left-form pipeline, and
-    un-mirrors the answer (x components of R's columns and of the centre).
-    """
-    V = np.asarray(mesh.vertices) * np.array([-1.0, 1.0, 1.0])
-    F = np.asarray(mesh.triangles)[:, ::-1].copy()
-    m = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(V),
-                                  o3d.utility.Vector3iVector(F))
-    if mesh.has_vertex_colors():          # keep the skin; grey renders detect worse
-        m.vertex_colors = o3d.utility.Vector3dVector(np.asarray(mesh.vertex_colors).copy())
-    m.compute_vertex_normals()
-    return m

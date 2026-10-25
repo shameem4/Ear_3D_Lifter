@@ -29,8 +29,7 @@ fn ear3d_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(landmarker_inputs, m)?)?;
     m.add_function(wrap_pyfunction!(landmarks_fused, m)?)?;
     m.add_function(wrap_pyfunction!(blazeear_input, m)?)?;
-    m.add_function(wrap_pyfunction!(blazeear_boxes, m)?)?;
-    m.add_function(wrap_pyfunction!(rng_draws, m)?)
+    m.add_function(wrap_pyfunction!(blazeear_boxes, m)?)
 }
 
 // ------------------------------------------------------------- the pipeline
@@ -121,13 +120,6 @@ fn blazeear_input(img: &[u8], w: usize) -> Vec<f32> { crate::detect::blazeear_in
 fn blazeear_boxes(boxes: Vec<f32>, scores: Vec<f32>, anchors: &[u8], w: usize) -> Vec<[f64; 5]> {
     let a: Vec<[f64; 4]> = f64s(anchors).chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect();
     crate::detect::blazeear_boxes(&boxes, &scores, &a, w)
-}
-
-/// rng_draws(seed, kind, n): numpy-compatible draws, for the parity test.
-#[pyfunction]
-fn rng_draws(seed: u64, kind: &str, n: usize) -> Vec<f64> {
-    let mut r = crate::rng::Rng::new(seed);
-    (0..n).map(|_| match kind { "normal" => r.normal(), "raw" => r.u64() as f64, _ => r.random() }).collect()
 }
 
 /// run(host, V bytes (f64), F bytes (u32), cfg JSON, table, angles, template,

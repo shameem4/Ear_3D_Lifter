@@ -20,13 +20,19 @@ Stages, each the one measured best on 2026-10-17 (80 HUTUBS ears):
      pad, one zoom. Fixes each ear's frame (R, centre, scale).
   3. 25 views (+-30 deg, 15 deg steps) orbited about that frame, sun fixed to
      the head (config multiview_light_dir, x mirrored for the right ear),
-     shipped 2D landmarker (bare LandmarkPredictor, no detector or ROI) on
-     the whole frame, flip fusion = its default.
-  4. per landmark, RANSAC over its best 8 views by view_table_v9.npz
-     (scripts/caches/4_build_view_table.py), 1 mm threshold.
+     the render-only 2D landmarker (config render_run; bare
+     LandmarkPredictor, no detector or ROI) on the whole frame, flip fusion
+     = its default.
+  4. per landmark, RANSAC over its best 8 views by the corpus generation's
+     view table (view_table_v13 for lmw; scripts/caches/4_build_view_table.py),
+     1 mm threshold.
   5. re-seat each point onto the head surface.
 
-Against lm3d_v9 this is 1.46 mm median on those 80 ears (2.29 vs v7).
+A mesh under ear_only.HEAD_MIN_MM is an ear on its own: no face stage, pose
+and side from fitting the mean ear (ear3d/ear_only.py), then steps 3-5.
+
+r3p_s42, 2026-10-25: 1.03 mm median per ear against the user's hand-corrected
+landmarks on 32 held-out ears (16 HUTUBS heads); FINDINGS.md has the rest.
 """
 from __future__ import annotations
 

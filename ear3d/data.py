@@ -14,7 +14,6 @@ from .config import DEFAULTS
 from .corpus import WRAP
 
 # The raw third-party scans ($EAR3D_DIR in config.py; this is its default).
-RAW = WRAP.parent / "clean_3d_data"
 
 # HUTUBS head meshes are in metres; the fit lands on them at 0.19 mm after this
 # and at 83 mm without it.
