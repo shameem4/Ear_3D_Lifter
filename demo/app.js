@@ -77,7 +77,13 @@ function colourMesh(C) {
   const k = 0.45 / Math.max(mean, 1e-3), c = new Float32Array(C.length);
   for (let i = 0; i < C.length; i++) c[i] = Math.min(1, C[i] * k);
   meshObj.geometry.setAttribute("color", new THREE.BufferAttribute(c, 3));
-  meshObj.material.vertexColors = true; meshObj.material.color.set(0xffffff); meshObj.material.needsUpdate = true;
+  showSkin();
+}
+// the pipeline's synthetic skin on the displayed mesh, or plain grey (the default)
+function showSkin() {
+  if (!meshObj) return;
+  const on = $("showSkin").checked && !!meshObj.geometry.attributes.color;
+  meshObj.material.vertexColors = on; meshObj.material.color.set(on ? 0xffffff : 0xd8d4cc); meshObj.material.needsUpdate = true;
 }
 
 // head event: show the mesh in the pipeline's head frame (y up, face +z)
@@ -414,6 +420,7 @@ function showResult(o, secs) {
 
 $("showCams").onchange = (e) => { camGroup.visible = e.target.checked; };
 $("showTri").onchange = (e) => { triGroup.visible = e.target.checked; };
+$("showSkin").onchange = showSkin;
 $("tabHeads").onclick = () => { tab = "heads"; renderList(); };
 $("tabEars").onclick = () => { tab = "ears"; renderList(); };
 $("spin").onclick = () => { controls.autoRotate = !controls.autoRotate; $("spin").className = controls.autoRotate ? "on" : ""; };
