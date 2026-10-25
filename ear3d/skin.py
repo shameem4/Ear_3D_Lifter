@@ -162,3 +162,25 @@ def apply_skin(mesh, seed: int = 0, tone: int | None = None,
     col = base[None, :] * shade * warm + (float(noise) * (blotch + grain))[:, None]
     mesh.vertex_colors = o3d.utility.Vector3dVector(np.clip(col, 0, 1))
     return mesh
+
+
+def skinned(mesh, cfg, tone, noise):
+    """A coloured copy of mesh. The skin's blotches and AO rays are laid out
+    in world axes, so it is computed on a copy in the mesh's own PCA frame
+    (signs fixed by the third moment) and the per-vertex colours copied back:
+    the same head in any orientation gets the same skin."""
+    V = np.asarray(mesh.vertices); c0 = V.mean(0)
+    _, _, Vt = np.linalg.svd(V - c0, full_matrices=False)
+    A = (V - c0) @ Vt.T
+    Vt = Vt * np.sign(np.sign((A ** 3).sum(0)) + 0.5)[:, None]        # 0 -> +1
+    if np.linalg.det(Vt) < 0:
+        Vt[2] = -Vt[2]
+    m = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector((V - c0) @ Vt.T),
+                                  o3d.utility.Vector3iVector(np.asarray(mesh.triangles)))
+    m.compute_vertex_normals()
+    apply_skin(m, seed=cfg["skin_seed"], tone=tone, ao_strength=cfg["ao_strength"],
+               n_rays=cfg["ao_rays"], noise=noise)
+    out = o3d.geometry.TriangleMesh(mesh)
+    out.vertex_colors = m.vertex_colors
+    out.compute_vertex_normals()
+    return out

@@ -77,11 +77,6 @@ K_BEST = 8
 RANSAC_MM = 1.0
 
 
-def _apply_skin():
-    from .skin import apply_skin
-    return apply_skin
-
-
 def mesh_texture(mesh):
     """Per-vertex colours the mesh brings with it, or None.
 
@@ -138,29 +133,11 @@ class Pipeline:
         self.table, self.angles = t["table"], t["angles"]
         key = {tuple(a): i for i, a in enumerate(self.angles)}
         self.mirror = np.array([key[(-a[0], a[1])] for a in self.angles])
-        self.apply_skin = _apply_skin()
 
     def _skinned(self, mesh, tone, noise):
-        """A coloured copy. The skin's blotches and AO rays are laid out in
-        world axes, so it is computed on a copy in the mesh's own PCA frame
-        (signs fixed by the third moment) and the per-vertex colours copied
-        back: the same head in any orientation gets the same skin."""
-        V = np.asarray(mesh.vertices); c0 = V.mean(0)
-        _, _, Vt = np.linalg.svd(V - c0, full_matrices=False)
-        A = (V - c0) @ Vt.T
-        Vt = Vt * np.sign(np.sign((A ** 3).sum(0)) + 0.5)[:, None]        # 0 -> +1
-        if np.linalg.det(Vt) < 0:
-            Vt[2] = -Vt[2]
-        m = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector((V - c0) @ Vt.T),
-                                      o3d.utility.Vector3iVector(np.asarray(mesh.triangles)))
-        m.compute_vertex_normals()
-        c = self.cfg
-        self.apply_skin(m, seed=c["skin_seed"], tone=tone, ao_strength=c["ao_strength"],
-                        n_rays=c["ao_rays"], noise=noise)
-        out = o3d.geometry.TriangleMesh(mesh)
-        out.vertex_colors = m.vertex_colors
-        out.compute_vertex_normals()
-        return out
+        """A coloured copy (skin.skinned)."""
+        from .skin import skinned
+        return skinned(mesh, self.cfg, tone, noise)
 
     def run(self, mesh, return_debug=False):
         c = self.cfg

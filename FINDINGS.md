@@ -134,6 +134,23 @@ were measured against, because both have changed.
   0.1-0.2 mm spread, plausible ear sizes; judged improved. Partial validation:
   it is a clean scan, so hair, holes and partial heads are untested.
 
+## Face landmarks (ported from Face_3D_Lifter, 2026-10-25) *(inherited)*
+
+`ear3d/face.py` lifts MediaPipe's 478 points; runbook in `scripts/face/README.md`. Face_3D_Lifter's own
+FINDINGS.md is the long form. In brief:
+- **Method:** 33 views (yaw -75..75 in 15 deg steps x pitch -30/0/30) about a pivot 60 mm behind the nose.
+  The front sun is fixed to the head, skin tone 5 with blotches. FaceLandmarker runs per view, then per-view
+  mean 2D offsets are subtracted, then RANSAC at 2 mm, then the points are seated on the surface.
+- **Pseudo GT:** MediaPipe's canonical face, Wrap-fitted to each head with the user's 11 named control points.
+- **Result:** leave one head out on 50 HUTUBS heads, the median error vs the pseudo GT is 4.21 mm with offsets
+  off and 2.34 mm with them on (p90 5.59). Reproduced here bit-for-bit. On BJ002's 12 physical stickers:
+  4.0 -> 2.4 mm.
+- **Per-view miss table** (`view_table.py`): split-half Spearman 0.91, so it is stable across heads. Views
+  from below the face miss by 5+ mm even near face-on. Weighting or choosing views on top of the offsets adds
+  little (2.34 -> 2.25 at best).
+- **Error is sliding along the skin** (0.26 mm along the normal), so off-surface checks cannot see it. RANSAC
+  residual does not predict error.
+
 ## The pipeline, and why each stage is the way it is
 
     head scan -> face frame -> per ear: box, 25 views -> 2D landmarks
