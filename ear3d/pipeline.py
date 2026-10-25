@@ -192,9 +192,6 @@ class Pipeline:
         # Same vertices, re-coloured with the ear skin (colour is per vertex,
         # so the face-skinned normalised mesh can simply be re-skinned).
         ear = mesh_c if tex is not None else self._skinned(mesh_c, c["ear_tone"], c["ear_skin_noise"])
-        scene = o3d.t.geometry.RaycastingScene()
-        scene.add_triangles(o3d.core.Tensor(np.asarray(mesh_c.vertices, np.float32)),
-                            o3d.core.Tensor(np.asarray(mesh_c.triangles, np.uint32)))
         out, dbg = {}, {"R_head": R_head, "centre": centre, "textured": tex is not None}
         for side in "LR":
             v = ear_view(ear, side, c, self.yolo)
@@ -202,9 +199,7 @@ class Pipeline:
                 out[side] = None
                 continue
             P = self._multiview(ear, side, v["R"], v["centre"], v["scale"])
-            ok = np.isfinite(P).all(1)                           # a failed landmark stays NaN:
-            if ok.any():                                         # the snap maps NaN to ~origin
-                P[ok] = scene.compute_closest_points(o3d.core.Tensor(P[ok].astype(np.float32)))["points"].numpy()
+            P = self._snap(P, mesh_c)                            # a failed landmark stays NaN
             out[side] = P @ R_head + centre                      # back to the input frame
             dbg[side] = dict(R=v["R"], centre=v["centre"], scale=v["scale"], P_norm=P)
         return (out, dbg) if return_debug else out
@@ -306,6 +301,22 @@ class Pipeline:
                 tot += ear_score(self.yolo, img)
             return tot
         return judge
+
+    def _snap(self, P, mesh):
+        """Each finite point moved to its closest point on the mesh; NaN rows stay NaN."""
+        P = np.array(P, float); ok = np.isfinite(P).all(1)
+        if not ok.any():
+            return P
+        V, F = np.asarray(mesh.vertices, float), np.asarray(mesh.triangles)
+        if self.cfg.get("core") == "rust":
+            import ear3d_core
+            P[ok] = np.reshape(ear3d_core.closest_points(P[ok].ravel().tolist(), V.ravel().tolist(),
+                                                         F.ravel().astype(np.uint32).tolist()), (-1, 3))
+        else:
+            sc = o3d.t.geometry.RaycastingScene()
+            sc.add_triangles(o3d.core.Tensor(V.astype(np.float32)), o3d.core.Tensor(F.astype(np.uint32)))
+            P[ok] = sc.compute_closest_points(o3d.core.Tensor(P[ok].astype(np.float32)))["points"].numpy()
+        return P
 
     def _multiview(self, ear, side, R, c0, s):
         c = self.cfg

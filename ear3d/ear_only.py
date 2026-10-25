@@ -90,9 +90,7 @@ def landmarks(pipe, mesh):
     p0 = np.r_[mid, near[:, 2].max() if len(near) else Wv[:, 2].max()]
     half = c["eye_z"] * np.tan(np.radians(c["vfov"]) / 2)
     P = pipe._multiview(ear_m, "L", Rv, p0 @ Rv, 0.5 * float((hi - lo).max()) * (1 + 2 * PAD) / half)
-    ok = np.isfinite(P).all(1)
-    sc = o3d.t.geometry.RaycastingScene(); sc.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(m))
-    P[ok] = sc.compute_closest_points(o3d.core.Tensor(P[ok].astype(np.float32)))["points"].numpy()
+    P = pipe._snap(P, m)
     X = ((P @ CANON_TO_HEAD + c0) - t) / s @ R                        # back to W
     if mirror:
         X = X * [1.0, 1.0, -1.0]

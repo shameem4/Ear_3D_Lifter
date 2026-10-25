@@ -2,6 +2,7 @@
 //! two bindings (`python` feature: PyO3; `wasm` feature: wasm-bindgen).
 //! Arrays cross the boundary flat, row-major: n x 3 is a slice of 3n f64.
 
+pub mod snap;
 pub mod triangulate;
 
 #[cfg(feature = "python")]

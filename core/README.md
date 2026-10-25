@@ -17,3 +17,6 @@ Ported so far:
   RANSAC draws (numpy's RNG cannot be reproduced). 16 held-out heads, 32
   hand-corrected ears: median 1.089 = 1.089 mm, paired p=0.87; WASM and the
   Python extension agree bit for bit. Pipeline: `EAR3D_CORE=rust`.
+- `snap`: closest point on the mesh (brute force, Ericson). Matches open3d's
+  RaycastingScene to 1.4e-4 mm (its float32) on a 364k-triangle head, 0.2 s.
+  The Python path stayed bit-identical after the refactor (`Pipeline._snap`).
