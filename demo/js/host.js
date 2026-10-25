@@ -62,7 +62,7 @@ export class BrowserHost {
   event(kind, payload) { this.onEvent(kind, payload); }
 }
 
-function rgb(rgba, S) {
+export function rgb(rgba, S) {
   const o = new Uint8Array(S * S * 3);
   for (let i = 0; i < S * S; i++) { o[3 * i] = rgba[4 * i]; o[3 * i + 1] = rgba[4 * i + 1]; o[3 * i + 2] = rgba[4 * i + 2]; }
   return o;

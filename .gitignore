@@ -72,3 +72,5 @@ core/pkg/
 
 # exported by demo/export_models.py, regenerate rather than commit
 demo/models/
+demo/meshes/
+demo/pkg/

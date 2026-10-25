@@ -10,6 +10,7 @@ browser and the Python host run the same code around the same graphs:
   blazeear_anchors.bin  its anchors (A x 4: cx, cy, w, h, normalised, f64 LE),
                     from BlazeEar's get_anchors -- data, not regenerated
   face_landmarker.task  MediaPipe's model bundle, as the Python host uses it
+  table/angles/template/canon.bin, cfg.json  the pipeline's assets and config
 Each graph is checked against torch on probe inputs.
 
     python demo/export_models.py
@@ -55,6 +56,16 @@ print(f"blazeear.onnx: max |onnx - torch| = {worst:.2e}")
 assert worst < 1e-3, "BlazeEar export does not match torch"
 np.ascontiguousarray(inf.anchors.cpu().numpy(), "<f8").tofile(OUT / "blazeear_anchors.bin")
 shutil.copy(DEFAULTS["face_task"], OUT / "face_landmarker.task")
+# The pipeline's own assets, as ear3d.core_host.run hands them to the crate
+# (f64 LE): the learned view table and its angles, the mean ear template, the
+# canonical face; and the config subset the crate reads (cfg.json).
+from ear3d import core_host, ear_only
+from ear3d.pipeline import TABLE
+t = np.load(TABLE, allow_pickle=True)
+for name, a in [("table", t["table"]), ("angles", t["angles"]), ("template", ear_only._template()),
+                ("canon", core_host.canonical_face(DEFAULTS))]:
+    np.ascontiguousarray(a, "<f8").tofile(OUT / f"{name}.bin")
+json.dump({k: DEFAULTS[k] for k in core_host.CFG_KEYS}, open(OUT / "cfg.json", "w"))
 json.dump({"r2j_checkpoint": str(ck), "blazeear_weights": str(BLAZE_EAR), "blazeear_input": inf.input_size,
            "anchors": int(inf.anchors.shape[0]), "face_task": DEFAULTS["face_task"]}, open(OUT / "manifest.json", "w"), indent=1)
 print("wrote", sorted(p.name for p in OUT.iterdir()))

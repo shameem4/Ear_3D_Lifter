@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ear 3D Lifter</title>
+<style>
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1d1b; --mute: #6b6a66; --line: #e2e0da;
+  --accent: #b4532a; --ok: #2f7d4f; --ray: #3a6ea5; --view-bg: #e9e7e1;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #161615; --panel: #1f1f1d; --ink: #ecebe6; --mute: #9a9891; --line: #33322f;
+          --accent: #e07a4a; --ok: #5cbf86; --ray: #6fa3dc; --view-bg: #2a2a27; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { padding: 14px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+header p { margin: 0; color: var(--mute); }
+main { display: grid; grid-template-columns: 260px 1fr 340px; gap: 0; height: calc(100vh - 52px); }
+aside, section { overflow: auto; }
+aside { border-right: 1px solid var(--line); padding: 14px; background: var(--panel); }
+#right { border-left: 1px solid var(--line); padding: 14px; background: var(--panel); }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--mute); margin: 14px 0 6px; font-weight: 600; }
+h2:first-child { margin-top: 0; }
+.tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+.tabs button { flex: 1; }
+button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--mute); }
+button.on { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; width: 100%; padding: 9px; font-weight: 600; }
+button:disabled { opacity: .45; cursor: default; }
+#list { list-style: none; margin: 0; padding: 0; max-height: 38vh; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+#list li { padding: 6px 9px; cursor: pointer; display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); }
+#list li:last-child { border-bottom: 0; }
+#list li.sel { background: var(--view-bg); font-weight: 600; }
+#list li span { color: var(--mute); font-size: 12px; }
+label.up { display: block; border: 1px dashed var(--line); border-radius: 6px; padding: 10px; text-align: center; color: var(--mute); cursor: pointer; margin: 8px 0; }
+label.up input { display: none; }
+#stages { list-style: none; padding: 0; margin: 0; }
+#stages li { padding: 5px 0 5px 22px; position: relative; color: var(--mute); }
+#stages li::before { content: ""; position: absolute; left: 4px; top: 11px; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--line); }
+#stages li.run { color: var(--ink); font-weight: 600; }
+#stages li.run::before { border-color: var(--accent); background: var(--accent); animation: pulse 1s infinite; }
+#stages li.done { color: var(--ink); }
+#stages li.done::before { border-color: var(--ok); background: var(--ok); }
+#stages li small { color: var(--mute); font-weight: 400; margin-left: 4px; }
+@keyframes pulse { 50% { opacity: .3; } }
+#center { position: relative; background: var(--view-bg); }
+#viewer { width: 100%; height: 100%; display: block; }
+#overlay { position: absolute; left: 14px; top: 12px; right: 14px; display: flex; justify-content: space-between; pointer-events: none; }
+#status { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; max-width: 70%; }
+#legend { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; font-size: 12px; }
+#legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 4px 0 8px; vertical-align: middle; }
+#legend i:first-child { margin-left: 0; }
+#controls { position: absolute; bottom: 12px; left: 14px; display: flex; gap: 6px; }
+#controls button { background: var(--panel); }
+#controls button.on { background: var(--ink); color: var(--panel); }
+#cam { width: 100%; aspect-ratio: 1; background: var(--view-bg); border-radius: 6px; display: block; }
+#camcap { color: var(--mute); font-size: 12px; margin: 4px 0 0; min-height: 1.4em; }
+#strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+#strip canvas { width: 100%; aspect-ratio: 1; border-radius: 3px; background: var(--view-bg); cursor: pointer; }
+#result { border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+#result dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0 0 8px; }
+#result dt { color: var(--mute); }
+#result dd { margin: 0; font-variant-numeric: tabular-nums; }
+.credits { color: var(--mute); font-size: 11.5px; margin-top: 16px; }
+.err { color: var(--accent); }
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; height: auto; }
+  #center { height: 70vh; }
+  aside, #right { border: 0; border-bottom: 1px solid var(--line); }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Ear 3D Lifter</h1>
+  <p>A head or ear mesh in, 55 ear landmarks in 3D out. Runs entirely in your browser: the Rust pipeline as WebAssembly, ONNX models on the CPU.</p>
+</header>
+<main>
+  <aside>
+    <h2>Mesh</h2>
+    <div class="tabs"><button id="tabHeads" class="on">Heads</button><button id="tabEars">Ears</button></div>
+    <ul id="list"></ul>
+    <label class="up">Upload your own (.ply, .obj, .stl, in mm)<input id="file" type="file" accept=".ply,.obj,.stl"></label>
+    <button id="run" class="primary" disabled>Loading models…</button>
+    <h2>Stages</h2>
+    <ul id="stages"></ul>
+    <p class="credits" id="credits"></p>
+  </aside>
+  <section id="center">
+    <canvas id="viewer"></canvas>
+    <div id="overlay">
+      <div id="status">Pick a mesh.</div>
+      <div id="legend"><i style="background:var(--ray)"></i>cameras <i style="background:var(--accent)"></i>triangulated <i style="background:var(--ok)"></i>on the surface</div>
+    </div>
+    <div id="controls">
+      <button id="spin" class="on">Rotate</button>
+      <button id="frameEar" disabled>Zoom to ear</button>
+      <button id="frameAll">Whole mesh</button>
+    </div>
+  </section>
+  <section id="right">
+    <h2>What the pipeline sees</h2>
+    <canvas id="cam" width="600" height="600"></canvas>
+    <p id="camcap"></p>
+    <h2>Landmark views</h2>
+    <div id="strip"></div>
+    <h2>Result</h2>
+    <div id="result"><span style="color:var(--mute)">Not run yet.</span></div>
+  </section>
+</main>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+               "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
