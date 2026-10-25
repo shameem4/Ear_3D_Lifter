@@ -35,10 +35,21 @@ for h in HELD_OUT:
     index["heads"].append(write(h, np.asarray(m.vertices) * 1000.0, np.asarray(m.triangles)) | {"label": f"HUTUBS {h}"})
 import trimesh
 cut = np.load(BACK_EXCLUSION)["triangles"]
+# Cutting renumbers faces AND vertices, so the template's (triangle, barycentric)
+# marks no longer index the cut meshes: as-is, 13 of 55 land on the wrong
+# triangle (up to 52 mm off). The maps below restore them exactly; the topology
+# is the template's for every wrap, so one pair of maps serves all ears.
+face_map, vert_map = None, None
 for i in range(1, 21):
     t = trimesh.load(WRAPS / f"{i:03d}_left.obj", process=False)       # trimesh: the triangle order the mask indexes
     F = np.delete(np.asarray(t.faces), cut, axis=0)
     used = np.unique(F); remap = np.full(len(t.vertices), -1); remap[used] = np.arange(len(used))
+    kept = np.setdiff1d(np.arange(len(t.faces)), cut)
+    assert face_map is None or ((face_map == kept).all() and (vert_map == used).all()), "wraps do not share the template topology"
+    face_map, vert_map = kept, used
     index["ears"].append(write(f"ae{i:03d}_left", np.asarray(t.vertices)[used], remap[F]) | {"label": f"AudioEar3D {i:03d} left (wrap)"})
+# cut face k is template face face_map[k]; cut vertex k is template vertex vert_map[k]
+np.savez(OUT / "ae_cut_maps.npz", face_map=face_map, vert_map=vert_map)
+index["ear_maps"] = "ae_cut_maps.npz"
 json.dump(index, open(OUT / "index.json", "w"), indent=1)
 print(len(index["heads"]), "heads,", len(index["ears"]), "ears ->", OUT)
