@@ -169,11 +169,19 @@ def cut_ear(V, F, P):
     return m
 
 
-def wrap_ear(V, F, P, side, work_dir, name="ear", cut=True, use=None, anchors=()):
+def wrap_ear(V, F, P, side, work_dir, name="ear", cut=True, use=None, anchors=(), exclude=None):
     """Fitted template vertices (base resolution) in the input's frame, or raise.
 
     cut=False fits (V, F) as given -- an ear-only surface such as a meshed
     AudioEar3D cloud -- instead of cutting the ear out of a head first.
+
+    exclude: template triangle indices Wrapping does NOT fit (its `polygons`
+    input excludes; verified on 006_right: passing the front made the front
+    fit worse, 10.8% -> 24.8% of the scan off, passing the back made it
+    better, 10.8% -> 4.8%). Tried on AudioEar3D with the back of the rim
+    (templates/ear_L_template_back_exclusion.npz), since a one-sided scan
+    holds nothing there: over 39 ears 15 better, 14 worse (2026-10-25), not
+    adopted; the corpus wraps are unchanged.
 
     anchors: landmark indices also given to Wrapping as control points. A
     RESCUE, never a default: (15, 17, 19) pulls a lobe the automatic fit left
@@ -236,6 +244,15 @@ def wrap_ear(V, F, P, side, work_dir, name="ear", cut=True, use=None, anchors=()
         _anchor_pairs(anchors, P, Vs, Fs, mir)
     sav = one(proj, "SaveGeom"); sav["params"]["fileName"]["value"] = str(dst)
     connect(sav, "geom", one(proj, "SubdivideGeom"))          # no ProjectGeom
+    if exclude is not None:           # Wrapping's `polygons`: template triangles NOT fitted; they follow by smoothness
+        nid = max(n["nodeId"] for n in proj["nodes"].values()) + 1
+        proj["nodes"]["SelectPolygons"] = {"isEnabled": True, "nodeId": nid, "nodeType": "SelectPolygons", "params": {
+            "displayMode": {"value": 0}, "fileName": {"value": ""}, "invisiblePolygonIndices": {"value": []},
+            "selection": {"value": [int(i) for i in exclude]}, "source": {"value": 0},
+            "geom": {"connectedNodeId": rig["params"]["geomFloating"]["connectedNodeId"]}}}
+        connect(wrp, "polygons", proj["nodes"]["SelectPolygons"])
+        proj["layout"]["items"].append({"itemId": max(i["itemId"] for i in proj["layout"]["items"]) + 1,
+                                        "itemType": "node", "nodeId": nid, "x": 0, "y": 400})
     proj["timeline"] = {"current": 0, "min": 0, "max": 0}
     pj = wd / f"{name}.wrap"; json.dump(proj, open(pj, "w"), indent=4)
     r = subprocess.run([str(WRAPCMD), "compute", str(pj), "-s", "0", "-e", "0"],
