@@ -7,7 +7,6 @@ import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 import { STLLoader } from "three/addons/loaders/STLLoader.js";
 import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
-import init, { run } from "./pkg/ear3d_core.js";
 import { BrowserHost, rgb } from "./js/host.js";
 
 const $ = (id) => document.getElementById(id);
@@ -28,6 +27,8 @@ cam.add(new THREE.DirectionalLight(0xffffff, 0.6)); scene.add(cam);
 const world = new THREE.Group(); scene.add(world);      // the head frame, once the pipeline has one
 const body = new THREE.Group(); world.add(body);        // the mesh (mirrored for a right ear-only scan)
 const marks = new THREE.Group(); world.add(marks);      // everything in the pipeline's mesh coordinates
+const camGroup = new THREE.Group(), triGroup = new THREE.Group(); // the optional layers, off by default
+camGroup.visible = triGroup.visible = false;
 let meshObj = null, earFocus = null, this_head = null;
 const anims = {};                                        // name -> step(now), returns true when finished
 window.__demo = { cam, controls, world, get mesh() { return meshObj; }, get ear() { return earFocus; }, frameAll, THREE };   // for the parity driver
@@ -55,7 +56,7 @@ function frameAll() {
 
 function showMesh(V, F) {
   if (meshObj) { body.remove(meshObj); meshObj.geometry.dispose(); }
-  marks.clear(); world.matrix.identity(); this_head = null; world.matrixAutoUpdate = false; body.scale.set(1, 1, 1);
+  marks.clear(); camGroup.clear(); triGroup.clear(); marks.add(camGroup, triGroup); world.matrix.identity(); this_head = null; world.matrixAutoUpdate = false; body.scale.set(1, 1, 1);
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(V), 3));
   g.setIndex(new THREE.BufferAttribute(F, 1)); g.computeVertexNormals();
@@ -99,10 +100,10 @@ function toHeadFrame(R, c0, mirror) {
 }
 
 const sphereGeo = new THREE.SphereGeometry(1, 12, 8);
-function dots(P, color, r) {
+function dots(P, color, r, into = marks) {
   const m = new THREE.InstancedMesh(sphereGeo, new THREE.MeshStandardMaterial({ color, roughness: 0.4 }), P.length);
   P.forEach((p, i) => m.setMatrixAt(i, new THREE.Matrix4().compose(new THREE.Vector3(...p), new THREE.Quaternion(), new THREE.Vector3(r, r, r))));
-  marks.add(m); return m;
+  into.add(m); return m;
 }
 const valid = (p) => p && (p[0] !== 0 || p[1] !== 0 || p[2] !== 0);
 
@@ -225,11 +226,11 @@ class DemoHost {
         const w = [0, 1, 2].map((k) => s * (y[0] * R[0][k] + y[1] * R[1][k] + y[2] * R[2][k]) + C[k]);
         pts.push(w);
       });
-      dots(pts, css("--ray"), 1.6);
+      dots(pts, css("--ray"), 1.6, camGroup);
       if (earFocus) {
         const g = new THREE.BufferGeometry().setFromPoints(pts.flatMap((w) => [new THREE.Vector3(...w), earFocus.c]));
         const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: css("--ray"), transparent: true, opacity: 0.18 }));
-        marks.add(l);
+        camGroup.add(l);
       }
       const S = lastBatch.length ? Math.round(Math.sqrt(lastBatch[0].length / 4)) : 600;
       fillStrip(lastBatch, p.uv, S);
@@ -237,7 +238,7 @@ class DemoHost {
       status("2D landmarks on every view; triangulating the rays");
     } else if (kind === "triangulated") {
       this.tri = p.filter(valid);
-      this.triMesh = dots(this.tri, css("--accent"), 0.55);
+      this.triMesh = dots(this.tri, css("--accent"), 0.55, triGroup);
       status("Triangulated; snapping onto the surface");
     } else if (kind === "snapped") {
       const to = p, from = this.tri || [], idx = p.map((q, i) => i).filter((i) => valid(p[i]));
@@ -266,6 +267,7 @@ class DemoHost {
 
 // ------------------------------------------------------------------ meshes
 let index, tab = "heads";
+const BIG_MESH = 300000;      // vertices; above this, say the run will be slow
 const HEAD_MIN_MM = 100;      // ear_only.HEAD_MIN_MM: the crate's flow gate, mirrored only to pick the stage list
 function spanOf(V) { let m = 0; for (let k = 0; k < 3; k++) { let lo = Infinity, hi = -Infinity; for (let i = k; i < V.length; i += 3) { lo = Math.min(lo, V[i]); hi = Math.max(hi, V[i]); } m = Math.max(m, hi - lo); } return m; }
 async function loadBin(file) {
@@ -288,7 +290,9 @@ function setCurrent(c) {
   current = c; renderList(); showMesh(c.V, c.F);
   setStages(spanOf(c.V) < HEAD_MIN_MM ? STAGES_EAR : STAGES_HEAD); stage("load", "done", `${(c.V.length / 3).toLocaleString()} vertices`);
   $("result").innerHTML = `<span style="color:var(--mute)">Not run yet.</span>`; $("strip").innerHTML = "";
-  status(`${c.label}: ready. Press Run.`); $("run").disabled = !host; if (host) $("run").textContent = "Run";
+  const nv = c.V.length / 3;
+  status(nv > BIG_MESH ? `${c.label}: ${(nv / 1e6).toFixed(1)}M vertices. That works, but skinning and rendering it takes longer, and the page may feel slow while it runs. Press Run.`
+                       : `${c.label}: ready. Press Run.`); $("run").disabled = !host; if (host) $("run").textContent = "Run";
 }
 
 $("file").onchange = async (e) => {
@@ -325,8 +329,7 @@ $("run").onclick = async () => {
   status(earOnly ? "An ear on its own: fitting the mean ear for its pose and side…" : "Skinning the mesh (synthetic skin and ambient occlusion)…");
   const dh = new DemoHost(host, earOnly); const t0 = performance.now();
   try {
-    await tick();
-    const o = await run(dh, current.V, current.F, assets.cfg, assets.table, assets.angles, assets.template, assets.canon, assets.anchors);
+    const o = await runInWorker(dh, [current.V, current.F, assets.cfg, assets.table, assets.angles, assets.template, assets.canon, assets.anchors]);
     showResult(o, (performance.now() - t0) / 1000);
   } catch (err) {
     console.error(err); status(`The pipeline failed: ${err.message || err}`);
@@ -334,6 +337,26 @@ $("run").onclick = async () => {
   }
   running = false; $("run").disabled = false; $("run").textContent = "Run again";
 };
+
+// The crate runs in worker.js; this side answers its host calls.
+let worker = null;
+function runInWorker(dh, args) {
+  if (!worker) worker = new Worker(new URL("worker.js", import.meta.url), { type: "module" });
+  return new Promise((resolve, reject) => {
+    worker.onmessage = async (e) => {
+      const m = e.data;
+      if (m.type === "call") {
+        const result = await dh[m.method](...m.args);
+        const transfer = m.method === "render" ? result.flatMap((o) => [o.depth, o.image].filter(Boolean).map((a) => a.buffer)) : [];
+        worker.postMessage({ type: "reply", id: m.id, result }, transfer);
+      } else if (m.type === "event") dh.event(m.kind, m.payload);
+      else if (m.type === "done") resolve(m.result);
+      else if (m.type === "error") reject(new Error(m.message));
+    };
+    worker.onerror = (e) => reject(new Error(e.message || "the worker failed"));
+    worker.postMessage({ type: "run", args });
+  });
+}
 
 function showResult(o, secs) {
   const n = (P) => (P ? P.length / 3 : 0);
@@ -353,6 +376,8 @@ function showResult(o, secs) {
   };
 }
 
+$("showCams").onchange = (e) => { camGroup.visible = e.target.checked; };
+$("showTri").onchange = (e) => { triGroup.visible = e.target.checked; };
 $("tabHeads").onclick = () => { tab = "heads"; renderList(); };
 $("tabEars").onclick = () => { tab = "ears"; renderList(); };
 $("spin").onclick = () => { controls.autoRotate = !controls.autoRotate; $("spin").className = controls.autoRotate ? "on" : ""; };
@@ -378,7 +403,7 @@ function focusEar() {
   $("credits").textContent = `Heads: ${index.credits.heads}. Ears: ${index.credits.ears}. 2D landmarker builds on SaifulULL's U-Net (CC BY 4.0). Ear boxes: BlazeEar. Face: MediaPipe FaceLandmarker.`;
   renderList();
   const f64 = async (n) => new Float64Array(await (await fetch(`models/${n}.bin`)).arrayBuffer());
-  const [, h, cfg, table, angles, template, canon, anchors] = await Promise.all([init(), BrowserHost.create("models/", 600),
+  const [h, cfg, table, angles, template, canon, anchors] = await Promise.all([BrowserHost.create("models/", 600),
     fetch("models/cfg.json").then((r) => r.text()), f64("table"), f64("angles"), f64("template"), f64("canon"), f64("blazeear_anchors")]);
   host = h; assets = { cfg, table, angles, template, canon, anchors };
   $("run").textContent = current ? "Run" : "Pick a mesh"; $("run").disabled = !current;

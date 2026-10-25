@@ -35,7 +35,7 @@ button:disabled { opacity: .45; cursor: default; }
 #list li { padding: 6px 9px; cursor: pointer; display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); }
 #list li:last-child { border-bottom: 0; }
 #list li.sel { background: var(--view-bg); font-weight: 600; }
-#list li span { color: var(--mute); font-size: 12px; }
+#list li span { color: var(--mute); font-size: 12px; white-space: nowrap; margin-left: 8px; }
 label.up { display: block; border: 1px dashed var(--line); border-radius: 6px; padding: 10px; text-align: center; color: var(--mute); cursor: pointer; margin: 8px 0; }
 label.up input { display: none; }
 #stages { list-style: none; padding: 0; margin: 0; }
@@ -51,6 +51,8 @@ label.up input { display: none; }
 #viewer { width: 100%; height: 100%; display: block; }
 #overlay { position: absolute; left: 14px; top: 12px; right: 14px; display: flex; justify-content: space-between; pointer-events: none; }
 #status { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; max-width: 70%; }
+#legend label { pointer-events: auto; cursor: pointer; margin-right: 6px; }
+#legend input { margin: 0 2px 0 0; vertical-align: middle; }
 #legend { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; font-size: 12px; }
 #legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 4px 0 8px; vertical-align: middle; }
 #legend i:first-child { margin-left: 0; }
@@ -94,7 +96,11 @@ label.up input { display: none; }
     <canvas id="viewer"></canvas>
     <div id="overlay">
       <div id="status">Pick a mesh.</div>
-      <div id="legend"><i style="background:var(--ray)"></i>cameras <i style="background:var(--accent)"></i>triangulated <i style="background:var(--ok)"></i>on the surface</div>
+      <div id="legend">
+        <label><input type="checkbox" id="showCams"><i style="background:var(--ray)"></i>cameras</label>
+        <label><input type="checkbox" id="showTri"><i style="background:var(--accent)"></i>triangulated</label>
+        <span><i style="background:var(--ok)"></i>landmarks</span>
+      </div>
     </div>
     <div id="controls">
       <button id="spin" class="on">Rotate</button>

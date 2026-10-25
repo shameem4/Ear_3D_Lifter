@@ -1,7 +1,10 @@
 """Export the demo's pick list to demo/meshes/ (gitignored, like the data it
 comes from): the 16 held-out HUTUBS heads (raw scans, metres -> mm) and the
-first 20 AudioEar3D left ears (the surfaces scripts/corpus/03 reconstructed
-from their point clouds, runs/ae3d_rewrap). Each mesh is one .bin:
+first 20 AudioEar3D left ears as WRAPPED (the mean-ear template fitted to
+each scan, ../wrap_work/corpus/canonical_lmw/audioear, canonical mm). Caveat:
+a wrap is smooth, hole-free and shares the pipeline's template topology, so
+it is an easier input than a raw scan; the raw cloud surfaces
+(runs/ae3d_rewrap) are where the pipeline is weak. Each mesh is one .bin:
 u32 nV, u32 nF, f32 V (nV x 3, mm), u32 F (nF x 3); index.json lists them.
 
     python demo/export_meshes.py
@@ -10,6 +13,7 @@ import json, pathlib, sys
 import numpy as np, open3d as o3d
 ROOT = pathlib.Path(__file__).resolve().parents[1]; OUT = ROOT / "demo" / "meshes"
 HUTUBS = ROOT.parent / "clean_3d_data" / "3D head meshes"
+WRAPS = ROOT.parent / "wrap_work" / "corpus" / "canonical_lmw" / "audioear"
 HELD_OUT = ["pp16", "pp19", "pp21", "pp22", "pp33", "pp40", "pp46", "pp47", "pp49", "pp57", "pp69", "pp70", "pp71", "pp72", "pp77", "pp78"]
 OUT.mkdir(exist_ok=True)
 
@@ -21,12 +25,12 @@ def write(name, V, F):
 
 index = {"heads": [], "ears": [], "credits": {
     "heads": "HUTUBS (Brinkmann et al. 2019, JAES 67(9)), CC BY 4.0",
-    "ears": "AudioEar3D (Huang et al. 2023, AAAI), CC BY 4.0; surfaces reconstructed from its point clouds"}}
+    "ears": "AudioEar3D (Huang et al. 2023, AAAI), CC BY 4.0, shown as our template wrapped onto each scan: smooth and hole-free, so easier than a raw scan"}}
 for h in HELD_OUT:
     m = o3d.io.read_triangle_mesh(str(HUTUBS / f"{h}_3DheadMesh.ply"))
     index["heads"].append(write(h, np.asarray(m.vertices) * 1000.0, np.asarray(m.triangles)) | {"label": f"HUTUBS {h}"})
 for i in range(1, 21):
-    z = np.load(ROOT / "runs" / "ae3d_rewrap" / f"{i:03d}_left.npz")
-    index["ears"].append(write(f"ae{i:03d}_left", z["Vm"], z["Fm"]) | {"label": f"AudioEar3D {i:03d} left"})
+    m = o3d.io.read_triangle_mesh(str(WRAPS / f"{i:03d}_left.obj"))
+    index["ears"].append(write(f"ae{i:03d}_left", np.asarray(m.vertices), np.asarray(m.triangles)) | {"label": f"AudioEar3D {i:03d} left (wrap)"})
 json.dump(index, open(OUT / "index.json", "w"), indent=1)
 print(len(index["heads"]), "heads,", len(index["ears"]), "ears ->", OUT)

@@ -22,8 +22,10 @@ generated and gitignored.
 The same pipeline as `EAR3D_CORE=rust` in Python, on different pictures and
 a different FaceMesh build: +0.04 mm paired over the 32 held-out ears
 (demo/parity: about half the three.js renderer, half the JS FaceLandmarker).
-Raw AudioEar3D cloud surfaces are the pipeline's known weak case (holes);
-005 orients poorly, 012 well.
+The AudioEar3D ears are shown as WRAPS (our template fitted to each scan):
+smooth, hole-free and sharing the pipeline's template topology, so an easier
+input than a raw scan. On the raw cloud surfaces the pipeline is weak (holes):
+005 orients poorly there, 012 well.
 
 ## Before hosting it publicly
 

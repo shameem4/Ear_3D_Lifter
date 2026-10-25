@@ -21,6 +21,8 @@ const ev = async (e) => (await cdp("Runtime.evaluate", { expression: e, awaitPro
 const flush = () => fs.writeFileSync(`${out}/console.txt`, logs.join("\n"));
 const shot = async (n) => { flush(); const r = await cdp("Page.captureScreenshot", { format: "png" }); fs.writeFileSync(`${out}/${n}.png`, Buffer.from(r.result.data, "base64")); };
 await cdp("Runtime.enable"); await cdp("Page.enable");
+// main-thread long tasks: a page blocked for many seconds gets the browser's "unresponsive" prompt
+await cdp("Page.addScriptToEvaluateOnNewDocument", { source: `window.__long = []; new PerformanceObserver((l) => l.getEntries().forEach((e) => window.__long.push(e.duration))).observe({ type: "longtask", buffered: true });` });
 await cdp("Emulation.setDeviceMetricsOverride", { width: +W, height: +H, deviceScaleFactor: 1, mobile: false });
 await cdp("Page.navigate", { url });
 for (let i = 0; i < 120; i++) { await sleep(500); if (await ev(`!document.getElementById("run").disabled`)) break; }
@@ -43,6 +45,7 @@ while (Date.now() - t0 < 600000) {
   if (/^Done|failed|No face/.test(st)) break;
 }
 await sleep(2500); await shot("z_final");
+console.log("main-thread long tasks:", await ev(`JSON.stringify({n: window.__long.length, max_ms: Math.round(Math.max(0, ...window.__long)), total_ms: Math.round(window.__long.reduce((a, b) => a + b, 0))})`));
 console.log(await ev(`(()=>{const d=window.__demo,T=d.THREE; const m=d.mesh; const g=m.geometry; const ray=new T.Raycaster(); const c=d.controls.target.clone(); ray.set(d.cam.position, c.clone().sub(d.cam.position).normalize()); m.material.side=T.DoubleSide; const hits=ray.intersectObject(m); return JSON.stringify({cam:d.cam.position.toArray().map(x=>+x.toFixed(1)), target:c.toArray().map(x=>+x.toFixed(1)), det:d.world.matrix.determinant().toFixed(3), firstHit: hits[0] ? {dist:+hits[0].distance.toFixed(1), facing: +hits[0].face.normal.clone().transformDirection(m.matrixWorld).dot(ray.ray.direction).toFixed(2)} : null, colorMean: [0,1,2].map(k=>{let s=0,n=0;const a=g.attributes.color.array;for(let i=k;i<a.length;i+=3){s+=a[i];n++;}return +(s/n).toFixed(3);})});})()`));
 console.log(await ev(`JSON.stringify({head: window.__demo.head, world: window.__demo.world.matrix.elements.map(x=>+x.toFixed(3))})`));
 await ev(`window.__demo.frameAll(); window.__demo.controls.autoRotate=false;`); await sleep(1500); await shot("z_whole");
