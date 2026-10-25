@@ -24,7 +24,10 @@ a different FaceMesh build: +0.04 mm paired over the 32 held-out ears
 (demo/parity: about half the three.js renderer, half the JS FaceLandmarker).
 The AudioEar3D ears are shown as WRAPS (our template fitted to each scan):
 smooth, hole-free and sharing the pipeline's template topology, so an easier
-input than a raw scan. On the raw cloud surfaces the pipeline is weak (holes):
+input than a raw scan. The back of the helix rim and the canal tube are cut
+from each wrap (wrap_work/templates/ear_L_template_back_exclusion.npz): a
+one-sided scan holds nothing there, and the template tore through the front
+on 62 of 112 wraps; cut, 0. On the raw cloud surfaces the pipeline is weak (holes):
 005 orients poorly there, 012 well.
 
 ## Before hosting it publicly
