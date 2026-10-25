@@ -9,21 +9,11 @@ without its WrapHead two-stage fit (superseded): nothing here derives from WrapH
 import json, pathlib, subprocess
 import numpy as np, open3d as o3d, trimesh
 from .faceform import WRAPCMD, BASE, one, connect, _wrap_env, _similarity
-from .face import canonical_obj
+from .face import canonical_raw
 
 N_LM = 468
 INLIER_MM = 6.0
 WORK_SIZE = 100.0            # Wrap's parameters are tuned for a scan ~100 units across
-
-
-def canonical_raw():
-    """The file as written (cm -> mm), in FILE order, which is the landmark numbering and Wrap's numbering.
-    Parsed by hand: Open3D's OBJ reader REORDERS this file's vertices (it has texture coordinates)."""
-    V, F = [], []
-    for l in open(canonical_obj()):
-        if l.startswith("v "): V.append([float(x) for x in l.split()[1:4]])
-        elif l.startswith("f "): F.append([int(x.split("/")[0]) - 1 for x in l.split()[1:4]])
-    return np.array(V) * 10.0, np.array(F)
 
 
 def canonical(levels=2):

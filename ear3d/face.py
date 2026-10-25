@@ -4,10 +4,13 @@ The face counterpart of Pipeline, ported from Face_3D_Lifter (2026-10-25):
   1. face skin -> frames.normalize_head (FaceMesh frame + checks)
   2. orbit skin (FACE orbit_*) -> 33 views on a yaw x pitch grid about a point behind the nose
   3. FaceLandmarker per view (all 478 points, or none)
-  4. per landmark: subtract each view's learned mean 2D offset (face_view_offsets_v0.npz,
-     scripts/face/build_view_offsets.py), then RANSAC ray intersection over every view that found the face
-  5. re-seat onto the head surface (closest point); the off-surface distance is kept
-Leave one head out on 50 HUTUBS heads: 2.34 mm median against the canonical-fit pseudo GT (FINDINGS).
+  4. subtract each view's learned mean 2D offset (face_view_offsets_*.npz, scripts/face/build_view_offsets.py),
+     then RANSAC ray intersection per landmark over every view that found the face, seated on the surface
+  5. joint ray fit (fit_rays): all 468 points at once to every view's rays, Cauchy-weighted per ray, with a
+     Laplacian prior on MediaPipe's canonical mesh, re-seated each iteration. Per-landmark triangulation lets
+     neighbours settle on different views and bunch; the joint fit keeps the canonical spacing.
+Leave one head out on 50 HUTUBS heads vs the canonical-fit pseudo GT: 2.34 mm after step 4, 2.16 (p90 5.59
+-> 4.99, collapsed edges 0.62 -> 0.05%) after step 5 (FINDINGS). Iris (468-477) keeps step 4's points.
 
     from ear3d.face import FaceLifter
     out, dbg = FaceLifter().run(mesh_mm)
@@ -20,6 +23,7 @@ from .render import render
 from .camera import orbit_extrinsic, camera_ke, Camera
 from .skin import skinned
 from .triangulate import ransac_point, ray_distance
+from .faceform import _similarity
 
 N_LM = 478
 
@@ -32,7 +36,7 @@ FACE = dict(
     orbit_tone=5,
     orbit_skin_noise=True,
     orbit_colours="skin",        # "skin": synthetic (tone, noise above); "scan": the mesh's own vertex colours
-    view_offsets=str(pathlib.Path(__file__).with_name("face_view_offsets_v0.npz")),   # None = off
+    view_offsets=str(pathlib.Path(__file__).with_name("face_view_offsets_v1.npz")),   # None = off; v1 = runs/face/v1
     orbit_light_dir=(0.0, -0.5, -1.0),   # direction the light TRAVELS, head frame (+z nose)
     orbit_light_frame="world",
     yaws=(-75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75),
@@ -40,12 +44,26 @@ FACE = dict(
     scale_mm=100.0,                      # mm per render unit (the camera is unit-scale)
     pivot_behind_nose_mm=60.0,           # orbit centre, behind the nose tip along -z
     ransac_mm=2.0,
+    fit_rays=True,                       # step 5; False returns step 4's points
+    fit_lambda=0.3,                      # Laplacian prior weight (swept 0.3-3: all within 0.02 mm)
+    fit_cauchy_mm=2.0,                   # ray residual scale for the Cauchy weights
+    fit_iters=6,
 )
 
 
 def canonical_obj(cfg=FACE):
     """MediaPipe's canonical face model (Apache-2.0), kept beside face_landmarker.task."""
     return pathlib.Path(cfg["face_task"]).parent / "canonical_face_model.obj"
+
+
+def canonical_raw(cfg=FACE):
+    """The canonical face (cm -> mm) in FILE order, which is the landmark numbering and Wrap's numbering.
+    Parsed by hand: Open3D's OBJ reader REORDERS this file's vertices (it has texture coordinates)."""
+    V, F = [], []
+    for l in open(canonical_obj(cfg)):
+        if l.startswith("v "): V.append([float(x) for x in l.split()[1:4]])
+        elif l.startswith("f "): F.append([int(x.split("/")[0]) - 1 for x in l.split()[1:4]])
+    return np.array(V) * 10.0, np.array(F)
 
 
 def views(cfg=FACE):
@@ -98,6 +116,45 @@ def seat(P, V, F):
     return Ps, dist
 
 
+def canonical_laplacian(cfg=FACE):
+    """Umbrella Laplacian of the canonical mesh's 468 vertices, and those vertices (mm)."""
+    import scipy.sparse as sp
+    V, F = canonical_raw(cfg)
+    E = np.unique(np.sort(np.r_[F[:, [0, 1]], F[:, [1, 2]], F[:, [2, 0]]], 1), axis=0)
+    A = sp.coo_matrix((np.ones(2 * len(E)), (np.r_[E[:, 0], E[:, 1]], np.r_[E[:, 1], E[:, 0]])), (len(V), len(V))).tocsr()
+    return (sp.diags(np.asarray(A.sum(1)).ravel()) - A).tocsr(), V
+
+
+def fit_rays(UV, cams, off, V, F, init, cfg=FACE, lap=None):
+    """Step 5: the 468 face points fitted jointly to every (view, landmark) ray, mm in the frame of V.
+    UV, off: view x >=468 x 2 px; cams in render units (scale_mm); init: 468 x 3 seated triangulation (NaN ok).
+    Minimises sum w_kj |ray_kj miss|^2 + lambda |L (X - canonical posed onto init)|^2, w Cauchy on the miss."""
+    import scipy.sparse as sp, scipy.sparse.linalg as sla
+    L, Vc = canonical_laplacian(cfg) if lap is None else lap
+    n, s, c = len(Vc), cfg["scale_mm"], cfg["fit_cauchy_mm"]
+    O = np.zeros((len(cams), n, 3)); D = np.zeros((len(cams), n, 3))
+    has = np.isfinite(UV[:, :n, 0])
+    for k, cam in enumerate(cams):
+        if has[k].any():
+            o, d = cam.rays(UV[k, :n][has[k]] - off[k, :n][has[k]]); O[k, has[k]] = o * s; D[k, has[k]] = d
+    ok = np.isfinite(init).all(1)
+    if ok.sum() < 4:
+        return init
+    ref = _similarity(Vc[ok], init[ok])(Vc)
+    LL = sp.kron(cfg["fit_lambda"] * (L.T @ L), sp.eye(3)).tocsr()
+    Pm = np.eye(3)[None, None] - D[..., :, None] * D[..., None, :]          # projector off each ray
+    PmO = (Pm @ O[..., None])[..., 0]
+    X = np.where(ok[:, None], init, ref)
+    for _ in range(cfg["fit_iters"]):
+        v = X[None] - O; miss = np.linalg.norm(v - (v * D).sum(2, keepdims=True) * D, axis=2)
+        w = np.where(has, 1 / (1 + (miss / c) ** 2), 0.0)
+        A = sp.block_diag(list((w[..., None, None] * Pm).sum(0))).tocsr()
+        b = (w[..., None] * PmO).sum(0)
+        X = sla.spsolve((A + LL).tocsc(), b.ravel() + LL @ ref.ravel()).reshape(n, 3)
+        X, _ = seat(X, V, F)
+    return X
+
+
 class FaceLifter:
     def __init__(self, cfg=None):
         import mediapipe as mp
@@ -108,6 +165,7 @@ class FaceLifter:
         self.fl = vision.FaceLandmarker.create_from_options(vision.FaceLandmarkerOptions(
             base_options=mpp.BaseOptions(model_asset_path=self.cfg["face_task"]), num_faces=1))
         self.off = load_offsets(self.cfg)
+        self.lap = canonical_laplacian(self.cfg) if self.cfg["fit_rays"] else None
 
     def run(self, mesh, keep_images=False):
         c = self.cfg
@@ -141,12 +199,18 @@ class FaceLifter:
                 imgs.append(img)
         P, res, inliers = triangulate(UV, cams, self.off, c["ransac_mm"] / s)
         Ps, dist = seat(P, geo.vertices, geo.triangles)
+        Pt = Ps.copy()                                      # step 4, kept for comparison
+        if c["fit_rays"]:
+            n = len(self.lap[1])
+            Ps[:n] = fit_rays(UV, cams, self.off, np.asarray(geo.vertices) * s, np.asarray(geo.triangles),
+                              Ps[:n] * s, c, self.lap) / s
         to_input = lambda X: (X * s + piv) @ R_head + centre
-        out = dict(P=to_input(Ps), P_raw=to_input(P), off_surface_mm=dist * s, residual_mm=res * s,
+        out = dict(P=to_input(Ps), P_raw=to_input(P), P_tri=to_input(Pt), off_surface_mm=dist * s, residual_mm=res * s,
                    n_inliers=inliers.sum(1), n_views=np.isfinite(UV[:, 0, 0]).sum())
         E = np.array([np.r_[np.c_[cm.R, cm.t], [[0, 0, 0, 1]]] for cm in cams])
         dbg = dict(UV=UV, inliers=inliers, views=np.array(vs), E=E, cams=cams, piv=piv, R_head=R_head, centre=centre,
-                   V=np.asarray(geo.vertices) * s, F=np.asarray(geo.triangles), P_norm=Ps * s, P_raw_norm=P * s, imgs=imgs)
+                   V=np.asarray(geo.vertices) * s, F=np.asarray(geo.triangles), P_norm=Ps * s, P_tri_norm=Pt * s,
+                   P_raw_norm=P * s, imgs=imgs)
         return out, dbg
 
 

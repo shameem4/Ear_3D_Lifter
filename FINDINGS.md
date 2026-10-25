@@ -148,6 +148,16 @@ FINDINGS.md is the long form. In brief:
 - **Per-view miss table** (`view_table.py`): split-half Spearman 0.91, so it is stable across heads. Views
   from below the face miss by 5+ mm even near face-on. Weighting or choosing views on top of the offsets adds
   little (2.34 -> 2.25 at best).
+- **Bunching fixed by a joint ray fit (2026-10-25, now the default).** Per-landmark triangulation lets
+  neighbours settle on different views, so they pile up or spread apart. Fitting all 468 points at once to
+  every view's rays (Cauchy-weighted) with a Laplacian prior on the canonical mesh fixes it. Leave one head out
+  on a fresh lift (v1, today's ear3d, offsets rebuilt): median 2.34 -> 2.18 mm, p90 5.50 -> 4.90. Better on
+  39/50 heads, worst +0.23 mm. Edges longer than 2 mm in the GT that collapse to half their length: 0.62% ->
+  0.05% (measured on v0). Caveat: the GT is a fit of the same canonical mesh the prior pulls toward, so it
+  flatters this. BJ002's stickers are the independent check. What remains: closed-lip corners (183/191,
+  407/415, edges ~1.4 mm) and whole-feature shifts (a mouth a few mm off), which smoothing cannot move.
+- **ear3d drift:** v0 (Face_3D_Lifter era) vs v1 normalisation differs. pp1 was pitched in v0 and is
+  upright in v1; the other heads moved <5 mm. BJ002 lost one view (stickers 2.4 -> 2.7 mm on the v0 offsets).
 - **Error is sliding along the skin** (0.26 mm along the normal), so off-surface checks cannot see it. RANSAC
   residual does not predict error.
 

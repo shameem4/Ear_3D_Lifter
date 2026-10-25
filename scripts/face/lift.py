@@ -2,7 +2,7 @@
 
 python scripts/face/lift.py mesh.ply|obj [out.npz] [--metres]   one mesh -> <mesh>.face478.npz
 python scripts/face/lift.py --hutubs pp10 pp12 ...              HUTUBS heads, with per-view diagnostics
-                                                                -> runs/face/v0/<head>.npz (+ _views.jpg)
+                                                                -> runs/face/$FACE_RUN/<head>.npz (+ _views.jpg)
 """
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
@@ -11,6 +11,7 @@ from ear3d.face import FaceLifter
 from ear3d.config import EAR3D_DIR
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+RUN_TAG = __import__("os").environ.get("FACE_RUN", "v1")       # runs/face/<tag>: one lift generation + its GT
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 L = FaceLifter()
 
@@ -22,7 +23,7 @@ def report(name, out):
 
 
 if "--hutubs" in sys.argv:
-    out_dir = ROOT / "runs" / "face" / "v0"; out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = ROOT / "runs" / "face" / RUN_TAG; out_dir.mkdir(parents=True, exist_ok=True)
     for h in args:
         m = o3d.io.read_triangle_mesh(str(EAR3D_DIR / "3D head meshes" / f"{h}_3DheadMesh.ply"))
         m.vertices = o3d.utility.Vector3dVector(np.asarray(m.vertices) * 1000.0)

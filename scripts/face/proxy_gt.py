@@ -1,9 +1,9 @@
 """Pseudo GT per head: the canonical face Wrap-fitted with the user's named control points.
 
-python scripts/face/proxy_gt.py [heads...]  -> runs/face/v0/<head>_gtd.npz  (G: 468 x 3, same frame as P_norm)
+python scripts/face/proxy_gt.py [heads...]  -> runs/face/$FACE_RUN/<head>_gtd.npz  (G: 468 x 3, same frame as P_norm)
 
 Points are matched BY NAME between face_points/projects/canonical.wrap (on the canonical file as Wrap loads
-it: file order, cm) and head_NN_<head>.wrap. Needs runs/face/v0/<head>.npz from lift.py for the mesh.
+it: file order, cm) and head_NN_<head>.wrap. Needs runs/face/$FACE_RUN/<head>.npz from lift.py for the mesh.
 """
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
@@ -12,7 +12,8 @@ from ear3d.face_gt import canonical, canonical_raw, wrap_template, wrap_points, 
 from ear3d.face import show
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-RUN = ROOT / "runs" / "face" / "v0"
+RUN_TAG = __import__("os").environ.get("FACE_RUN", "v1")       # runs/face/<tag>: one lift generation + its GT
+RUN = ROOT / "runs" / "face" / RUN_TAG
 WP = ROOT.parent / "wrap_work" / "face_points"
 frames = json.load(open(WP / "frames.json")); only = set(sys.argv[1:])
 

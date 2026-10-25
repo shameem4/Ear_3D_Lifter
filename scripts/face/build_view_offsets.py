@@ -2,7 +2,7 @@
 ear3d/face_view_offsets_<tag>.npz (views, off_px: view x 478 x 2, n_heads, heads), for FACE view_offsets.
 
 python scripts/face/build_view_offsets.py v0
-Needs runs/face/v0/<head>.npz and <head>_gtd.npz. Iris (468-477) has no GT, so its offset is 0.
+Needs runs/face/$FACE_RUN/<head>.npz and <head>_gtd.npz. Iris (468-477) has no GT, so its offset is 0.
 Valid only for the render settings and view grid it was learned with (FaceLifter checks the grid).
 """
 import sys, pathlib
@@ -10,7 +10,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 import sys, glob, os, pathlib, numpy as np
 from ear3d.face import FACE, cameras
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]; RUN = ROOT / "runs" / "face" / "v0"; s = FACE["scale_mm"]
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+RUN_TAG = __import__("os").environ.get("FACE_RUN", "v1")       # runs/face/<tag>: one lift generation + its GT
+RUN = ROOT / "runs" / "face" / RUN_TAG; s = FACE["scale_mm"]
 tag = sys.argv[1]
 H = sorted(os.path.basename(f)[:-8] for f in glob.glob(str(RUN / "*_gtd.npz")))
 O, views = [], None
