@@ -154,7 +154,7 @@ FINDINGS.md is the long form. In brief:
   on a fresh lift (v1, today's ear3d, offsets rebuilt): median 2.34 -> 2.18 mm, p90 5.50 -> 4.90. Better on
   39/50 heads, worst +0.23 mm. Edges longer than 2 mm in the GT that collapse to half their length: 0.62% ->
   0.05% (measured on v0). Caveat: the GT is a fit of the same canonical mesh the prior pulls toward, so it
-  flatters this. BJ002's stickers are the independent check. What remains: closed-lip corners (183/191,
+  flatters this. Independent check, BJ002's 12 stickers (1bb9ed0): fit on 2.8 / 3.8 / 9.3 mm (median/mean/max) vs fit off 2.4 / 3.8 / 9.5, so NO accuracy gain; the differences are within noise for 12 points on one scan. What the fit buys is regular spacing (no bunching), not accuracy. What remains: closed-lip corners (183/191,
   407/415, edges ~1.4 mm) and whole-feature shifts (a mouth a few mm off), which smoothing cannot move.
 - **ear3d drift:** v0 (Face_3D_Lifter era) vs v1 normalisation differs. pp1 was pitched in v0 and is
   upright in v1; the other heads moved <5 mm. BJ002 lost one view (stickers 2.4 -> 2.7 mm on the v0 offsets).
