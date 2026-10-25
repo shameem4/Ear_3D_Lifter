@@ -65,6 +65,7 @@ function showMesh(V, F) {
   const b = new THREE.Box3().setFromBufferAttribute(g.attributes.position), c = b.getCenter(new THREE.Vector3());
   world.matrix.makeTranslation(-c.x, -c.y, -c.z); world.updateMatrixWorld(true);
   earFocus = null; $("frameEar").disabled = true;
+  camCtx.clearRect(0, 0, $("cam").width, $("cam").height); $("camcap").textContent = ""; $("strip").innerHTML = ""; lastBatch = [];   // no views from the previous mesh
   cam.position.set(0, 0, 1); controls.target.set(0, 0, 0); frameAll();
 }
 
