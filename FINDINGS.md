@@ -156,6 +156,11 @@ FINDINGS.md is the long form. In brief:
   0.05% (measured on v0). Caveat: the GT is a fit of the same canonical mesh the prior pulls toward, so it
   flatters this. Independent check, BJ002's 12 stickers (1bb9ed0): fit on 2.8 / 3.8 / 9.3 mm (median/mean/max) vs fit off 2.4 / 3.8 / 9.5, so NO accuracy gain; the differences are within noise for 12 points on one scan. What the fit buys is regular spacing (no bunching), not accuracy. What remains: closed-lip corners (183/191,
   407/415, edges ~1.4 mm) and whole-feature shifts (a mouth a few mm off), which smoothing cannot move.
+- **Bunch-prone metric (score_loho.py):** spacing and error split into FEATURES (MediaPipe's lips, eyes,
+  brows and nose: 116 landmarks, 178 edges) and the REST, so flat-surface points cannot dilute it. On v1,
+  features: spacing |log ratio| median 0.095 -> 0.063, p90 0.307 -> 0.187, collapsed 0.70% -> 0.00%
+  (ray fit better on 49/50 heads); error 2.25 -> 2.06 mm. Offsets off, for scale: 0.221 / 0.767 / 9.9%.
+  Same caveat: the spacing reference is the canonical-mesh GT.
 - **ear3d drift:** v0 (Face_3D_Lifter era) vs v1 normalisation differs. pp1 was pitched in v0 and is
   upright in v1; the other heads moved <5 mm. BJ002 lost one view (stickers 2.4 -> 2.7 mm on the v0 offsets).
 - **Error is sliding along the skin** (0.26 mm along the normal), so off-surface checks cannot see it. RANSAC
