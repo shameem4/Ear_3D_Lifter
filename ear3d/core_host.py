@@ -38,6 +38,25 @@ class FilamentHost:
         self.colors[id] = (mesh, np.frombuffer(c, "<f8").reshape(-1, 3).copy())
 
     def render(self, req):
+        out = []
+        for img, depth in self._draw(req):
+            o = {}
+            if req["depth"]:
+                o["depth"] = np.asarray(depth, "<f4").tobytes()
+            kind = req["detect"]
+            if kind == "face":
+                uv = self._face_points(img)
+                o["face"] = None if uv is None else uv.astype("<f8").tobytes()
+            elif kind == "ear_boxes":
+                B, S = self.det.boxes(img)
+                o["boxes"] = np.c_[B, S].astype("<f8").tobytes() if len(B) else b""
+            elif kind == "landmarks":
+                o["landmarks"] = np.asarray(self.pred.predict(img), "<f8").tobytes()
+            out.append(o)
+        return out
+
+    def _draw(self, req):
+        """(image, depth or None) per view: Filament, exactly as ear3d.render draws."""
         size = int(req["size"])
         K = np.array([[req["f"], 0, req["c"]], [0, req["f"], req["c"]], [0, 0, 1.0]])
         V, F = self.meshes[req["mesh"]]
@@ -60,20 +79,9 @@ class FilamentHost:
             r.scene.scene.enable_sun_light(True)
             r.setup_camera(K, E, size, size)
             img = np.asarray(r.render_to_image())[:, :, :3]
-            o = {}
-            if req["depth"]:
-                o["depth"] = np.asarray(r.render_to_depth_image(z_in_view_space=True), "<f4").tobytes()
-            kind = req["detect"]
-            if kind == "face":
-                uv = self._face_points(img)
-                o["face"] = None if uv is None else uv.astype("<f8").tobytes()
-            elif kind == "ear_boxes":
-                B, S = self.det.boxes(img)
-                o["boxes"] = np.c_[B, S].astype("<f8").tobytes() if len(B) else b""
-            elif kind == "landmarks":
-                o["landmarks"] = np.asarray(self.pred.predict(img), "<f8").tobytes()
+            depth = np.asarray(r.render_to_depth_image(z_in_view_space=True)) if req["depth"] else None
             del r
-            out.append(o)
+            out.append((img, depth))
         return out
 
     def event(self, kind, payload):
