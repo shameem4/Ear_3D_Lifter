@@ -80,8 +80,10 @@ action and never Claude's.
   its runbook, with the commands as run.
 - Experiments start in scratch (`/var/tmp/claude/ear3d/<date-task>/`). One
   that becomes a step others depend on moves into a stage folder; one that is
-  finished goes to `archive/` with a line in its README, and its result goes
-  in `FINDINGS.md`. Don't add experiments to `scripts/` directly.
+  finished stays in scratch until its result is in `FINDINGS.md`, then is
+  deleted. Don't add experiments to `scripts/` directly. The old `archive/`
+  of frozen experiments was removed on 2026-10-25; it is at the git tag
+  `archive-final` (`git show archive-final:archive/README.md`).
 - `EAR3D_CORPUS` selects a corpus generation (default `lmw`); fits, transforms,
   reference landmarks and view table change together. New fits mean
   re-deriving the reference marks (`scripts/corpus/11-12`).
@@ -95,7 +97,8 @@ action and never Claude's.
 - `scripts/{corpus,caches}/README.md`: runbooks.
 - `RESULTS_inherited.md`: the inherited effort's long chronological log.
 - `docs/`: write-ups for other agents (AudioEar3D cloud wrapping).
-- `archive/README.md`: index of frozen experiments.
+- `git show archive-final:archive/README.md`: index of the frozen
+  experiments removed on 2026-10-25.
 
 ## Prior research
 

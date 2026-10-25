@@ -24,7 +24,7 @@ similarity.
 
 Also the WrapCmd project plumbing every Faceform caller shares (WRAPCMD, and
 the node helpers that edit a saved .wrap project). Moved here 2026-10-20 from
-archive/scripts/wrap_from_landmarks.py, wrap_batch_faceform.py and refit_variants.py;
+archive-final:archive/scripts/wrap_from_landmarks.py, wrap_batch_faceform.py and refit_variants.py;
 the code is unchanged. The Faceform Wrap EULA forbids decompiling or reverse
 engineering it: this only edits project files and runs its CLI.
 """

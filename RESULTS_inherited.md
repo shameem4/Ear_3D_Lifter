@@ -1,8 +1,9 @@
 # v2 results
 
-> **Paths below are as they were when written.** Scripts named here now live in
-> `archive/scripts/` (or `scripts/<stage>/` if still in use; see the stage READMEs),
-> and `model/`, `data/` modules in `archive/`. Some files named here were never
+> **Paths below are as they were when written.** Scripts named here live in
+> `scripts/<stage>/` if still in use (see the stage READMEs); the rest, and the
+> `model/`, `data/` modules, are at the git tag `archive-final`
+> (`git show archive-final:archive/scripts/<name>.py`). Some files named here were never
 > brought across from Ear_Landmarker. The condensed record, inherited
 > and since 2026-10-13, is `FINDINGS.md`.
 

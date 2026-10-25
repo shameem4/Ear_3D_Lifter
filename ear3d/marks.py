@@ -2,8 +2,8 @@
 
 A mark is a (triangle, barycentric) address on the template connectivity;
 see memory marks-are-fit-coupled for why marks are re-derived per fit
-generation. Moved here 2026-10-20 from archive/scripts/gt_landmark_check.py
-(read_marks) and archive/scripts/landmark_template.py (place, replay), unchanged.
+generation. Moved here 2026-10-20 from archive-final:archive/scripts/gt_landmark_check.py
+(read_marks) and archive-final:archive/scripts/landmark_template.py (place, replay), unchanged.
 """
 import json
 import pathlib
@@ -24,7 +24,7 @@ DEFAULT_MARKS = WRAP / "templates/mark_mean_v6_spacing.wrap"
 def read_marks(path):
     """(triangle, barycentric, names) from a Wrap SelectPoints project or npz.
 
-    The same convention as archive/scripts/wrap_marks_to_npz.py: u weights the
+    The same convention as archive-final:archive/scripts/wrap_marks_to_npz.py: u weights the
     triangle's first vertex, v the second, the remainder the third.
     """
     path = pathlib.Path(path)

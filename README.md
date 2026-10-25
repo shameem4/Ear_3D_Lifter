@@ -82,9 +82,8 @@ the runbook.
       caches/   1-4       render caches -> view table
       eval/               validate_pipeline (held-out), score_heldout,
                           validate_scans, validate_wrapped_ears,
-                          escape_audit, gt_check_ear_views, slid_fit_flag
+                          escape_audit, gt_check_ear_views
     tests/
-    archive/            finished or failed experiments, frozen; see its README
 
 ## Things that change results without changing this code
 
@@ -109,8 +108,10 @@ truth is made, the measurement mistakes that produced wrong answers and the
 rule each left, the retractions, and what is closed or open.
 `RESULTS_inherited.md` is the inherited long form. Learned
 depth from images never transferred to photographs across five attempts; a
-geometric solve and a general depth model (MoGe-2) did. That code is in
-`archive/`.
+geometric solve and a general depth model (MoGe-2) did. That code, and every
+other finished experiment, was removed from the tree on 2026-10-25 and lives
+at the git tag `archive-final`: `git show archive-final:archive/README.md`
+indexes it.
 
 ## Licences and data
 

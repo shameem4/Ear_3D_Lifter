@@ -262,6 +262,7 @@ the 55-point scheme is extended by appending indices, never renumbering.
 | Right-ear heads were rendered inside out (det < 0, winding not reversed), and a sun rule was fitted to cancel it | Reverse winding on any reflection; never fit a correction to a symptom |
 | A pooled left/right delta cancelled a real side bias to zero | Stratify by side; score the component the effect lives in |
 | Snapping to the surface made the surface metric tautological | Score a re-seat on paired distance only |
+| Reprojection error chose a 20 deg view cone; it rewards the lateral agreement the fit already optimises and is blind to depth | Judge placement in 3D (distance from the surface or the reference), not by reprojection |
 | A transposed box (`[ymin, xmin, ...]`) gave two false conclusions | Draw geometry on its image before reasoning from it |
 | A new reference moved the score more than the model change did | Compare models on one fixed reference |
 | The same checkpoint gave different results a day apart | The 2D code moves too; re-run the baseline |
@@ -332,7 +333,7 @@ reliability 0.417 at 1 epoch, 0.937 at 25, 0.978 at 78). Four traps in the
 ## Tools that exist
 
 *(inherited; built for 2D annotation QA, still working)*
-- **SAM 2.1 silhouette check** (`archive/scripts/check_helix_silhouette.py`):
+- **SAM 2.1 silhouette check** (`archive-final:archive/scripts/check_helix_silhouette.py`):
   outer points sit 1.2-1.5% of ear height from the mask, interior points 6-7x
   deeper. Apache-2.0, code and checkpoints.
 - **SAM 3 mask deficit**: a free occlusion score; deep deficit marks hair and
@@ -353,7 +354,7 @@ reliability 0.417 at 1 epoch, 0.937 at 25, 0.978 at 78). Four traps in the
 | Templates, bases, corpora | `../wrap_work/templates`, `../wrap_work/corpus` |
 | lmw's as-run rewrap outputs | `../wrap_work/corpus/lmwrap_v1/asrun` |
 | The 2D model | `../Ear_Landmarker`, reached only via `ear3d/twod.py` |
-| Frozen experiments | `archive/` (index in its README) |
+| Frozen experiments | git tag `archive-final` (`git show archive-final:archive/README.md`) |
 
 Nothing under the data paths is committed, in either repository. Licences by
 source matter for anything released; the HUTUBS-only `ccby` bases exist for

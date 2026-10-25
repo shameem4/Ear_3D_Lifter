@@ -3,7 +3,7 @@
 Audience: an agent fitting a fixed-topology template mesh to partial,
 single-sided point clouds of a body part, where commercial wrappers (which
 need meshes) do not apply. Written 2026-10-18 from `ear3d/wrap.py`,
-`archive/scripts/wrap_cloud.py` and `archive/scripts/wrap_cloud_adaptive.py`. Numbers are
+`archive-final:archive/scripts/wrap_cloud.py` and `archive-final:archive/scripts/wrap_cloud_adaptive.py`. Numbers are
 measured on this project; hypotheses are marked.
 
 > **Status in this repo (2026-10-20).** This NICP method made `ae3d_v2`, the
