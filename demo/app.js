@@ -100,22 +100,28 @@ function toHeadFrame(R, c0, mirror) {
 }
 
 const sphereGeo = new THREE.SphereGeometry(1, 12, 8);
-// p (pipeline mesh coordinates) moved out by r along the normal of its nearest
-// vertex, the normal turned to face the cameras (scan windings vary). The
+// Display only: points (pipeline mesh coordinates) moved out by r along the
+// normal of their nearest vertex. Which way is "out" is decided ONCE per ear
+// (the mesh's winding is consistent): per point, a wall facing sideways to the
+// cameras (the back of the concha) would flip inward and bury its dot. The
 // displayed mesh is the input; mesh 1 of an ear-only right ear is it mirrored in z.
-function lifted(p, r, camPts, mirror) {
+function liftedAll(pts, r, camPts, mirror) {
   const g = meshObj.geometry, P = g.attributes.position.array, N = g.attributes.normal.array, z = mirror ? -1 : 1;
-  let best = 0, bd = Infinity;
-  for (let i = 0; i < P.length; i += 3) {
-    const d = (P[i] - p[0]) ** 2 + (P[i + 1] - p[1]) ** 2 + (z * P[i + 2] - p[2]) ** 2;
-    if (d < bd) { bd = d; best = i; }
-  }
-  const n = new THREE.Vector3(N[best], N[best + 1], z * N[best + 2]).normalize(), q = new THREE.Vector3(...p);
+  const ns = pts.map((p) => {
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < P.length; i += 3) {
+      const d = (P[i] - p[0]) ** 2 + (P[i + 1] - p[1]) ** 2 + (z * P[i + 2] - p[2]) ** 2;
+      if (d < bd) { bd = d; best = i; }
+    }
+    return new THREE.Vector3(N[best], N[best + 1], z * N[best + 2]).normalize();
+  });
+  let sign = 1;
   if (camPts.length) {
     const c = new THREE.Vector3(); camPts.forEach((w) => c.add(new THREE.Vector3(...w))); c.divideScalar(camPts.length);
-    if (n.dot(c.sub(q)) < 0) n.negate();
+    const vote = pts.reduce((s, p, k) => s + ns[k].dot(c.clone().sub(new THREE.Vector3(...p)).normalize()), 0);
+    sign = vote < 0 ? -1 : 1;
   }
-  return q.add(n.multiplyScalar(r));
+  return pts.map((p, k) => new THREE.Vector3(...p).add(ns[k].multiplyScalar(sign * r)));
 }
 
 function dots(P, color, r, into = marks) {
@@ -269,7 +275,7 @@ class DemoHost {
       // half buried, and in a fold mostly hidden. Draw each lifted by its radius
       // along the surface normal (display only), plus a faint ghost that shows
       // through the mesh, so a point behind a fold is never silently missing.
-      const R = 0.6, dest = idx.map((i) => lifted(to[i], R, this.camPts, this.mirror));
+      const R = 0.6, dest = liftedAll(idx.map((i) => to[i]), R * 1.3, this.camPts, this.mirror);
       const m = dots(dest, css("--ok"), R), ghost = dots(dest, css("--ok"), R);
       if (this.ghost) this.ghost.visible = false;        // one ear's ghosts at a time: the other's would show through the head
       this.ghost = ghost;
