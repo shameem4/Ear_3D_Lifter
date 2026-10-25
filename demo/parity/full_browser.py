@@ -6,7 +6,7 @@ loads the heads and scores them, so this is the browser demo's accuracy.
     python demo/parity/full_browser.py OUT_DIR 2 16 0 1
 (build core/pkg first: wasm-pack build --release --target web -d pkg core -- --features wasm)
 """
-import http.server, json, pathlib, queue, runpy, subprocess, sys, tempfile, threading, urllib.parse
+import http.server, json, os, pathlib, queue, runpy, subprocess, sys, tempfile, threading, urllib.parse
 import numpy as np
 HERE = pathlib.Path(__file__).resolve().parent; ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT))
@@ -31,14 +31,21 @@ class H(http.server.SimpleHTTPRequestHandler):
         s.send_response(200); s.send_header("Content-Length", str(len(body))); s.end_headers(); s.wfile.write(body)
     def do_POST(s):
         data = s.rfile.read(int(s.headers["Content-Length"]))
+        if s.path.startswith("/face"):
+            S = int(round((len(data) / 3) ** 0.5))
+            uv = face_host._face_points(np.frombuffer(data, np.uint8).reshape(S, S, 3).copy())
+            body = b"" if uv is None else np.asarray(uv, "<f8").tobytes()
+            s.send_response(200); s.send_header("Content-Length", str(len(body))); s.end_headers(); s.wfile.write(body); return
         results.put((int(urllib.parse.parse_qs(urllib.parse.urlparse(s.path).query)["seq"][0]), json.loads(data)))
         s.send_response(200); s.end_headers(); s.wfile.write(b"ok")
 
+PYFACE = os.environ.get("EAR3D_PYFACE") == "1"   # FaceMesh from Python: isolates the JS FaceLandmarker
+face_host = ch.FilamentHost(DEFAULTS["face_task"], verbose=False) if PYFACE else None
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), H)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 prof = tempfile.mkdtemp(prefix="ear3d_chrome_")
 chrome = subprocess.Popen(["google-chrome", "--headless=new", f"--user-data-dir={prof}", "--use-gl=angle", "--use-angle=gl-egl",
-                           "--ignore-gpu-blocklist", "--enable-logging=stderr", f"http://localhost:{PORT}/parity/full.html"],
+                           "--ignore-gpu-blocklist", "--enable-logging=stderr", f"http://localhost:{PORT}/parity/full.html{'?pyface=1' if PYFACE else ''}"],
                           stdout=subprocess.DEVNULL, stderr=open(pathlib.Path(prof) / "chrome.log", "w"))
 print("chrome log:", pathlib.Path(prof) / "chrome.log", flush=True)
 seq = [0]

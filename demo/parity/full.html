@@ -7,6 +7,19 @@ import init, { run } from "/pkg/ear3d_core.js";
 import { BrowserHost } from "../js/host.js";
 await init();
 const host = await BrowserHost.create("../models/", 600);
+// ?pyface=1: FaceMesh from the Python host instead (the chase of the browser gap)
+if (new URLSearchParams(location.search).get("pyface")) {
+  const render = host.render.bind(host);
+  host.render = async (q) => {
+    const out = render({ ...q, detect: q.detect === "face" ? "none" : q.detect, image: q.image || q.detect === "face" });
+    if (q.detect === "face") for (const o of out) {
+      const r = await (await fetch("/face", { method: "POST", body: o.image })).arrayBuffer();
+      o.face = r.byteLength ? new Float64Array(r) : null;
+      if (!q.image) delete o.image;
+    }
+    return out;
+  };
+}
 const blob = async (k, T) => new T(await (await fetch(`/blob/${k}`)).arrayBuffer());
 for (;;) {
   const j = await (await fetch("/next")).json();

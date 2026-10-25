@@ -1,0 +1,20 @@
+<!doctype html><meta charset="utf-8"><title>Detector bridge</title>
+<script type="module">
+// demo/js/host.js's detectors on images and tensors that detector_js.py
+// sends, so the browser's FaceMesh and onnxruntime-web are compared alone.
+import { BrowserHost } from "../js/host.js";
+const host = await BrowserHost.create("../models/", 600);
+for (;;) {
+  const j = await (await fetch("/next")).json();
+  if (j.stop) break;
+  const buf = await (await fetch(`/blob/${j.key}`)).arrayBuffer();
+  let out;
+  if (j.kind === "face") {
+    const rgb = new Uint8Array(buf), S = j.size, rgba = new Uint8Array(S * S * 4);
+    for (let i = 0; i < S * S; i++) { rgba.set(rgb.subarray(3 * i, 3 * i + 3), 4 * i); rgba[4 * i + 3] = 255; }
+    const uv = host.facePoints(rgba, S);
+    out = uv ? [Array.from(uv)] : [];
+  } else out = (await host.infer(j.kind, new Float32Array(buf))).map((a) => Array.from(a));
+  await fetch(`/result?seq=${j.seq}`, { method: "POST", body: JSON.stringify(out) });
+}
+</script>
