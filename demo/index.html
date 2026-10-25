@@ -18,6 +18,8 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 syst
 header { padding: 14px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
 header h1 { font-size: 17px; margin: 0; font-weight: 650; }
 header p { margin: 0; color: var(--mute); }
+header a.gh { margin-left: auto; color: var(--mute); text-decoration: none; }
+header a.gh:hover { color: inherit; text-decoration: underline; }
 main { display: grid; grid-template-columns: 260px 1fr 340px; gap: 0; height: calc(100vh - 52px); }
 aside, section { overflow: auto; }
 aside { border-right: 1px solid var(--line); padding: 14px; background: var(--panel); }
@@ -80,6 +82,7 @@ label.up input { display: none; }
 <header>
   <h1>Ear 3D Lifter</h1>
   <p>A head or ear mesh in, 55 ear landmarks in 3D out. Runs entirely in your browser: the Rust pipeline as WebAssembly, ONNX models on the CPU.</p>
+  <a class="gh" href="https://github.com/shameem4/Ear_3D_Lifter" target="_blank" rel="noopener">Source on GitHub</a>
 </header>
 <main>
   <aside>
