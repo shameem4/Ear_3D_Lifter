@@ -1,6 +1,6 @@
 """Export the demo's pick list to demo/meshes/ (gitignored, like the data it
 comes from): the 16 held-out HUTUBS heads (raw scans, metres -> mm) and the
-first 20 AudioEar3D left ears as WRAPPED (the mean-ear template fitted to
+20 AudioEar3D ears (10 left, 10 right) as WRAPPED (the mean-ear template fitted to
 each scan, ../wrap_work/corpus/canonical_lmw/audioear, canonical mm). Caveat:
 a wrap is smooth, hole-free and shares the pipeline's template topology, so
 it is an easier input than a raw scan; the raw cloud surfaces
@@ -40,14 +40,21 @@ cut = np.load(BACK_EXCLUSION)["triangles"]
 # triangle (up to 52 mm off). The maps below restore them exactly; the topology
 # is the template's for every wrap, so one pair of maps serves all ears.
 face_map, vert_map = None, None
-for i in range(1, 21):
-    t = trimesh.load(WRAPS / f"{i:03d}_left.obj", process=False)       # trimesh: the triangle order the mask indexes
-    F = np.delete(np.asarray(t.faces), cut, axis=0)
+# 001-010 left and 011-020 right. The corpus stores right ears mirrored about Z
+# (as left ears); undo it: z -> -z with each face's vertex order reversed, so
+# they face out. Face ORDER is unchanged, so face_map holds for both sides, but
+# on a right ear a template barycentric (b0, b1, b2) reads as (b2, b1, b0).
+for i, side in [(i, "left") for i in range(1, 11)] + [(i, "right") for i in range(11, 21)]:
+    t = trimesh.load(WRAPS / f"{i:03d}_{side}.obj", process=False)     # trimesh: the triangle order the mask indexes
+    V0, F0 = np.asarray(t.vertices), np.asarray(t.faces)
+    if side == "right":
+        V0, F0 = V0 * [1, 1, -1], F0[:, ::-1]
+    F = np.delete(F0, cut, axis=0)
     used = np.unique(F); remap = np.full(len(t.vertices), -1); remap[used] = np.arange(len(used))
     kept = np.setdiff1d(np.arange(len(t.faces)), cut)
     assert face_map is None or ((face_map == kept).all() and (vert_map == used).all()), "wraps do not share the template topology"
     face_map, vert_map = kept, used
-    index["ears"].append(write(f"ae{i:03d}_left", np.asarray(t.vertices)[used], remap[F]) | {"label": f"AudioEar3D {i:03d} left (wrap)"})
+    index["ears"].append(write(f"ae{i:03d}_{side}", V0[used], remap[F]) | {"label": f"AudioEar3D {i:03d} {side} (wrap)"})
 # cut face k is template face face_map[k]; cut vertex k is template vertex vert_map[k]
 np.savez(OUT / "ae_cut_maps.npz", face_map=face_map, vert_map=vert_map)
 index["ear_maps"] = "ae_cut_maps.npz"

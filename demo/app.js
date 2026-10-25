@@ -83,6 +83,9 @@ function colourMesh(C) {
 function toHeadFrame(R, c0, mirror) {
   const Q = R, m = new THREE.Matrix4().set(Q[0][0], Q[0][1], Q[0][2], 0, Q[1][0], Q[1][1], Q[1][2], 0, Q[2][0], Q[2][1], Q[2][2], 0, 0, 0, 0, 1);
   m.multiply(new THREE.Matrix4().makeTranslation(-c0[0], -c0[1], -c0[2]));
+  // An ear-only right ear is processed as its mirror (a left ear); flip the
+  // whole view back left-to-right so it is shown as the right ear it is.
+  if (mirror) m.premultiply(new THREE.Matrix4().makeScale(-1, 1, 1));
   const from = world.matrix.clone(), to = m, t0 = performance.now();
   body.scale.set(1, 1, mirror ? -1 : 1);              // ear-only right ear: mesh 1 is the scan mirrored about z
   const pf = new THREE.Vector3(), qf = new THREE.Quaternion(), sf = new THREE.Vector3(), pt = new THREE.Vector3(), qt = new THREE.Quaternion(), st = new THREE.Vector3();
@@ -268,7 +271,7 @@ class DemoHost {
       const to = p, from = this.tri || [], idx = p.map((q, i) => i).filter((i) => valid(p[i]));
       if (this.earOnly && idx.length) {                  // no ear-box event: centre on the landmarks
         const c = new THREE.Vector3(); idx.forEach((i) => c.add(new THREE.Vector3(...p[i]))); c.divideScalar(idx.length);
-        earFocus = { c, r: 32, left: true, earOnly: true }; $("frameEar").disabled = false;
+        earFocus = { c, r: 32, left: true, earOnly: true, flip: this.mirror }; $("frameEar").disabled = false;
         controls.autoRotate = false; $("spin").className = "";
       }
       // The points are ON the surface (closest points); a sphere centred there is
@@ -424,7 +427,7 @@ function focusEar() {
   const c = earFocus.c.clone().applyMatrix4(world.matrix);
   let out = c.clone().sub(this_head ? this_head.centre : new THREE.Vector3());
   out.y = 0;                                           // level: the head frame has y up
-  if (earFocus.earOnly || out.length() < 20) out = new THREE.Vector3(1, 0, 0);
+  if (earFocus.earOnly || out.length() < 20) out = new THREE.Vector3(earFocus.flip ? -1 : 1, 0, 0);
   out.normalize().add(new THREE.Vector3(0, 0.1, 0.3));
   frame(c, earFocus.r * 1.5, out);
 }
