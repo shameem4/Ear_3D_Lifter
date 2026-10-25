@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8"><title>Pipeline bridge</title>
+<script type="module">
+// The whole pipeline in the browser: ear3d_core (WASM) against demo/js/host.js.
+// full_browser.py posts jobs (a mesh plus the pipeline's assets) and scores
+// the landmarks this page sends back.
+import init, { run } from "/pkg/ear3d_core.js";
+import { BrowserHost } from "../js/host.js";
+await init();
+const host = await BrowserHost.create("../models/", 600);
+const blob = async (k, T) => new T(await (await fetch(`/blob/${k}`)).arrayBuffer());
+for (;;) {
+  const j = await (await fetch("/next")).json();
+  if (j.stop) break;
+  const events = [];
+  host.onEvent = (k, p) => { if (k !== "log") events.push([k, p]); };
+  let body;
+  try {
+    const t0 = performance.now();
+    const o = await run(host, await blob("V", Float64Array), await blob("F", Uint32Array), j.cfg, await blob("table", Float64Array),
+                        await blob("angles", Float64Array), await blob("template", Float64Array), await blob("canon", Float64Array),
+                        await blob("anchors", Float64Array));
+    const a = (x) => (x ? Array.from(x) : null);
+    body = { L: a(o.L), R: a(o.R), earOnly: o.earOnly, fitResidual: o.fitResidual, R_head: a(o.R_head), centre: a(o.centre),
+             seconds: (performance.now() - t0) / 1000, events };
+  } catch (e) { body = { error: String(e && e.stack || e) }; }
+  await fetch(`/result?seq=${j.seq}`, { method: "POST", body: JSON.stringify(body) });
+}
+</script>

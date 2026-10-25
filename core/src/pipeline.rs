@@ -15,6 +15,7 @@
 //! levels at millimetre scale, and FaceMesh flips on that.)
 
 use crate::camera::{self, backproject, frame_from, intrinsics, orbit, side_frame, Depth, Ext, Intr, M3};
+use crate::detect;
 use crate::host::{Detect, Host, RenderReq, View, ViewOut};
 use crate::kdtree::KdTree;
 use crate::mesh::{add, cross, dot, mul_r, mul_rt, norm, scale, sub, unit, Mesh, V3};
@@ -75,6 +76,7 @@ pub struct Assets {
     pub angles: Vec<[f64; 2]>,   // (yaw, pitch) per view
     pub template: Vec<V3>,       // mean ear, canonical left ear
     pub canon: Vec<V3>,          // MediaPipe canonical face model, 468 points
+    pub anchors: Vec<[f64; 4]>,  // BlazeEar anchors (cx, cy, w, h), normalised
 }
 
 pub struct EarOut { pub p: Vec<V3> }
@@ -167,7 +169,27 @@ impl<'h, H: Host> Pipeline<'h, H> {
         // transform of the host mesh that is R Q about c0 + C Q / sigma, scale s / sigma.
         let vs: Vec<View> = views.iter().map(|(r, c, s, e, sun)| View { r: mm(r, &f.q), c: f.to_mesh(*c), s: s / f.sigma, e: *e, sun: *sun }).collect();
         let models = vs.iter().map(|v| Model { r: v.r, c: v.c, s: v.s, e: v.e }).collect();
-        let out = self.host.render(&RenderReq { mesh: f.mesh, colors, k: self.k, views: &vs, depth, detect }).await;
+        let ours = matches!(detect, Detect::EarBoxes | Detect::Landmarks);
+        let host_detect = if ours { Detect::Nothing } else { detect };
+        let mut out = self.host.render(&RenderReq { mesh: f.mesh, colors, k: self.k, views: &vs, depth, image: ours, detect: host_detect }).await;
+        if ours {
+            let n = self.k.size;
+            for o in out.iter_mut() {
+                let img = o.image.take().expect("host returned no image");
+                match detect {
+                    Detect::Landmarks => {
+                        let (a, b) = detect::landmarker_inputs(&img, n, n);
+                        let ra = self.host.infer("r2j", &a).await;
+                        let rb = self.host.infer("r2j", &b).await;
+                        o.landmarks = Some(detect::landmarks_fused(&ra[0], &rb[0], n, n));
+                    }
+                    _ => {
+                        let r = self.host.infer("blazeear", &detect::blazeear_input(&img, n, n)).await;
+                        o.boxes = detect::blazeear_boxes(&r[0], &r[1], &self.a.anchors, n);
+                    }
+                }
+            }
+        }
         (out, models)
     }
 

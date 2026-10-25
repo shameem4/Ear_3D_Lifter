@@ -26,6 +26,10 @@ fn ear3d_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(orient, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
     m.add_function(wrap_pyfunction!(skinned, m)?)?;
+    m.add_function(wrap_pyfunction!(landmarker_inputs, m)?)?;
+    m.add_function(wrap_pyfunction!(landmarks_fused, m)?)?;
+    m.add_function(wrap_pyfunction!(blazeear_input, m)?)?;
+    m.add_function(wrap_pyfunction!(blazeear_boxes, m)?)?;
     m.add_function(wrap_pyfunction!(rng_draws, m)?)
 }
 
@@ -61,6 +65,7 @@ impl<'py> Host for PyHost<'py> {
         d.set_item("f", r.k.f).unwrap();
         d.set_item("c", r.k.c).unwrap();
         d.set_item("depth", r.depth).unwrap();
+        d.set_item("image", r.image).unwrap();
         d.set_item("detect", match r.detect { Detect::Nothing => "none", Detect::Face => "face", Detect::EarBoxes => "ear_boxes", Detect::Landmarks => "landmarks" }).unwrap();
         let views = PyList::empty(py);
         for v in r.views {
@@ -81,11 +86,16 @@ impl<'py> Host for PyHost<'py> {
             let mut o = ViewOut::default();
             if let Some(b) = get("depth") { o.depth = Some(f32s(b.extract::<&[u8]>().expect("depth bytes"))); }
             if let Some(b) = get("face") { o.face = Some(f64s(b.extract::<&[u8]>().unwrap()).chunks_exact(2).map(|c| [c[0], c[1]]).collect()); }
-            if let Some(b) = get("landmarks") { o.landmarks = Some(f64s(b.extract::<&[u8]>().unwrap()).chunks_exact(2).map(|c| [c[0], c[1]]).collect()); }
-            if let Some(b) = get("boxes") { o.boxes = f64s(b.extract::<&[u8]>().unwrap()).chunks_exact(5).map(|c| [c[0], c[1], c[2], c[3], c[4]]).collect(); }
+            if let Some(b) = get("image") { o.image = Some(b.extract::<&[u8]>().expect("image bytes").to_vec()); }
             res.push(o);
         }
         res
+    }
+    async fn infer(&self, model: &str, input: &[f32]) -> Vec<Vec<f32>> {
+        let py = self.obj.py();
+        let x = PyBytes::new(py, &input.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>());
+        let out = self.obj.call_method1("infer", (model, x)).expect("host.infer");
+        out.try_iter().expect("infer returns a list").map(|b| f32s(b.unwrap().extract::<&[u8]>().expect("output bytes"))).collect()
     }
     fn event(&self, kind: &str, json: &str) {
         self.obj.call_method1("event", (kind, json)).expect("host.event");
@@ -100,6 +110,19 @@ fn skinned<'py>(py: Python<'py>, v: &[u8], f: &[u8], seed: u64, tone: usize, ao_
     PyBytes::new(py, &bytes_f64(&c.iter().flatten().cloned().collect::<Vec<f64>>()))
 }
 
+// detect.rs for the drift test (demo/parity/detector_drift.py): RGB u8 bytes in, f32 out.
+#[pyfunction]
+fn landmarker_inputs(img: &[u8], w: usize, h: usize) -> (Vec<f32>, Vec<f32>) { crate::detect::landmarker_inputs(img, w, h) }
+#[pyfunction]
+fn landmarks_fused(a: Vec<f32>, b: Vec<f32>, w: usize, h: usize) -> Vec<[f64; 2]> { crate::detect::landmarks_fused(&a, &b, w, h) }
+#[pyfunction]
+fn blazeear_input(img: &[u8], w: usize) -> Vec<f32> { crate::detect::blazeear_input(img, w, w) }
+#[pyfunction]
+fn blazeear_boxes(boxes: Vec<f32>, scores: Vec<f32>, anchors: &[u8], w: usize) -> Vec<[f64; 5]> {
+    let a: Vec<[f64; 4]> = f64s(anchors).chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect();
+    crate::detect::blazeear_boxes(&boxes, &scores, &a, w)
+}
+
 /// rng_draws(seed, kind, n): numpy-compatible draws, for the parity test.
 #[pyfunction]
 fn rng_draws(seed: u64, kind: &str, n: usize) -> Vec<f64> {
@@ -108,14 +131,14 @@ fn rng_draws(seed: u64, kind: &str, n: usize) -> Vec<f64> {
 }
 
 /// run(host, V bytes (f64), F bytes (u32), cfg JSON, table, angles, template,
-/// canon (f64 bytes)) -> dict(L, R as f64 bytes or None, ear_only, fit_residual, R_head, centre)
+/// canon, BlazeEar anchors (f64 bytes)) -> dict(L, R as f64 bytes or None, ear_only, fit_residual, R_head, centre)
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-fn run<'py>(host: Bound<'py, PyAny>, v: &[u8], f: &[u8], cfg: &str, table: &[u8], angles: &[u8], template: &[u8], canon: &[u8]) -> PyResult<Bound<'py, PyDict>> {
+fn run<'py>(host: Bound<'py, PyAny>, v: &[u8], f: &[u8], cfg: &str, table: &[u8], angles: &[u8], template: &[u8], canon: &[u8], anchors: &[u8]) -> PyResult<Bound<'py, PyDict>> {
     let py = host.py();
     let mesh = Mesh::from_flat(&f64s(v), &u32s(f));
     let cfg: crate::pipeline::Cfg = serde_json::from_str(cfg).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-    let a = assets(&f64s(table), &f64s(angles), &f64s(template), &f64s(canon));
+    let a = assets(&f64s(table), &f64s(angles), &f64s(template), &f64s(canon), &f64s(anchors));
     let h = PyHost { obj: host };
     let mut p = crate::pipeline::Pipeline::new(&h, mesh, cfg, a);
     let out = block_on(p.run());

@@ -23,12 +23,13 @@ pub fn orient(v: &[f64], tpl: &[f64]) -> Vec<f64> {
 use crate::exec::assets;
 use crate::host::{Detect, Host, RenderReq, ViewOut};
 use crate::mesh::{Mesh, V3};
-use js_sys::{Array, Float32Array, Float64Array, Function, Object, Promise, Reflect, Uint32Array};
+use js_sys::{Array, Float32Array, Float64Array, Function, Object, Promise, Reflect, Uint32Array, Uint8Array};
 use wasm_bindgen_futures::JsFuture;
 
 /// The browser host: an object with async setMesh(id, Float64Array V,
 /// Uint32Array F), async setColors(id, mesh, Float64Array C), async
-/// render(request) -> [{depth, face, boxes, landmarks}], and event(kind, json).
+/// render(request) -> [{depth, face, image (RGB Uint8Array)}], async
+/// infer(model, Float32Array) -> [Float32Array per output], and event(kind, json).
 struct JsHost { obj: JsValue }
 
 fn call(obj: &JsValue, name: &str, args: &[JsValue]) -> JsValue {
@@ -66,6 +67,7 @@ impl Host for JsHost {
         set(&q, "f", r.k.f.into());
         set(&q, "c", r.k.c.into());
         set(&q, "depth", r.depth.into());
+        set(&q, "image", r.image.into());
         set(&q, "detect", match r.detect { Detect::Nothing => "none", Detect::Face => "face", Detect::EarBoxes => "ear_boxes", Detect::Landmarks => "landmarks" }.into());
         let views = Array::new();
         for v in r.views {
@@ -83,24 +85,27 @@ impl Host for JsHost {
             let mut v = ViewOut::default();
             if let Ok(d) = Reflect::get(&o, &"depth".into()) { if !d.is_null() && !d.is_undefined() { v.depth = Some(Float32Array::new(&d).to_vec()); } }
             v.face = get_f64(&o, "face").map(|a| a.chunks_exact(2).map(|c| [c[0], c[1]]).collect());
-            v.landmarks = get_f64(&o, "landmarks").map(|a| a.chunks_exact(2).map(|c| [c[0], c[1]]).collect());
-            v.boxes = get_f64(&o, "boxes").map(|a| a.chunks_exact(5).map(|c| [c[0], c[1], c[2], c[3], c[4]]).collect()).unwrap_or_default();
+            if let Ok(d) = Reflect::get(&o, &"image".into()) { if !d.is_null() && !d.is_undefined() { v.image = Some(Uint8Array::new(&d).to_vec()); } }
             v
         }).collect()
+    }
+    async fn infer(&self, model: &str, input: &[f32]) -> Vec<Vec<f32>> {
+        let out = Array::from(&wait(call(&self.obj, "infer", &[model.into(), Float32Array::from(input).into()])).await);
+        out.iter().map(|a| Float32Array::new(&a).to_vec()).collect()
     }
     fn event(&self, kind: &str, json: &str) {
         call(&self.obj, "event", &[kind.into(), json.into()]);
     }
 }
 
-/// run(host, V, F, cfgJson, table, angles, template, canon) -> Promise of
+/// run(host, V, F, cfgJson, table, angles, template, canon, anchors) -> Promise of
 /// {L, R (Float64Array or null), earOnly, fitResidual, R_head, centre}.
 #[wasm_bindgen]
 #[allow(clippy::too_many_arguments)]
-pub async fn run(host: JsValue, v: Vec<f64>, f: Vec<u32>, cfg: String, table: Vec<f64>, angles: Vec<f64>, template: Vec<f64>, canon: Vec<f64>) -> Result<JsValue, JsValue> {
+pub async fn run(host: JsValue, v: Vec<f64>, f: Vec<u32>, cfg: String, table: Vec<f64>, angles: Vec<f64>, template: Vec<f64>, canon: Vec<f64>, anchors: Vec<f64>) -> Result<JsValue, JsValue> {
     let cfg: crate::pipeline::Cfg = serde_json::from_str(&cfg).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let h = JsHost { obj: host };
-    let mut p = crate::pipeline::Pipeline::new(&h, Mesh::from_flat(&v, &f), cfg, assets(&table, &angles, &template, &canon));
+    let mut p = crate::pipeline::Pipeline::new(&h, Mesh::from_flat(&v, &f), cfg, assets(&table, &angles, &template, &canon, &anchors));
     let out = p.run().await;
     let o = Object::new();
     let pts = |x: &Option<Vec<V3>>| x.as_ref().map_or(JsValue::NULL, |p| f64a(&p.iter().flatten().cloned().collect::<Vec<f64>>()));

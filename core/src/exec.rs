@@ -24,12 +24,13 @@ use crate::mesh::V3;
 use crate::pipeline::Assets;
 
 /// Assets from flat arrays: table (V x 55), angles (V x 2), template, canon.
-pub fn assets(table: &[f64], angles: &[f64], template: &[f64], canon: &[f64]) -> Assets {
+pub fn assets(table: &[f64], angles: &[f64], template: &[f64], canon: &[f64], anchors: &[f64]) -> Assets {
     let v3 = |a: &[f64]| a.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect::<Vec<V3>>();
     Assets {
         table: table.chunks_exact(55).map(|c| c.try_into().unwrap()).collect(),
         angles: angles.chunks_exact(2).map(|c| [c[0], c[1]]).collect(),
         template: v3(template),
         canon: v3(canon),
+        anchors: anchors.chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect(),
     }
 }

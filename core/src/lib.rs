@@ -4,6 +4,7 @@
 
 pub mod bvh;
 pub mod camera;
+pub mod detect;
 pub mod host;
 pub mod kdtree;
 pub mod linalg;

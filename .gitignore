@@ -69,3 +69,6 @@ data/mv_*/
 # ear3d_core build outputs
 core/target/
 core/pkg/
+
+# exported by demo/export_models.py, regenerate rather than commit
+demo/models/

@@ -1,10 +1,12 @@
 """The Python host for ear3d_core's pipeline (core/src/pipeline.rs).
 
-The Rust pipeline makes every decision and asks its host for three things:
-hold a mesh and its vertex colours, render views of it, and run a detector on
-each picture -- FaceMesh, the ear-box detector or the 2D landmarker. This is
-that host on Filament (open3d) and the same models the Python pipeline uses.
-The browser demo implements the same interface on three.js and onnxruntime-web.
+The Rust pipeline makes every decision and asks its host for four things:
+hold a mesh and its vertex colours, render views of it (returning the
+pictures, or FaceMesh's points on them), and evaluate the bare 2D graphs.
+Pre- and post-processing around those graphs is the crate's (detect.rs). This
+is that host on Filament (open3d) and onnxruntime, with the graphs exported
+by demo/export_models.py; the browser demo implements the same interface on
+three.js and onnxruntime-web.
 
 Arrays cross as little-endian bytes: f64 for geometry, f32 depth, u32 faces.
 """
@@ -19,12 +21,21 @@ import open3d as o3d
 from .render import MATERIAL, SUN_LUX
 
 BACKGROUND = (0.5, 0.5, 0.5)
+MODELS = Path(__file__).resolve().parents[1] / "demo" / "models"
+GRAPHS = {"r2j": ("r2j_s42.onnx", 192), "blazeear": ("blazeear.onnx", 256)}
+
+
+def anchors():
+    return np.fromfile(MODELS / "blazeear_anchors.bin", "<f8")
 
 
 class FilamentHost:
-    def __init__(self, pred, det, face_task, verbose=True):
-        self.pred, self.det, self.verbose = pred, det, verbose
+    def __init__(self, face_task, verbose=True):
+        import onnxruntime as ort
+        self.verbose = verbose
         self.meshes, self.colors, self.events = {}, {}, []
+        self.graphs = {k: ort.InferenceSession(str(MODELS / f), providers=["CPUExecutionProvider"])
+                       for k, (f, _) in GRAPHS.items()}
         self._face = None
         self._face_task = face_task
 
@@ -43,15 +54,11 @@ class FilamentHost:
             o = {}
             if req["depth"]:
                 o["depth"] = np.asarray(depth, "<f4").tobytes()
-            kind = req["detect"]
-            if kind == "face":
+            if req["image"]:
+                o["image"] = np.ascontiguousarray(img, np.uint8).tobytes()
+            if req["detect"] == "face":
                 uv = self._face_points(img)
                 o["face"] = None if uv is None else uv.astype("<f8").tobytes()
-            elif kind == "ear_boxes":
-                B, S = self.det.boxes(img)
-                o["boxes"] = np.c_[B, S].astype("<f8").tobytes() if len(B) else b""
-            elif kind == "landmarks":
-                o["landmarks"] = np.asarray(self.pred.predict(img), "<f8").tobytes()
             out.append(o)
         return out
 
@@ -83,6 +90,11 @@ class FilamentHost:
             del r
             out.append((img, depth))
         return out
+
+    def infer(self, model, x):
+        g, n = self.graphs[model], GRAPHS[model][1]
+        x = np.frombuffer(x, "<f4").reshape(1, 3, n, n)
+        return [np.ascontiguousarray(y, "<f4").tobytes() for y in g.run(None, {g.get_inputs()[0].name: x})]
 
     def event(self, kind, payload):
         if kind == "log":
@@ -116,14 +128,14 @@ def canonical_face(cfg):
     return np.array([[float(x) for x in l.split()[1:4]] for l in open(model) if l.startswith("v ")])
 
 
-def run(mesh, cfg, pred, det, table, angles, template, verbose=True):
+def run(mesh, cfg, table, angles, template, verbose=True, host=None):
     """The Rust pipeline on an open3d mesh. Returns ({"L", "R"}, debug)."""
     import ear3d_core
-    host = FilamentHost(pred, det, cfg["face_task"], verbose)
+    host = host or FilamentHost(cfg["face_task"], verbose)
     b = lambda a: np.ascontiguousarray(a, "<f8").tobytes()
     out = ear3d_core.run(host, b(np.asarray(mesh.vertices)), np.asarray(mesh.triangles, "<u4").tobytes(),
                          json.dumps({k: cfg[k] for k in CFG_KEYS}), b(table), b(angles), b(template),
-                         b(canonical_face(cfg)))
+                         b(canonical_face(cfg)), b(anchors()))
     pts = lambda x: None if x is None else np.frombuffer(x, "<f8").reshape(-1, 3).copy()
     res = {"L": pts(out["L"]), "R": pts(out["R"])}
     dbg = {"ear_only": out["ear_only"], "fit_residual": out["fit_residual"], "events": host.events,

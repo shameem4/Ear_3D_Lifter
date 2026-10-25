@@ -168,7 +168,7 @@ class Pipeline:
             if c.get("use_mesh_texture"):
                 raise NotImplementedError("core='rust' re-skins every mesh; use_mesh_texture is Python-only")
             self.pred, self.ckpt = self.pred_render, str(render_checkpoint(c))
-            out, dbg = core_host.run(mesh, c, self.pred_render, self.yolo, self.table, self.angles, ear_only._template())
+            out, dbg = core_host.run(mesh, c, self.table, self.angles, ear_only._template())
             if dbg["R_head"] is None and not dbg["ear_only"]:
                 out = None                                       # no face, as the Python path says it
             return (out, dbg) if return_debug else out
