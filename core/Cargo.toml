@@ -1,0 +1,16 @@
+[package]
+name = "ear3d_core"
+version = "0.1.0"
+edition = "2021"
+description = "Ear 3D Lifter geometry, shared by the Python pipeline (PyO3) and the browser demo (WASM)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+python = ["dep:pyo3"]
+wasm = ["dep:wasm-bindgen"]
+
+[dependencies]
+pyo3 = { version = "0.30", features = ["extension-module"], optional = true }
+wasm-bindgen = { version = "0.2", optional = true }

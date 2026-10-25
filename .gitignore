@@ -65,3 +65,7 @@ data/hsrd100/
 data/mv_hutubs/
 /data/mv_*/
 data/mv_*/
+
+# ear3d_core build outputs
+core/target/
+core/pkg/

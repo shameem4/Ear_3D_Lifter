@@ -309,6 +309,13 @@ class Pipeline:
 
     def _multiview(self, ear, side, R, c0, s):
         c = self.cfg
+        if c.get("core") == "rust":                              # ear3d_core (core/): exhaustive pairs
+            import ear3d_core
+            def ransac_point(o, d, t):
+                q = np.array(ear3d_core.ransac_point(np.ravel(o).tolist(), np.ravel(d).tolist(), t))
+                return q if np.isfinite(q).all() else None
+        else:
+            from .triangulate import ransac_point
         d0 = np.asarray(c["multiview_light_dir"], float) * ([-1.0, 1, 1] if side == "R" else 1.0)
         cfg = dict(c, light_dir=tuple(d0), light_mirror=False, light_frame="world")
         if c.get("target_occupancy"):                            # frame from the ear, not the box
