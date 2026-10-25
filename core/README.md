@@ -25,3 +25,25 @@ Ported so far:
   instead of a random one. Gate test, all-Rust pipeline: 32 head-cut ears
   1.524 vs 1.495 mm, paired +0.005, p=0.19, side 32/32; AudioEar3D within 15
   deg 90% both. 011_left, Python's one wrong side, comes out the right side.
+- `pipeline` (+ `camera`, `host`, `skin`, `bvh`, `section`, `rng`,
+  `ziggurat`, `mesh`, `exec`): THE WHOLE PIPELINE -- face search and frame
+  checks, ear framing, the 25-view landmarking, the ear-only path. It asks
+  its host only to hold meshes and colours, render views (a model transform
+  plus a camera: exactly in_frame then render) and run a detector on each.
+  Python host: `ear3d/core_host.py` (Filament, MediaPipe, BlazeEar, r2j);
+  `EAR3D_CORE=rust`. Browser: the same `run` from the WASM build, with a JS
+  host. The skin draws numpy's own stream (PCG64 + SeedSequence + numpy's
+  ziggurat tables, BSD-3, read from numpy's libnpyrandom), so it is
+  skin.py's skin on all but one vertex of a 182k head (a grazing AO ray:
+  f64 here, float32 in open3d); WASM matches native to 3e-17.
+  16 held-out heads, 32 hand-corrected ears: median 1.089 = 1.089, mean
+  1.107 = 1.107, points within a median 0.0005 mm of the Python run (max
+  0.24 mm, one point).
+
+Two traps found on the way, both silent:
+- The sun is a direction in the RENDERED (in_frame) scene; forgetting the
+  view's rotation lights every view from the wrong side.
+- Folding in_frame into the camera is exact on paper but Filament shades a
+  millimetre scene a few grey levels differently, and a reused renderer
+  carries ~0.4 grey levels between frames. FaceMesh flips on both. So the
+  host applies the model transform itself and makes a fresh renderer per view.

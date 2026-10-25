@@ -9,8 +9,12 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 python = ["dep:pyo3"]
-wasm = ["dep:wasm-bindgen"]
+wasm = ["dep:wasm-bindgen", "dep:js-sys", "dep:wasm-bindgen-futures"]
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 pyo3 = { version = "0.30", features = ["extension-module"], optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }

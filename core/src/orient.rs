@@ -48,7 +48,7 @@ fn extent(p: &[V3], c: &V3, ax: &V3) -> f64 {
 
 /// Similarity (s, R, t) with dst ~ s R src + t, least squares (Horn's
 /// quaternion rotation; s = sum dst'.(R src') / sum |src'|^2 = Umeyama's).
-fn similarity(src: &[V3], dst: &[V3]) -> (f64, M3, V3) {
+pub fn similarity(src: &[V3], dst: &[V3]) -> (f64, M3, V3) {
     let (cs, cd) = (mean(src), mean(dst));
     let mut s = [[0.0; 3]; 3];
     let mut ss = 0.0;

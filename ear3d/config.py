@@ -188,9 +188,8 @@ DEFAULTS = dict(
                             # p=0.92), pp16's attached lobe 9.7 -> 5.7 mm.
                             # Without a matching table it is WORSE (v7 +0.14).
                             # None restores box framing.
-    core=os.environ.get("EAR3D_CORE", "python"),  # geometry: "python" (ear3d.triangulate's 64 random
-                              # RANSAC pairs, open3d snap) or "rust" (ear3d_core in
-                              # core/: every pair, brute-force closest point)
+    core=os.environ.get("EAR3D_CORE", "python"),  # "python", or "rust": the whole pipeline in
+                              # ear3d_core (core/), hosted by ear3d.core_host
     ear_detector="blazeear",  # pipeline ear box: "blazeear" (Apache-2.0) or "yolo"
                               # (Ultralytics, AGPL-3.0; local use only). 16 held-out
                               # heads: 1.68 vs 1.61 mm median vs v9, 32/32 ears both.

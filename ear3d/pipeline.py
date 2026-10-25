@@ -162,6 +162,16 @@ class Pipeline:
         if not 25.0 <= ext <= 600.0:
             raise ValueError(f"mesh spans {ext:.3g} along its longest axis; the pipeline needs a head "
                              f"(~150-350) or an ear (~40-90) in MILLIMETRES. Metres? scale by 1000.")
+        if c.get("core") == "rust":                              # the whole pipeline in ear3d_core
+            from . import core_host, ear_only
+            from .twod import render_checkpoint
+            if c.get("use_mesh_texture"):
+                raise NotImplementedError("core='rust' re-skins every mesh; use_mesh_texture is Python-only")
+            self.pred, self.ckpt = self.pred_render, str(render_checkpoint(c))
+            out, dbg = core_host.run(mesh, c, self.pred_render, self.yolo, self.table, self.angles, ear_only._template())
+            if dbg["R_head"] is None and not dbg["ear_only"]:
+                out = None                                       # no face, as the Python path says it
+            return (out, dbg) if return_debug else out
         from . import ear_only                                   # FLOW-GATE: too small to be a head
         if ext < ear_only.HEAD_MIN_MM:                           # -> no face stage; pose from the ear's shape
             from .twod import render_checkpoint
