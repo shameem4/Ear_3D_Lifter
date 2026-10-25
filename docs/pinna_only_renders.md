@@ -66,6 +66,19 @@ sha256 beside the folder).
   permissive reading (2026-10-21), as in v3r. These are renders of scan
   geometry: local only, never committed or uploaded.
 
+## Delivered (2026-10-25)
+
+444 ears, 44,400 images, 12 GB, no skips. 8,000 HUTUBS and 36,400 SONICOM;
+22,200 left and 22,200 right. Labels: 21,200 images hand, 23,200 v13.
+Occupancy: median 0.758, range 0.55-1.05.
+
+**Exclude the 35 ears in `labels_off_wrap.csv`.** Some of their labels
+lie more than 3 mm off the wrap (mostly landmarks 26-28; P0066_right is a
+broken wrap with 20 points off, pp5_right is 15 mm off at 17). On a head
+render such a point still lands on scan skin. On a pinna-only render it
+floats in the air beside the ear, and that would teach the model to put
+points off the ear. Elsewhere labels lie on the wrap (median 0.0 mm).
+
 ## Suggested ingest and training
 
     python scripts/ingest_synthetic_v1.py --name synthetic_v3p --px 600 \
