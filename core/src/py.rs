@@ -13,8 +13,15 @@ fn closest_points(p: Vec<f64>, v: Vec<f64>, t: Vec<u32>) -> Vec<f64> {
     crate::snap::closest_points_flat(&p, &v, &t)
 }
 
+/// orient(vertices_flat, template_flat) -> [R (9), t (3), s, mirror, residual].
+#[pyfunction]
+fn orient(v: Vec<f64>, tpl: Vec<f64>) -> Vec<f64> {
+    crate::orient::orient_flat(&v, &tpl)
+}
+
 #[pymodule]
 fn ear3d_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ransac_point, m)?)?;
-    m.add_function(wrap_pyfunction!(closest_points, m)?)
+    m.add_function(wrap_pyfunction!(closest_points, m)?)?;
+    m.add_function(wrap_pyfunction!(orient, m)?)
 }

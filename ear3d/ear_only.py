@@ -46,6 +46,11 @@ def _mirror_z(V, F):
 def orient(V):
     """(R, t, s, mirror, residual): canonical-left-ear X ~ s * (V' @ R.T) + t,
     where V' is V mirrored about z if mirror (a right ear)."""
+    from .config import DEFAULTS
+    if DEFAULTS.get("core") == "rust":                               # ear3d_core.orient: stride subsample, own ICP
+        import ear3d_core
+        o = np.array(ear3d_core.orient(np.ravel(V).astype(float).tolist(), np.ravel(_template()).astype(float).tolist()))
+        return o[:9].reshape(3, 3), o[9:12], float(o[12]), bool(o[13]), float(o[14])
     T = _template(); ct = T.mean(0); Et = np.linalg.svd(T - ct, full_matrices=False)[2]
     tgt = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(T))
     best = None

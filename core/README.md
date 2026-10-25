@@ -20,3 +20,8 @@ Ported so far:
 - `snap`: closest point on the mesh (brute force, Ericson). Matches open3d's
   RaycastingScene to 1.4e-4 mm (its float32) on a 364k-triangle head, 0.2 s.
   The Python path stayed bit-identical after the refactor (`Pipeline._snap`).
+- `orient` (+ `kdtree`, `linalg`): the ear-only template fit, with its own
+  scaled ICP (open3d's convergence rule kept) and an even-stride subsample
+  instead of a random one. Gate test, all-Rust pipeline: 32 head-cut ears
+  1.524 vs 1.495 mm, paired +0.005, p=0.19, side 32/32; AudioEar3D within 15
+  deg 90% both. 011_left, Python's one wrong side, comes out the right side.
