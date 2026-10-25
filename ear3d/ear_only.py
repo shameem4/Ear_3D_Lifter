@@ -79,8 +79,11 @@ def orient(V):
     return best
 
 
-def landmarks(pipe, mesh):
-    """55 landmarks on an ear-only mesh (mm), in the mesh's own frame, and its side ("L"/"R")."""
+def frame(pipe, mesh):
+    """The ear-only path's view of a mesh: (skinned mesh in the normalised-head
+    frame, view rotation, view centre, view scale, to_head) where to_head maps
+    points of the input mesh's frame into that skinned mesh's frame. Shared by
+    landmarks() and the pinna-only training renders (scripts/handfix/5)."""
     V, F = np.asarray(mesh.vertices, float), np.asarray(mesh.triangles)
     R, t, s, mirror, res = orient(V)
     W, Fw = _mirror_z(V, F) if mirror else (V, F)
@@ -94,9 +97,21 @@ def landmarks(pipe, mesh):
     near = Wv[np.linalg.norm(Wv[:, :2] - mid, axis=1) < 3.0]
     p0 = np.r_[mid, near[:, 2].max() if len(near) else Wv[:, 2].max()]
     half = c["eye_z"] * np.tan(np.radians(c["vfov"]) / 2)
-    P = pipe._multiview(ear_m, "L", Rv, p0 @ Rv, 0.5 * float((hi - lo).max()) * (1 + 2 * PAD) / half)
-    P = pipe._snap(P, m)
-    X = ((P @ CANON_TO_HEAD + c0) - t) / s @ R                        # back to W
-    if mirror:
-        X = X * [1.0, 1.0, -1.0]
-    return X, ("R" if mirror else "L"), res
+
+    def to_head(P):
+        P = np.asarray(P, float) * ([1.0, 1.0, -1.0] if mirror else 1.0)
+        return ((P @ R.T) * s + t - c0) @ CANON_TO_HEAD.T
+
+    def from_head(P):
+        X = ((P @ CANON_TO_HEAD + c0) - t) / s @ R
+        return X * [1.0, 1.0, -1.0] if mirror else X
+    return dict(ear=ear_m, mesh=m, R=Rv, centre=p0 @ Rv, scale=0.5 * float((hi - lo).max()) * (1 + 2 * PAD) / half,
+                to_head=to_head, from_head=from_head, side="R" if mirror else "L", residual=res)
+
+
+def landmarks(pipe, mesh):
+    """55 landmarks on an ear-only mesh (mm), in the mesh's own frame, and its side ("L"/"R")."""
+    f = frame(pipe, mesh)
+    P = pipe._multiview(f["ear"], "L", f["R"], f["centre"], f["scale"])
+    P = pipe._snap(P, f["mesh"])
+    return f["from_head"](P), f["side"], f["residual"]
