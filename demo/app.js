@@ -100,6 +100,24 @@ function toHeadFrame(R, c0, mirror) {
 }
 
 const sphereGeo = new THREE.SphereGeometry(1, 12, 8);
+// p (pipeline mesh coordinates) moved out by r along the normal of its nearest
+// vertex, the normal turned to face the cameras (scan windings vary). The
+// displayed mesh is the input; mesh 1 of an ear-only right ear is it mirrored in z.
+function lifted(p, r, camPts, mirror) {
+  const g = meshObj.geometry, P = g.attributes.position.array, N = g.attributes.normal.array, z = mirror ? -1 : 1;
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < P.length; i += 3) {
+    const d = (P[i] - p[0]) ** 2 + (P[i + 1] - p[1]) ** 2 + (z * P[i + 2] - p[2]) ** 2;
+    if (d < bd) { bd = d; best = i; }
+  }
+  const n = new THREE.Vector3(N[best], N[best + 1], z * N[best + 2]).normalize(), q = new THREE.Vector3(...p);
+  if (camPts.length) {
+    const c = new THREE.Vector3(); camPts.forEach((w) => c.add(new THREE.Vector3(...w))); c.divideScalar(camPts.length);
+    if (n.dot(c.sub(q)) < 0) n.negate();
+  }
+  return q.add(n.multiplyScalar(r));
+}
+
 function dots(P, color, r, into = marks) {
   const m = new THREE.InstancedMesh(sphereGeo, new THREE.MeshStandardMaterial({ color, roughness: 0.4 }), P.length);
   P.forEach((p, i) => m.setMatrixAt(i, new THREE.Matrix4().compose(new THREE.Vector3(...p), new THREE.Quaternion(), new THREE.Vector3(r, r, r))));
@@ -163,7 +181,7 @@ function faceOnView() {
 // ------------------------------------------------------------------ host
 let host, assets, current = null, running = false;
 class DemoHost {
-  constructor(h, earOnly) { this.h = h; this.mirror = false; this.left = true; this.earOnly = earOnly; this.skins = 0; }
+  constructor(h, earOnly) { this.camPts = []; this.h = h; this.mirror = false; this.left = true; this.earOnly = earOnly; this.skins = 0; }
   async setMesh(id, V, F) {
     this.h.setMesh(id, V, F);
     if (id === (this.earOnly ? 1 : 0)) stage("skin", "run");
@@ -219,12 +237,12 @@ class DemoHost {
       controls.autoRotate = false; $("spin").className = ""; focusEar();
       status(`${p.left ? "Left" : "Right"} ear found; rendering 25 views around it`);
     } else if (kind === "views") {
-      const pts = [], lines = [];
+      const pts = [], lines = []; this.camPts = [];
       p.model.forEach(([R, C, s], i) => {
         const E = p.E[i], t = [E[3], E[7], E[11]];
         const y = [0, 1, 2].map((k) => -(E[k] * t[0] + E[4 + k] * t[1] + E[8 + k] * t[2]));   // -R^T t
         const w = [0, 1, 2].map((k) => s * (y[0] * R[0][k] + y[1] * R[1][k] + y[2] * R[2][k]) + C[k]);
-        pts.push(w);
+        pts.push(w); this.camPts.push(w);
       });
       dots(pts, css("--ray"), 1.6, camGroup);
       if (earFocus) {
@@ -237,8 +255,8 @@ class DemoHost {
       this.faceOn = { rgba: lastBatch[faceOnView()], uv: p.uv[faceOnView()], S, left: p.left };
       status("2D landmarks on every view; triangulating the rays");
     } else if (kind === "triangulated") {
-      this.tri = p.filter(valid);
-      this.triMesh = dots(this.tri, css("--accent"), 0.55, triGroup);
+      this.tri = p;
+      this.triMesh = dots(p.filter(valid), css("--accent"), 0.55, triGroup);
       status("Triangulated; snapping onto the surface");
     } else if (kind === "snapped") {
       const to = p, from = this.tri || [], idx = p.map((q, i) => i).filter((i) => valid(p[i]));
@@ -247,15 +265,23 @@ class DemoHost {
         earFocus = { c, r: 32, left: true, earOnly: true }; $("frameEar").disabled = false;
         controls.autoRotate = false; $("spin").className = "";
       }
-      const m = dots(idx.map((i) => to[i]), css("--ok"), 0.6), t0 = performance.now();
-      const fromAll = idx.map((i, k) => from[k] || to[i]);
+      // The points are ON the surface (closest points); a sphere centred there is
+      // half buried, and in a fold mostly hidden. Draw each lifted by its radius
+      // along the surface normal (display only), plus a faint ghost that shows
+      // through the mesh, so a point behind a fold is never silently missing.
+      const R = 0.6, dest = idx.map((i) => lifted(to[i], R, this.camPts, this.mirror));
+      const m = dots(dest, css("--ok"), R), ghost = dots(dest, css("--ok"), R);
+      if (this.ghost) this.ghost.visible = false;        // one ear's ghosts at a time: the other's would show through the head
+      this.ghost = ghost;
+      ghost.material.depthTest = false; ghost.material.transparent = true; ghost.material.opacity = 0.28; ghost.renderOrder = 3;
+      const fromAll = idx.map((i) => (valid(from[i]) ? from[i] : to[i])), t0 = performance.now();
       anims.points = (now) => {
         const a = Math.min(1, (now - t0) / 900);
         idx.forEach((i, k) => {
-          const v = new THREE.Vector3(...fromAll[k]).lerp(new THREE.Vector3(...to[i]), a);
-          m.setMatrixAt(k, new THREE.Matrix4().compose(v, new THREE.Quaternion(), new THREE.Vector3(0.6, 0.6, 0.6)));
+          const v = new THREE.Vector3(...fromAll[k]).lerp(dest[k], a), M = new THREE.Matrix4().compose(v, new THREE.Quaternion(), new THREE.Vector3(R, R, R));
+          m.setMatrixAt(k, M); ghost.setMatrixAt(k, M);
         });
-        m.instanceMatrix.needsUpdate = true;
+        m.instanceMatrix.needsUpdate = ghost.instanceMatrix.needsUpdate = true;
         return a >= 1;
       };
       if (this.faceOn) { const f = this.faceOn; showImage(f.rgba, f.S, `${this.earOnly ? "The ear" : f.left ? "Left ear" : "Right ear"}, face-on view, with its 2D landmarks`); drawPoints(camCtx, f.uv, 1, css("--accent"), 4); }
