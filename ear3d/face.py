@@ -10,7 +10,8 @@ The face counterpart of Pipeline, ported from Face_3D_Lifter (2026-10-25):
      Laplacian prior on MediaPipe's canonical mesh, re-seated each iteration. Per-landmark triangulation lets
      neighbours settle on different views and bunch; the joint fit keeps the canonical spacing.
 Leave one head out on 50 HUTUBS heads vs the canonical-fit pseudo GT: 2.34 mm after step 4, 2.16 (p90 5.59
--> 4.99, collapsed edges 0.62 -> 0.05%) after step 5 (FINDINGS). Iris (468-477) keeps step 4's points.
+-> 4.99, collapsed edges 0.62 -> 0.05%) after step 5; 2.10 with per-view weights (FINDINGS). Iris (468-477)
+keeps step 4's points.
 
     from ear3d.face import FaceLifter
     out, dbg = FaceLifter().run(mesh_mm)
@@ -48,6 +49,8 @@ FACE = dict(
     fit_lambda=0.3,                      # Laplacian prior weight (swept 0.3-3: all within 0.02 mm)
     fit_cauchy_mm=2.0,                   # ray residual scale for the Cauchy weights
     fit_iters=6,
+    fit_view_weights=True,               # weight each ray by 1/(its view's typical miss for that landmark)^2,
+                                         # miss_mm in the view-offset file; leave one head out 2.18 -> 2.10 mm
 )
 
 
@@ -76,15 +79,33 @@ def cameras(E, cfg=FACE):
     return [Camera(K, e, (cfg["size"],) * 2, cfg["size"]) for e in E]
 
 
-def load_offsets(cfg=FACE):
-    """view x 478 x 2 px, checked against the view grid; zeros when view_offsets is None."""
+def load_offsets(cfg=FACE, what="off_px"):
+    """From the view-offset file, checked against the view grid: "off_px" (view x 478 x 2, zeros when
+    view_offsets is None) or "miss_mm" (view x 468, each view's median ray miss per landmark, raw detections)."""
     vs = views(cfg)
     if not cfg["view_offsets"]:
-        return np.zeros((len(vs), N_LM, 2))
+        return np.zeros((len(vs), N_LM, 2)) if what == "off_px" else None
     t = np.load(cfg["view_offsets"])
     if t["views"].shape != (len(vs), 2) or not np.allclose(t["views"], vs):
         raise ValueError(f"{cfg['view_offsets']} was learned on a different view grid")
-    return t["off_px"]
+    return t[what]
+
+
+def view_weights(miss_mm, floor_mm=0.5, unseen_mm=50.0):
+    """1 / miss^2 per (view, landmark); a view that never detected a landmark gets unseen_mm."""
+    m = np.where(np.isfinite(miss_mm), np.maximum(miss_mm, floor_mm), unseen_mm)
+    return 1.0 / m ** 2
+
+
+def ray_misses(UV, cams, off, G, scale_mm):
+    """How far each view's ray through its (offset-corrected) detection passes from G (n x 3 mm): view x n mm."""
+    n = len(G); miss = np.full((len(cams), n), np.nan)
+    for k, cam in enumerate(cams):
+        ok = np.isfinite(UV[k, :n, 0])
+        if ok.any():
+            o, d = cam.rays(UV[k, :n][ok] - off[k, :n][ok]); v = G[ok] / scale_mm - o
+            miss[k, ok] = np.linalg.norm(v - (v * d).sum(1)[:, None] * d, axis=1) * scale_mm
+    return miss
 
 
 def triangulate(UV, cams, off, thresh):
@@ -125,10 +146,11 @@ def canonical_laplacian(cfg=FACE):
     return (sp.diags(np.asarray(A.sum(1)).ravel()) - A).tocsr(), V
 
 
-def fit_rays(UV, cams, off, V, F, init, cfg=FACE, lap=None):
+def fit_rays(UV, cams, off, V, F, init, cfg=FACE, lap=None, view_w=None):
     """Step 5: the 468 face points fitted jointly to every (view, landmark) ray, mm in the frame of V.
     UV, off: view x >=468 x 2 px; cams in render units (scale_mm); init: 468 x 3 seated triangulation (NaN ok).
-    Minimises sum w_kj |ray_kj miss|^2 + lambda |L (X - canonical posed onto init)|^2, w Cauchy on the miss."""
+    Minimises sum w_kj |ray_kj miss|^2 + lambda |L (X - canonical posed onto init)|^2, w Cauchy on the miss,
+    times view_w (view x landmark prior weight) when given."""
     import scipy.sparse as sp, scipy.sparse.linalg as sla
     L, Vc = canonical_laplacian(cfg) if lap is None else lap
     n, s, c = len(Vc), cfg["scale_mm"], cfg["fit_cauchy_mm"]
@@ -148,6 +170,8 @@ def fit_rays(UV, cams, off, V, F, init, cfg=FACE, lap=None):
     for _ in range(cfg["fit_iters"]):
         v = X[None] - O; miss = np.linalg.norm(v - (v * D).sum(2, keepdims=True) * D, axis=2)
         w = np.where(has, 1 / (1 + (miss / c) ** 2), 0.0)
+        if view_w is not None:
+            w = w * view_w[:, :n]
         A = sp.block_diag(list((w[..., None, None] * Pm).sum(0))).tocsr()
         b = (w[..., None] * PmO).sum(0)
         X = sla.spsolve((A + LL).tocsc(), b.ravel() + LL @ ref.ravel()).reshape(n, 3)
@@ -166,6 +190,8 @@ class FaceLifter:
             base_options=mpp.BaseOptions(model_asset_path=self.cfg["face_task"]), num_faces=1))
         self.off = load_offsets(self.cfg)
         self.lap = canonical_laplacian(self.cfg) if self.cfg["fit_rays"] else None
+        miss = load_offsets(self.cfg, "miss_mm") if self.cfg["fit_view_weights"] else None
+        self.view_w = None if miss is None else view_weights(miss)
 
     def run(self, mesh, keep_images=False):
         c = self.cfg
@@ -203,7 +229,7 @@ class FaceLifter:
         if c["fit_rays"]:
             n = len(self.lap[1])
             Ps[:n] = fit_rays(UV, cams, self.off, np.asarray(geo.vertices) * s, np.asarray(geo.triangles),
-                              Ps[:n] * s, c, self.lap) / s
+                              Ps[:n] * s, c, self.lap, self.view_w) / s
         to_input = lambda X: (X * s + piv) @ R_head + centre
         out = dict(P=to_input(Ps), P_raw=to_input(P), P_tri=to_input(Pt), off_surface_mm=dist * s, residual_mm=res * s,
                    n_inliers=inliers.sum(1), n_views=np.isfinite(UV[:, 0, 0]).sum())

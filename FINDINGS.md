@@ -161,6 +161,15 @@ FINDINGS.md is the long form. In brief:
   features: spacing |log ratio| median 0.095 -> 0.063, p90 0.307 -> 0.187, collapsed 0.70% -> 0.00%
   (ray fit better on 49/50 heads); error 2.25 -> 2.06 mm. Offsets off, for scale: 0.221 / 0.767 / 9.9%.
   Same caveat: the spacing reference is the canonical-mesh GT.
+- **Per-view weights in the ray fit (2026-10-25, default):** each ray weighted 1/miss^2, miss = that view's
+  median raw ray miss for the landmark over the training heads (miss_mm in the offsets file). Leave one head
+  out, error, ray fit -> weighted: features 2.06 -> 1.98, rest 2.22 -> 2.15 (rest p90 5.03 -> 5.19); nostril
+  1.69 -> 1.58, lip corners 2.56 -> 2.52. 1/miss and best-8-views were no better.
+- **pp22's septum is a 2D error weighting cannot fix:** FaceLandmarker puts the nostrils on the upper lip in
+  every face-on and below view (the nostrils sit high); weighting makes it worse (3.4 -> 3.8 mm down). No
+  bias across heads (+0.1 mm). A geometric subnasale snap (deepest midline point under the tip-to-labrale
+  chord) is worse than the detection at lm 2 (2.26 vs 1.42 mm median); gated to vertical disagreements >3 mm
+  it fixes pp22 (3.6 -> 2.0) but helps 4 heads and hurts 3. Not adopted.
 - **ear3d drift:** v0 (Face_3D_Lifter era) vs v1 normalisation differs. pp1 was pitched in v0 and is
   upright in v1; the other heads moved <5 mm. BJ002 lost one view (stickers 2.4 -> 2.7 mm on the v0 offsets).
 - **Error is sliding along the skin** (0.26 mm along the normal), so off-surface checks cannot see it. RANSAC

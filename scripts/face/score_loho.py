@@ -14,7 +14,7 @@ import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 import pathlib, numpy as np
 from concurrent.futures import ProcessPoolExecutor
-from ear3d.face import FACE, cameras, triangulate, seat, fit_rays, canonical_laplacian, canonical_raw
+from ear3d.face import FACE, cameras, triangulate, seat, fit_rays, canonical_laplacian, canonical_raw, view_weights
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 RUN_TAG = __import__("os").environ.get("FACE_RUN", "v1")       # runs/face/<tag>: one lift generation + its GT
@@ -33,7 +33,7 @@ def regions():
 
 
 REG = regions()
-T = np.load(RUN / "view_table.npz"); H, OFF = list(T["heads"]), T["off_px"]
+T = np.load(RUN / "view_table.npz"); H, OFF, RAY = list(T["heads"]), T["off_px"], T["ray_mm"]
 
 
 def one(j):
@@ -46,6 +46,8 @@ def one(j):
         Ps, _ = seat(P * s, z["V"], z["F"])
         out[arm] = Ps
     out["offsets on + ray fit"] = fit_rays(z["UV"], cams, off, z["V"], z["F"], out["offsets on"], FACE, LAP)
+    w = view_weights(np.nanmedian(RAY[[i for i in range(len(H)) if i != j]], 0))
+    out["+ view weights"] = fit_rays(z["UV"], cams, off, z["V"], z["F"], out["offsets on"], FACE, LAP, w)
     res = {}
     for arm, X in out.items():
         for r, (m, E) in REG.items():
