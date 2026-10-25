@@ -11,7 +11,24 @@ The long form of the inherited work is `RESULTS_inherited.md` (chronological,
 with its retractions; grep it). Numbers carry the date and the reference they
 were measured against, because both have changed.
 
-## Where it stands (2026-10-24)
+## Where it stands (2026-10-25)
+
+- **r3p_s42 replaces r2j_s42 as the 3D path's model** (user's choice).
+  r3p is r2j's recipe plus pinna-only renders (synthetic_v3p, 25% of the mix).
+  Paired r2j -> r3p, same day, same heads and rotations:
+  - **Heads vs the user's 32 hand-corrected held-out ears:** clean 1.089 -> 1.031 mm (20/32 better, p=0.15); with jewellery 1.061 -> 1.068 mm. Points 26-28 are +0.10-0.14 mm worse (p~0.045 in both runs).
+  - **HUTUBS held-out ears cut to the pinna, vs hand:** landmarks 0-2 4.97 -> 1.93 mm; per ear 1.72 -> 1.04.
+  - **Head-cut held-out ears:** 1.50 -> 1.10 mm.
+  - **AudioEar3D, vs v12:** wraps 0-2 5.39 -> 2.16 mm; raw clouds per ear 2.74 -> 2.04 mm, >5 mm 40% -> 14%. The cloud lobe stays weak (3.7 mm).
+  One seed.
+- **Why ear-only meshes failed: no surrounding skin.** r2j missed the helix root (landmarks 0-2) by ~5 mm on any pinna-only mesh.
+  Evidence: HUTUBS ears cut to the pinna 5.0 mm; the same ears with a disc of cheek left 2.2 mm; full heads ~1.5 mm.
+  Ruled out: the lift (given the reference's own pixels it is exact, 0.00 mm) and mesh density (16x subdivision changes nothing). The model had never seen a pinna without its head.
+  This supersedes the 2026-10-24 advice not to fine-tune on ear-only renders: that test kept skin around the ear.
+- **A visibility constraint on the lift does not pay** ("rays cannot pass through the ear": replace a point that sits >1.5 mm behind its rays' first surface hit).
+  Held-out heads vs v12: 0.991 -> 1.071 mm; >5 mm 0.23% -> 0.80%. Reverted. Folds legitimately hide landmarks 1-3 mm from their best views.
+
+## Where it stood (2026-10-24)
 
 - **Render-only 2D model r2j_s42 is the 3D path's model** (user's choice).
   On the user's 32 hand-corrected held-out ears (16 heads), end to end, view_table_v13:

@@ -2,7 +2,7 @@
 
 Pre- and post-processing live in ear3d_core (core/src/detect.rs), so the
 browser and the Python host run the same code around the same graphs:
-  r2j_s42.onnx      Ear_Landmarker's own export_onnx.py on the render-only
+  render_landmarker.onnx  Ear_Landmarker's own export_onnx.py on the render-only
                     checkpoint (render_checkpoint): (1,3,192,192) in [-1,1]
                     -> landmarks (1,55,2) in [0,1], confidence (1,55)
   blazeear.onnx     BlazeEar's network alone: (1,3,256,256) in [-1,1] ->
@@ -28,7 +28,7 @@ from ear3d.twod import EAR_LANDMARKER, render_checkpoint
 
 OUT.mkdir(parents=True, exist_ok=True)
 ck = render_checkpoint(DEFAULTS)
-subprocess.run([sys.executable, "export_onnx.py", "--checkpoint", str(ck), "--output", str(OUT / "r2j_s42.onnx")],
+subprocess.run([sys.executable, "export_onnx.py", "--checkpoint", str(ck), "--output", str(OUT / "render_landmarker.onnx")],
                cwd=EAR_LANDMARKER, check=True)
 
 sys.path.insert(0, str(BLAZEEAR))
@@ -66,6 +66,6 @@ for name, a in [("table", t["table"]), ("angles", t["angles"]), ("template", ear
                 ("canon", core_host.canonical_face(DEFAULTS))]:
     np.ascontiguousarray(a, "<f8").tofile(OUT / f"{name}.bin")
 json.dump({k: DEFAULTS[k] for k in core_host.CFG_KEYS}, open(OUT / "cfg.json", "w"))
-json.dump({"r2j_checkpoint": str(ck), "blazeear_weights": str(BLAZE_EAR), "blazeear_input": inf.input_size,
+json.dump({"render_checkpoint": str(ck), "blazeear_weights": str(BLAZE_EAR), "blazeear_input": inf.input_size,
            "anchors": int(inf.anchors.shape[0]), "face_task": DEFAULTS["face_task"]}, open(OUT / "manifest.json", "w"), indent=1)
 print("wrote", sorted(p.name for p in OUT.iterdir()))

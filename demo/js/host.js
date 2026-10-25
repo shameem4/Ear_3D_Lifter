@@ -8,7 +8,7 @@ import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.29.0/dist/o
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs";
 
 ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.29.0/dist/";
-const GRAPHS = { r2j: ["r2j_s42.onnx", 192], blazeear: ["blazeear.onnx", 256] };
+const GRAPHS = { r2j: ["render_landmarker.onnx", 192], blazeear: ["blazeear.onnx", 256] };
 
 export class BrowserHost {
   // models: URL of demo/models/; onEvent(kind, payload) gets the pipeline's events.

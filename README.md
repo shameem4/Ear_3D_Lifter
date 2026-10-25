@@ -17,23 +17,26 @@ or `from ear3d.pipeline import Pipeline; Pipeline().run(mesh)`.
   Flow-gate: a mesh under 100 mm on its longest side is treated as one ear
   (`ear3d.ear_only`): no face stage; its pose and side come from fitting the
   mean ear template, then the same 25-view landmarking. Output has only that
-  side filled. Held-out ears with the head cut away: 1.50 mm, side right
+  side filled. Held-out ears with the head cut away: 1.10 mm, side right
   32/32; noisy AudioEar3D clouds: orientation within 15 deg on 18/20, one
-  wrong side.
+  wrong side. A pinna-only mesh (AudioEar3D, any scan cut to the ear) gets
+  landmarks 0-2, the helix root, to ~2 mm (was 5 mm before r3p).
 - **2D model.** Every mesh is re-skinned and read by the render-only model
-  `r2j_s42` (config `render_run`); a scan's own texture is ignored by default.
+  `r3p_s42` (config `render_run`); a scan's own texture is ignored by default.
   `use_mesh_texture=True` reads the texture with Ear_Landmarker's regular
   `SHIPPED_RUN` instead; on three real textured heads it was 2-9x less stable.
-  `r2j` was trained only on this repo's renders and is 420% worse on
-  photographs: never point it at a photo or a real texture.
+  It was trained only on this repo's renders (head renders plus pinna-only
+  ones) and, like its predecessor r2j, is far worse on photographs: never
+  point it at a photo or a real texture.
 - **Output:** `L`, `R` (55 x 3 each) in the input mesh's own coordinates,
   NaN where an ear or landmark was not found (`L` is the subject's left),
   and `ckpt`, the 2D checkpoint used.
-- **Accuracy (untextured, r2j):** median **1.09 mm** per ear against the
+- **Accuracy (untextured, r3p):** median **1.03 mm** per ear against the
   user's hand-corrected landmarks on 16 HUTUBS heads used nowhere in building
-  it (32 ears), each randomly rotated; 0.85% of points beyond 5 mm (v4 was
-  1.61 mm and 4.7%). The reference is one annotator's placement, which r2j was
-  trained toward. With synthetic earrings added, 1.06 mm. About 15 s per head on one GPU. Validated only on HUTUBS
+  it (32 ears), each randomly rotated; 0.62% of points beyond 5 mm (r2j was
+  1.09 mm and 0.85%, v4 1.61 mm and 4.7%). The reference is one annotator's
+  placement, which the model was trained toward. With synthetic earrings
+  added, 1.07 mm. The antihelix points 26-28 are ~0.1 mm worse than r2j's. About 15 s per head on one GPU. Validated only on HUTUBS
   and SONICOM scans (no hair); one real scan looked right.
 
 Environment: the `mocap` conda env
@@ -85,7 +88,7 @@ the runbook.
 
 ## Things that change results without changing this code
 
-- **The 2D model.** `render_run` (`r2j_s42`) for every re-skinned mesh;
+- **The 2D model.** `render_run` (`r3p_s42`) for every re-skinned mesh;
   Ear_Landmarker's `SHIPPED_RUN` (live, from its working tree) only with
   `use_mesh_texture=True`. `EAR3D_CKPT=<run or .ckpt>`
   pins the checkpoint (results record it), but not their inference code:

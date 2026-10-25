@@ -37,12 +37,15 @@ DEFAULTS = dict(
                             # measurement needs one model held still. See
                             # twod.landmarker_checkpoint; results record it.
                             # This model is for a scan's OWN texture (photo-like).
-    render_run="r2j_s42",   # the model for SYNTHETIC-SKINNED renders, i.e. every
+    render_run="r3p_s42",   # the model for SYNTHETIC-SKINNED renders, i.e. every
                             # mesh without a texture (twod.render_checkpoint).
-                            # Render-only: trained on synthetic_v3r + the jewellery
-                            # set from v4; held-out 1.09 mm vs v4's 1.61 (user's
-                            # hand-corrected ears), +420% error on photographs, so
-                            # it must never see one. User's choice, 2026-10-24.
+                            # Render-only, never for photographs. r3p = r2j's recipe
+                            # (synthetic_v3r + jewellery, from v4) plus pinna-only
+                            # renders (synthetic_v3p). vs r2j_s42 on the user's 32
+                            # hand-corrected held-out ears: heads 1.089 -> 1.031 mm;
+                            # ear-only fixed (AudioEar3D lm 0-2 5.39 -> 2.16 vs v12,
+                            # head-cut ears 1.50 -> 1.10); lm 26-28 +0.1 mm. One
+                            # seed. User's choice, 2026-10-25 (r2j was 2026-10-24).
     device="cuda",
 
     # --- the 2D detector, on RENDERS ----------------------------------------

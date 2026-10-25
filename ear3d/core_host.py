@@ -22,7 +22,7 @@ from .render import MATERIAL, SUN_LUX
 
 BACKGROUND = (0.5, 0.5, 0.5)
 MODELS = Path(__file__).resolve().parents[1] / "demo" / "models"
-GRAPHS = {"r2j": ("r2j_s42.onnx", 192), "blazeear": ("blazeear.onnx", 256)}
+GRAPHS = {"r2j": ("render_landmarker.onnx", 192), "blazeear": ("blazeear.onnx", 256)}
 
 
 def anchors():
