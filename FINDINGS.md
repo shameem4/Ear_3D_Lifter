@@ -202,7 +202,12 @@ FINDINGS.md is the long form. In brief:
   lip corners. Four lifted oval points sit 1.4-3.3 mm off the skin before seating (93, 234, 361, 288).
   In-house replacements so far (468-mesh pins + membrane; dense pinned film with stiffness annealing) reach
   1.88-1.95 mm whole face but leave corner collapse at 7-9%: they do not yet reproduce Wrap's spacing.
-  BJ002 stickers near 345 / 383 / 347 miss by 6-10 mm in every method; what they mark is unknown.
+  BJ002 sticker labels corrected 2026-10-25: the "345 / 383 / 347" outliers were mislabelled (assumed mirror
+  of the right side); their nearest landmarks are 340 / 353 / 348. Two more red blobs are TRAGION stickers
+  (user), 17-20 mm from MediaPipe's nearest points (454 / 234): FaceMesh has no tragion; excluded. Re-scored
+  (12 stickers, labels = nearest landmark on the default, fixed): default 2.76 / mean 3.05 / max 6.32,
+  wrap D 3.11 / 3.28 / 6.81, wrap C 3.54 / 3.38 / 6.76. Same ranking with neutral labels. 340 and 348
+  (left lateral cheek) stay 5-7 mm in every method.
 - **ear3d drift:** v0 (Face_3D_Lifter era) vs v1 normalisation differs. pp1 was pitched in v0 and is
   upright in v1; the other heads moved <5 mm. BJ002 lost one view (stickers 2.4 -> 2.7 mm on the v0 offsets).
 - **Error is sliding along the skin** (0.26 mm along the normal), so off-surface checks cannot see it. RANSAC
