@@ -192,6 +192,17 @@ FINDINGS.md is the long form. In brief:
 - **Lip-corner spacing worsened by the view weights:** collapsed edges there 4.1% -> 11.1% (p90 0.36 ->
   0.86); after the dense fit 9.0%. Those edges are ~1.4 mm in the GT (closed lips), so the ratio is noisy,
   but this one is open.
+- **Wrapping the canonical face on lifted key points (2026-10-25, scratch 2026-10-25-face-wrapkeys, not
+  adopted).** Wrap (ear3d.face_gt.wrap_template) with lifted landmarks as control points, the GT's own method.
+  Leave one head out (whole / lip corners / corner collapse): current 2.06 / 2.52 / 11%; 25 keys (C: eyes,
+  nose, chin, mouth corners, brow/forehead, cheeks, nose base) 1.66 / 2.21 / 2%; C + 12 face-oval keys (D)
+  1.64 / 2.23 / 2% (47/50 heads better); every landmark with LOHO error < 2 mm as a key (~228) 2.06 / 2.15
+  / 1%. BJ002's stickers disagree: median 2.9 (default) vs 3.7 (C) vs 3.4 (D). Between the keys the wrap
+  swaps the lift for the canonical shape, which the GT shares. What the wrap reliably buys is spacing at the
+  lip corners. Four lifted oval points sit 1.4-3.3 mm off the skin before seating (93, 234, 361, 288).
+  In-house replacements so far (468-mesh pins + membrane; dense pinned film with stiffness annealing) reach
+  1.88-1.95 mm whole face but leave corner collapse at 7-9%: they do not yet reproduce Wrap's spacing.
+  BJ002 stickers near 345 / 383 / 347 miss by 6-10 mm in every method; what they mark is unknown.
 - **ear3d drift:** v0 (Face_3D_Lifter era) vs v1 normalisation differs. pp1 was pitched in v0 and is
   upright in v1; the other heads moved <5 mm. BJ002 lost one view (stickers 2.4 -> 2.7 mm on the v0 offsets).
 - **Error is sliding along the skin** (0.26 mm along the normal), so off-surface checks cannot see it. RANSAC
