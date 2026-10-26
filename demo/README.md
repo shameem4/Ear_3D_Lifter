@@ -22,10 +22,10 @@ generated and gitignored.
 https://shameem4.github.io/Ear_3D_Lifter/ is built by
 `.github/workflows/pages.yml` on every push to `main` that touches `core/` or
 `demo/`: the core is compiled to WebAssembly from that commit and the page
-code copied from `demo/`. The data (ONNX models, HUTUBS heads) is NOT in git:
-it is the release asset `demo-data-vN.tar.gz`, which holds `models/` and
-`meshes/` (heads only, ears list empty; no `manifest.json`, it has local
-paths). New data: re-export, pack, publish a new release, bump `DATA` and
+code copied from `demo/`. The data (ONNX models, HUTUBS heads, AudioEar3D ear wraps)
+is NOT in git: it is the release asset `demo-data-vN.tar.gz`, which holds
+`models/` and `meshes/` (no `manifest.json`, which has local paths, and no
+`ae_cut_maps.npz`, which only the parity scripts read). New data: re-export, pack, publish a new release, bump `DATA` and
 `DATA_SHA256` in the workflow:
 
     tar czf demo-data-v2.tar.gz models meshes     # from the assembled site dir
@@ -52,6 +52,8 @@ on 62 of 112 wraps; cut, 0. On the raw cloud surfaces the pipeline is weak (hole
 
 ## Before hosting it publicly
 
-- AudioEar3D's provenance is unverified (CLAUDE.md); decide before serving it.
+- AudioEar3D: served since 2026-10-26 (user's decision). CC BY 4.0 per its Zenodo
+  record; the paper says the scans are its authors' own and anonymised, but
+  states nothing on consent. Wraps only, never their photographs; credited.
 - The mean-ear template and view table come from the full corpus; anything
   released should use the HUTUBS-only `ccby` variant.

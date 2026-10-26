@@ -1,5 +1,6 @@
 # The web demo on GitHub Pages: the Rust core built to WebAssembly from this
-# commit, the page code from demo/, and the data (ONNX models, HUTUBS heads)
+# commit, the page code from demo/, and the data (ONNX models, HUTUBS heads,
+# AudioEar3D ear wraps)
 # from a release asset, so no binaries enter git history. New data: re-run
 # demo/export_models.py and demo/export_meshes.py, pack models/ and meshes/
 # (see demo/README.md), publish a new demo-data-vN release, and bump DATA here.
@@ -21,8 +22,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DATA: demo-data-v1
-  DATA_SHA256: 64bd68460c09956d58468315cb1afd86c4991f7cdaf7462f3560967a71f67ba2
+  DATA: demo-data-v2
+  DATA_SHA256: 8aefaaef86a0499f324506e35834c8631dfe07d33c22cc1e79b957081ac06300
 
 jobs:
   build:

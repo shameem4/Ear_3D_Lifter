@@ -2,7 +2,7 @@
 
 A head scan in, landmarks in 3D out: 55 per ear, and MediaPipe's 478 on the
 face. It runs in Python or entirely in a browser tab (`demo/`):
-**[try it](https://shameem4.github.io/Ear_3D_Lifter/)** on HUTUBS heads or your own scan.
+**[try it](https://shameem4.github.io/Ear_3D_Lifter/)** on HUTUBS heads, AudioEar3D ears, or your own scan.
 
 ## The story
 
@@ -179,6 +179,8 @@ and their licences travel with them.
   4.0) and credited as such. Anything released uses the HUTUBS-only (`ccby`)
   shape model.
 - MediaPipe's FaceLandmarker and canonical face model are Apache-2.0.
+- The demo's ears are AudioEar3D (Huang et al. 2023, "AudioEar: Single-View
+  Ear Reconstruction for Personalized Spatial Audio", AAAI), CC BY 4.0,
+  modified: our template wrapped onto each scan. Their photographs are not
+  used. AudioEar2D is not used at all (it derives from FFHQ, non-commercial).
 - Anything built on the U-Net or its outputs credits SaifulULL (CC BY 4.0).
-- The Faceform Wrap EULA forbids decompiling or reverse engineering it;
-  `ear3d/faceform.py` only edits project files and runs its CLI.
