@@ -142,3 +142,38 @@ def run(mesh, cfg, table, angles, template, verbose=True, host=None):
            "R_head": None if out["R_head"] is None else np.reshape(out["R_head"], (3, 3)),
            "centre": None if out["centre"] is None else np.asarray(out["centre"])}
     return res, dbg
+
+
+FACE_CFG_KEYS = ("orbit_tone", "orbit_skin_noise", "orbit_light_dir", "yaws", "pitches", "scale_mm",
+                 "pivot_behind_nose_mm", "ransac_mm", "fit_rays", "fit_lambda", "fit_cauchy_mm", "fit_iters",
+                 "fit_dense", "dense_lambda", "dense_beta", "dense_region_mm", "dense_apply_mm", "dense_trim_mm",
+                 "dense_iters", "fit_spacing", "spacing_rho", "spacing_sweeps", "spacing_anchor", "fit_view_weights")
+
+
+def face_assets(cfg):
+    """The face lift's arrays, in run_face's argument order: off, miss, edges, edge_rest, canonical V, F, dense V, F."""
+    from . import face
+    if cfg["orbit_colours"] != "skin" or cfg["orbit_light_frame"] != "world":
+        raise ValueError("the core's face lift implements orbit_colours='skin', orbit_light_frame='world' only")
+    Vc, Fc = face.canonical_raw(cfg); Vd, Fd = face.canonical_dense(cfg)
+    return dict(off=face.load_offsets(cfg), miss=face.load_offsets(cfg, "miss_mm"), edges=face.canonical_edges(cfg),
+                edge_rest=face.load_offsets(cfg, "edge_rest"), canon_v=Vc, canon_f=Fc, dense_v=Vd, dense_f=Fd)
+
+
+def run_face(mesh, cfg=None, verbose=True, host=None):
+    """The Rust face lift on an open3d mesh (mm). Returns dict(P 478 x 3, n_views, R_head, centre) or None."""
+    import ear3d_core
+    from .face import FACE
+    cfg = dict(FACE, **(cfg or {}))
+    host = host or FilamentHost(cfg["face_task"], verbose)
+    a = face_assets(cfg)
+    f8 = lambda x: np.ascontiguousarray(x, "<f8").tobytes()
+    u4 = lambda x: np.ascontiguousarray(x, "<u4").tobytes()
+    out = ear3d_core.run_face(host, f8(np.asarray(mesh.vertices)), u4(np.asarray(mesh.triangles)),
+                              json.dumps({k: cfg[k] for k in CFG_KEYS}), json.dumps({k: cfg[k] for k in FACE_CFG_KEYS}),
+                              f8(canonical_face(cfg)), f8(anchors()), f8(a["off"]), f8(a["miss"]), u4(a["edges"]),
+                              f8(a["edge_rest"]), f8(a["canon_v"]), u4(a["canon_f"]), f8(a["dense_v"]), u4(a["dense_f"]))
+    if out is None:
+        return None
+    return dict(P=np.frombuffer(out["P"], "<f8").reshape(-1, 3).copy(), n_views=out["n_views"],
+                R_head=np.reshape(out["R_head"], (3, 3)), centre=np.asarray(out["centre"]))

@@ -34,3 +34,16 @@ pub fn assets(table: &[f64], angles: &[f64], template: &[f64], canon: &[f64], an
         anchors: anchors.chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect(),
     }
 }
+
+/// The face lift's assets from flat arrays (demo/export_models.py's face_*.bin).
+#[allow(clippy::too_many_arguments)]
+pub fn face_assets(off: &[f64], miss: &[f64], edges: &[u32], edge_rest: &[f64], cv: &[f64], cf: &[u32], dv: &[f64], df: &[u32]) -> crate::pipeline::face::FaceAssets {
+    crate::pipeline::face::FaceAssets {
+        off: off.to_vec(),
+        miss: miss.to_vec(),
+        edges: edges.chunks_exact(2).map(|c| [c[0], c[1]]).collect(),
+        edge_rest: edge_rest.to_vec(),
+        canon: crate::mesh::Mesh::from_flat(cv, cf),
+        dense: crate::mesh::Mesh::from_flat(dv, df),
+    }
+}

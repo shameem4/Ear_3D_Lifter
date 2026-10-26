@@ -25,6 +25,7 @@ fn ear3d_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(closest_points, m)?)?;
     m.add_function(wrap_pyfunction!(orient, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
+    m.add_function(wrap_pyfunction!(run_face, m)?)?;
     m.add_function(wrap_pyfunction!(skinned, m)?)?;
     m.add_function(wrap_pyfunction!(landmarker_inputs, m)?)?;
     m.add_function(wrap_pyfunction!(landmarks_fused, m)?)?;
@@ -143,4 +144,28 @@ fn run<'py>(host: Bound<'py, PyAny>, v: &[u8], f: &[u8], cfg: &str, table: &[u8]
     d.set_item("R_head", out.r_head.map(|r| r.iter().flatten().cloned().collect::<Vec<f64>>()))?;
     d.set_item("centre", out.centre.map(|c| c.to_vec()))?;
     Ok(d)
+}
+
+/// run_face(host, V, F, cfg JSON, face cfg JSON, canon (468 x 3, the ear pipeline's), anchors,
+/// off, miss, edges (u32), edge_rest, canonical V, F (u32), dense V, F (u32)) -> dict(P (478 x 3 f64 bytes),
+/// n_views, R_head, centre), or None when no face was lifted.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn run_face<'py>(host: Bound<'py, PyAny>, v: &[u8], f: &[u8], cfg: &str, face_cfg: &str, canon: &[u8], anchors: &[u8],
+                 off: &[u8], miss: &[u8], edges: &[u8], edge_rest: &[u8], cv: &[u8], cf: &[u8], dv: &[u8], df: &[u8]) -> PyResult<Option<Bound<'py, PyDict>>> {
+    let py = host.py();
+    let err = |e: serde_json::Error| pyo3::exceptions::PyValueError::new_err(e.to_string());
+    let cfg: crate::pipeline::Cfg = serde_json::from_str(cfg).map_err(err)?;
+    let fc: crate::pipeline::face::FaceCfg = serde_json::from_str(face_cfg).map_err(err)?;
+    let a = assets(&[], &[], &[], &f64s(canon), &f64s(anchors));
+    let fa = crate::exec::face_assets(&f64s(off), &f64s(miss), &u32s(edges), &f64s(edge_rest), &f64s(cv), &u32s(cf), &f64s(dv), &u32s(df));
+    let h = PyHost { obj: host };
+    let mut p = crate::pipeline::Pipeline::new(&h, Mesh::from_flat(&f64s(v), &u32s(f)), cfg, a);
+    let Some(out) = block_on(p.run_face(&fc, &fa)) else { return Ok(None) };
+    let d = PyDict::new(py);
+    d.set_item("P", PyBytes::new(py, &bytes_f64(&out.p.iter().flatten().cloned().collect::<Vec<f64>>())))?;
+    d.set_item("n_views", out.n_views)?;
+    d.set_item("R_head", out.r_head.iter().flatten().cloned().collect::<Vec<f64>>())?;
+    d.set_item("centre", out.centre.to_vec())?;
+    Ok(Some(d))
 }

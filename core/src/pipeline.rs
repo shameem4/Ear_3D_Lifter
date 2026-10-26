@@ -23,6 +23,8 @@ use crate::section::longest_section_y;
 use crate::skin::{skinned, SkinCfg};
 use serde::Deserialize;
 
+pub mod face;
+
 const TRAGION_R: usize = 234;
 const TRAGION_L: usize = 454;
 const FOREHEAD: usize = 10;

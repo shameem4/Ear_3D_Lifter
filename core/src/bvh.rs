@@ -1,11 +1,12 @@
 //! Bounding-volume hierarchy over a mesh's triangles, for ray casts (the skin's
-//! ambient occlusion). Median split on the longest axis; Moller-Trumbore hits.
+//! ambient occlusion) and closest-point queries (the face lift's seating). Median split on the longest axis; Moller-Trumbore hits.
 
 use crate::mesh::{cross, dot, sub, Mesh, V3};
+use crate::snap::closest_on_triangle;
 
 struct Node { lo: V3, hi: V3, start: u32, count: u32, left: u32 } // leaf when count > 0
 
-pub struct Bvh { nodes: Vec<Node>, tris: Vec<[V3; 3]> }
+pub struct Bvh { nodes: Vec<Node>, tris: Vec<[V3; 3]>, ids: Vec<u32> }
 
 impl Bvh {
     pub fn new(m: &Mesh) -> Self {
@@ -15,7 +16,7 @@ impl Bvh {
         let mut nodes = vec![Node { lo: [0.0; 3], hi: [0.0; 3], start: 0, count: 0, left: 0 }];
         build_into(&tris, &cen, &mut idx, 0, &mut nodes, 0);
         let tris = idx.iter().map(|&i| tris[i as usize]).collect();
-        Bvh { nodes, tris }
+        Bvh { nodes, tris, ids: idx }
     }
 
     /// Distance to the first hit along a unit direction, or infinity.
@@ -37,6 +38,37 @@ impl Bvh {
         }
         best
     }
+}
+
+impl Bvh {
+    /// The closest surface point to p: (point, input triangle index, squared distance).
+    pub fn closest(&self, p: V3) -> (V3, u32, f64) {
+        let mut best = ([f64::NAN; 3], u32::MAX, f64::INFINITY);
+        let mut stack = vec![0u32];
+        while let Some(n) = stack.pop() {
+            let nd = &self.nodes[n as usize];
+            if box_d2(p, nd.lo, nd.hi) >= best.2 { continue; }
+            if nd.count > 0 {
+                for k in nd.start..nd.start + nd.count {
+                    let t = &self.tris[k as usize];
+                    let q = closest_on_triangle(p, t[0], t[1], t[2]);
+                    let d = sub(q, p);
+                    let d2 = dot(d, d);
+                    if d2 < best.2 { best = (q, self.ids[k as usize], d2); }
+                }
+            } else {
+                // nearer child last, so it is searched first
+                let (a, b) = (nd.left, nd.left + 1);
+                let (na, nb) = (&self.nodes[a as usize], &self.nodes[b as usize]);
+                if box_d2(p, na.lo, na.hi) < box_d2(p, nb.lo, nb.hi) { stack.push(b); stack.push(a); } else { stack.push(a); stack.push(b); }
+            }
+        }
+        best
+    }
+}
+
+fn box_d2(p: V3, lo: V3, hi: V3) -> f64 {
+    (0..3).map(|k| { let d = (lo[k] - p[k]).max(0.0).max(p[k] - hi[k]); d * d }).sum()
 }
 
 fn bounds(tris: &[[V3; 3]], idx: &[u32]) -> (V3, V3) {

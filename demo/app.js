@@ -146,6 +146,8 @@ const valid = (p) => p && (p[0] !== 0 || p[1] !== 0 || p[2] !== 0);
 // ------------------------------------------------------------------ stages
 const STAGES_HEAD = [["load", "Mesh loaded"], ["skin", "Synthetic skin"], ["face", "Find the face (FaceMesh)"], ["pose", "Head pose"],
   ["earL", "Left ear"], ["earR", "Right ear"]];
+const STAGES_FACE = [["load", "Mesh loaded"], ["skin", "Synthetic skin"], ["face", "Find the face (FaceMesh)"], ["pose", "Head pose"],
+  ["orbit", "FaceMesh from 33 views"], ["rays", "Joint ray fit"], ["nose", "Nose base fit + spacing"]];
 const STAGES_EAR = [["load", "Mesh loaded"], ["orient", "Template fit: pose and side"], ["skin", "Synthetic skin"], ["ear", "Landmark the ear"]];
 let stageT = {}, stageList = [];
 function setStages(list) {
@@ -212,7 +214,7 @@ class DemoHost {
     await tick();
   }
   async render(q) {
-    const S = q.size, out = [], keep = [];
+    const S = q.size, out = [], keep = [], orbit = q.mesh === 2, faces = [];   // mesh 2: the face lift's orbit
     for (const v of q.views) {
       const { rgba, depth } = this.h.renderer.render(q.mesh, q.colors, v, q.f, q.c, q.depth);
       const o = {};
@@ -222,10 +224,17 @@ class DemoHost {
       out.push(o);
       const what = q.detect === "face" ? (o.face ? "FaceMesh found a face" : "looking for a face") : q.image ? "finding the ear and its landmarks" : "depth";
       showImage(rgba, S, what);
-      if (o.face) drawPoints(camCtx, Array.from({ length: o.face.length / 2 }, (_, i) => [o.face[2 * i], o.face[2 * i + 1]]), 1, css("--ok"), 1.5);
+      const uv = o.face && Array.from({ length: o.face.length / 2 }, (_, i) => [o.face[2 * i], o.face[2 * i + 1]]);
+      if (uv) drawPoints(camCtx, uv, 1, css("--ok"), 1.5);
+      if (orbit) { keep.push(rgba); faces.push(uv); }
       await tick();
     }
     if (keep.length > 1) lastBatch = keep;
+    if (orbit) {
+      fillStrip(keep, faces, S);
+      stage("orbit", "done", `face in ${faces.filter(Boolean).length}/${faces.length} views`); stage("rays", "run");
+      status("Fitting all 468 points to every view's rays at once");
+    }
     return out;
   }
   infer(model, x) { return this.h.infer(model, x); }
@@ -235,6 +244,8 @@ class DemoHost {
     if (kind === "stage") {
       if (p === "face") stage("face", "run");
       if (p === "ear-only") stage("orient", "run");
+      if (p === "face orbit") { stage("pose", "done"); stage("orbit", "run"); status("Rendering the face from 33 views; FaceMesh on each"); }
+      if (p === "face nose fit") { stage("rays", "done"); stage("nose", "run"); status("Fitting the nose base to the scan; spacing the points"); }
       if (p === "ear L" || p === "ear R") {
         this.left = p === "ear L";
         if (!this.earOnly) { stage("pose", "done"); stage(this.left ? "earL" : "earR", "run"); }
@@ -310,7 +321,7 @@ class DemoHost {
 }
 
 // ------------------------------------------------------------------ meshes
-let index, tab = "heads";
+let index, tab = "heads", mode = "ears";
 const BIG_MESH = 300000;      // vertices; above this, say the run will be slow
 const HEAD_MIN_MM = 100;      // ear_only.HEAD_MIN_MM: the crate's flow gate, mirrored only to pick the stage list
 function spanOf(V) { let m = 0; for (let k = 0; k < 3; k++) { let lo = Infinity, hi = -Infinity; for (let i = k; i < V.length; i += 3) { lo = Math.min(lo, V[i]); hi = Math.max(hi, V[i]); } m = Math.max(m, hi - lo); } return m; }
@@ -332,12 +343,21 @@ async function pick(m) {
 }
 function setCurrent(c) {
   current = c; renderList(); showMesh(c.V, c.F);
-  setStages(spanOf(c.V) < HEAD_MIN_MM ? STAGES_EAR : STAGES_HEAD); stage("load", "done", `${(c.V.length / 3).toLocaleString()} vertices`);
+  setStages(stagesFor(c.V)); stage("load", "done", `${(c.V.length / 3).toLocaleString()} vertices`);
   $("result").innerHTML = `<span style="color:var(--mute)">Not run yet.</span>`; $("strip").innerHTML = "";
   const nv = c.V.length / 3;
   status(nv > BIG_MESH ? `${c.label}: ${(nv / 1e6).toFixed(1)}M vertices. That works, but skinning and rendering it takes longer, and the page may feel slow while it runs. Press Run.`
                        : `${c.label}: ready. Press Run.`); $("run").disabled = !host; if (host) $("run").textContent = "Run";
 }
+
+function stagesFor(V) { return spanOf(V) < HEAD_MIN_MM ? STAGES_EAR : mode === "face" ? STAGES_FACE : STAGES_HEAD; }
+function setMode(m) {
+  if (running) return;
+  mode = m; $("modeEars").className = m === "ears" ? "on" : ""; $("modeFace").className = m === "face" ? "on" : "";
+  if (current) setCurrent(current);
+}
+$("modeEars").onclick = () => setMode("ears");
+$("modeFace").onclick = () => setMode("face");
 
 $("file").onchange = async (e) => {
   const f = e.target.files[0]; if (!f || running) return;
@@ -367,14 +387,22 @@ $("file").onchange = async (e) => {
 $("run").onclick = async () => {
   if (!current || running) return;
   running = true; $("run").disabled = true; $("run").textContent = "Running…";
-  const earOnly = spanOf(current.V) < HEAD_MIN_MM;
-  showMesh(current.V, current.F); setStages(earOnly ? STAGES_EAR : STAGES_HEAD); stage("load", "done");
+  const earOnly = spanOf(current.V) < HEAD_MIN_MM, face = mode === "face";
+  if (face && earOnly) { status("The face lift needs a head, not an ear on its own."); running = false; $("run").disabled = false; $("run").textContent = "Run"; return; }
+  showMesh(current.V, current.F); setStages(stagesFor(current.V)); stage("load", "done");
   $("strip").innerHTML = ""; $("result").innerHTML = `<span style="color:var(--mute)">Running…</span>`;
   status(earOnly ? "An ear on its own: fitting the mean ear for its pose and side…" : "Skinning the mesh (synthetic skin and ambient occlusion)…");
   const dh = new DemoHost(host, earOnly); const t0 = performance.now();
   try {
-    const o = await runInWorker(dh, [current.V, current.F, assets.cfg, assets.table, assets.angles, assets.template, assets.canon, assets.anchors]);
-    showResult(o, (performance.now() - t0) / 1000);
+    if (face) {
+      const f = assets.face;
+      const o = await runInWorker(dh, [current.V, current.F, assets.cfg, f.cfg, assets.canon, assets.anchors, f.off, f.miss, f.edges,
+                                       f.edge_rest, f.canon_v, f.canon_f, f.dense_v, f.dense_f], true);
+      showFace(o, (performance.now() - t0) / 1000);
+    } else {
+      const o = await runInWorker(dh, [current.V, current.F, assets.cfg, assets.table, assets.angles, assets.template, assets.canon, assets.anchors]);
+      showResult(o, (performance.now() - t0) / 1000);
+    }
     showSkin();
   } catch (err) {
     console.error(err); status(`The pipeline failed: ${err.message || err}`);
@@ -385,7 +413,7 @@ $("run").onclick = async () => {
 
 // The crate runs in worker.js; this side answers its host calls.
 let worker = null;
-function runInWorker(dh, args) {
+function runInWorker(dh, args, face = false) {
   if (!worker) worker = new Worker(new URL("worker.js", import.meta.url), { type: "module" });
   return new Promise((resolve, reject) => {
     worker.onmessage = async (e) => {
@@ -399,7 +427,7 @@ function runInWorker(dh, args) {
       else if (m.type === "error") reject(new Error(m.message));
     };
     worker.onerror = (e) => reject(new Error(e.message || "the worker failed"));
-    worker.postMessage({ type: "run", args });
+    worker.postMessage({ type: "run", args, face });
   });
 }
 
@@ -418,6 +446,39 @@ function showResult(o, secs) {
     const pts = (P) => (P ? Array.from({ length: P.length / 3 }, (_, i) => [P[3 * i], P[3 * i + 1], P[3 * i + 2]]) : null);
     const blob = new Blob([JSON.stringify({ mesh: current.label, units: "mm, the input mesh's own frame", left: pts(o.L), right: pts(o.R) }, null, 1)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${current.id}_ear_landmarks.json`; a.click();
+  };
+}
+
+// The face lift's 478 points (mesh coordinates; NaN = unplaced), with the
+// canonical mesh's edges between the 468 so bunching or a fold shows at a glance.
+function showFace(o, secs) {
+  if (!o) {
+    status("No face found: the lift gives up rather than guess."); stageList.forEach(([k]) => { if ($(`st_${k}`).className === "run") stage(k, "done", "no face"); });
+    $("result").innerHTML = `<dl><dt>Result</dt><dd>no face found</dd><dt>Time</dt><dd>${secs.toFixed(1)} s</dd></dl>`; return;
+  }
+  const P = o.P, n = P.length / 3, ok = (i) => isFinite(P[3 * i]);
+  window.__demo.face = P;                               // for the parity driver
+  const pts = Array.from({ length: n }, (_, i) => [P[3 * i], P[3 * i + 1], P[3 * i + 2]]);
+  const placed = pts.map((p, i) => i).filter(ok);
+  dots(placed.filter((i) => i < 468).map((i) => pts[i]), css("--ok"), 0.7);
+  dots(placed.filter((i) => i >= 468).map((i) => pts[i]), css("--ray"), 0.7);
+  const E = assets.face.edges, seg = [];
+  for (let e = 0; e < E.length; e += 2) if (ok(E[e]) && ok(E[e + 1])) seg.push(new THREE.Vector3(...pts[E[e]]), new THREE.Vector3(...pts[E[e + 1]]));
+  // edges cut under the curved skin between their ends: drawn on top, faint
+  const lines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(seg), new THREE.LineBasicMaterial({ color: css("--ok"), transparent: true, opacity: 0.35, depthTest: false }));
+  lines.renderOrder = 2; marks.add(lines);
+  stage("nose", "done", `${placed.length}/478 points`);
+  status(`Done in ${secs.toFixed(0)} s.`);
+  if (anims.head) anims.head.finish();
+  const c = new THREE.Vector3(); placed.forEach((i) => c.add(new THREE.Vector3(...pts[i]))); c.divideScalar(placed.length || 1);
+  controls.autoRotate = false; $("spin").className = "";
+  frame(c.applyMatrix4(world.matrix), 95, new THREE.Vector3(0.45, 0.15, 1));
+  const rows = [["Lift", "MediaPipe 478 face landmarks"], ["Placed", `${placed.length}/478`], ["Views with a face", `${o.nViews}/33`], ["Time", `${secs.toFixed(1)} s, all in this tab`]];
+  $("result").innerHTML = `<dl>${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join("")}</dl><button id="dl">Download landmarks (JSON)</button>`;
+  $("dl").onclick = () => {
+    const blob = new Blob([JSON.stringify({ mesh: current.label, units: "mm, the input mesh's own frame", scheme: "MediaPipe FaceMesh 478 (null = unplaced)",
+                                            face: pts.map((p, i) => (ok(i) ? p : null)) }, null, 1)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${current.id}_face_landmarks.json`; a.click();
   };
 }
 
@@ -451,7 +512,11 @@ function focusEar() {
   const f64 = async (n) => new Float64Array(await (await fetch(`models/${n}.bin`)).arrayBuffer());
   const [h, cfg, table, angles, template, canon, anchors] = await Promise.all([BrowserHost.create("models/", 600),
     fetch("models/cfg.json").then((r) => r.text()), f64("table"), f64("angles"), f64("template"), f64("canon"), f64("blazeear_anchors")]);
-  host = h; assets = { cfg, table, angles, template, canon, anchors };
+  const u32 = async (n) => new Uint32Array(await (await fetch(`models/${n}.bin`)).arrayBuffer());
+  const face = { cfg: await (await fetch("models/face_cfg.json")).text() };
+  for (const k of ["off", "miss", "edge_rest", "canon_v", "dense_v"]) face[k] = await f64(`face_${k}`);
+  for (const k of ["edges", "canon_f", "dense_f"]) face[k] = await u32(`face_${k}`);
+  host = h; assets = { cfg, table, angles, template, canon, anchors, face };
   $("run").textContent = current ? "Run" : "Pick a mesh"; $("run").disabled = !current;
   await pick(index.heads[0]);
 })().catch((e) => { console.error(e); status(`Could not start: ${e.message || e}`); });

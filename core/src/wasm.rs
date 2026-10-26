@@ -118,6 +118,27 @@ pub async fn run(host: JsValue, v: Vec<f64>, f: Vec<u32>, cfg: String, table: Ve
     Ok(o.into())
 }
 
+/// runFace(host, V, F, cfgJson, faceCfgJson, canon, anchors, off, miss, edges, edgeRest, canonV, canonF,
+/// denseV, denseF) -> Promise of {P (Float64Array 478 x 3, NaN unplaced), nViews, R_head, centre}, or null.
+#[wasm_bindgen(js_name = runFace)]
+#[allow(clippy::too_many_arguments)]
+pub async fn run_face(host: JsValue, v: Vec<f64>, f: Vec<u32>, cfg: String, face_cfg: String, canon: Vec<f64>, anchors: Vec<f64>,
+                      off: Vec<f64>, miss: Vec<f64>, edges: Vec<u32>, edge_rest: Vec<f64>, cv: Vec<f64>, cf: Vec<u32>, dv: Vec<f64>, df: Vec<u32>) -> Result<JsValue, JsValue> {
+    let err = |e: serde_json::Error| JsValue::from_str(&e.to_string());
+    let cfg: crate::pipeline::Cfg = serde_json::from_str(&cfg).map_err(err)?;
+    let fc: crate::pipeline::face::FaceCfg = serde_json::from_str(&face_cfg).map_err(err)?;
+    let h = JsHost { obj: host };
+    let fa = crate::exec::face_assets(&off, &miss, &edges, &edge_rest, &cv, &cf, &dv, &df);
+    let mut p = crate::pipeline::Pipeline::new(&h, Mesh::from_flat(&v, &f), cfg, assets(&[], &[], &[], &canon, &anchors));
+    let Some(out) = p.run_face(&fc, &fa).await else { return Ok(JsValue::NULL) };
+    let o = Object::new();
+    set(&o, "P", f64a(&out.p.iter().flatten().cloned().collect::<Vec<f64>>()));
+    set(&o, "nViews", (out.n_views as u32).into());
+    set(&o, "R_head", f64a(&out.r_head.iter().flatten().cloned().collect::<Vec<f64>>()));
+    set(&o, "centre", f64a(&out.centre));
+    Ok(o.into())
+}
+
 /// skinned(V, F, seed, tone, aoStrength, nRays, noise) -> Float64Array colours.
 #[wasm_bindgen]
 pub fn skinned(v: Vec<f64>, f: Vec<u32>, seed: u64, tone: usize, ao_strength: f64, n_rays: usize, noise: bool) -> Vec<f64> {

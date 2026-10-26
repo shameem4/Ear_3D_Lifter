@@ -11,6 +11,7 @@ browser and the Python host run the same code around the same graphs:
                     from BlazeEar's get_anchors -- data, not regenerated
   face_landmarker.task  MediaPipe's model bundle, as the Python host uses it
   table/angles/template/canon.bin, cfg.json  the pipeline's assets and config
+  face_*.bin, face_cfg.json  the face lift's (view offsets, canonical face)
 Each graph is checked against torch on probe inputs.
 
     python demo/export_models.py
@@ -66,6 +67,13 @@ for name, a in [("table", t["table"]), ("angles", t["angles"]), ("template", ear
                 ("canon", core_host.canonical_face(DEFAULTS))]:
     np.ascontiguousarray(a, "<f8").tofile(OUT / f"{name}.bin")
 json.dump({k: DEFAULTS[k] for k in core_host.CFG_KEYS}, open(OUT / "cfg.json", "w"))
+# The face lift's (core_host.face_assets): face_<name>.bin, f64 LE or u32 LE for
+# indices, and the face cfg subset (face_cfg.json).
+from ear3d.face import FACE
+for name, a in core_host.face_assets(FACE).items():
+    a = np.asarray(a); a = np.where(np.isfinite(a), a, np.nan) if a.dtype.kind == "f" else a
+    np.ascontiguousarray(a, "<u4" if a.dtype.kind in "iu" else "<f8").tofile(OUT / f"face_{name}.bin")
+json.dump({k: FACE[k] for k in core_host.FACE_CFG_KEYS}, open(OUT / "face_cfg.json", "w"))
 json.dump({"render_checkpoint": str(ck), "blazeear_weights": str(BLAZE_EAR), "blazeear_input": inf.input_size,
            "anchors": int(inf.anchors.shape[0]), "face_task": DEFAULTS["face_task"]}, open(OUT / "manifest.json", "w"), indent=1)
 print("wrote", sorted(p.name for p in OUT.iterdir()))
