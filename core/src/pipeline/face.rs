@@ -198,6 +198,18 @@ impl<'h, H: Host> Pipeline<'h, H> {
         self.host.event("stage", r#""face""#);
         let (head, nose) = self.find_face().await?;
         self.host.event("head", &serde_json::json!({"R": head.q, "centre": head.c0}).to_string());
+        self.lift_face(fc, fa, head, nose).await
+    }
+
+    /// After run() on a head: the face lift on the head it found, without skinning or searching again.
+    pub async fn face_after_run(&mut self, fc: &FaceCfg, fa: &FaceAssets) -> Option<FaceOut> {
+        let (head, nose) = self.head?;
+        self.lift_face(fc, fa, head, nose).await
+    }
+
+    /// Steps 2-7 on the normalised head.
+    async fn lift_face(&mut self, fc: &FaceCfg, fa: &FaceAssets, head: Frame, nose: V3) -> Option<FaceOut> {
+        let c = self.cfg.clone();
 
         // 2-3. the orbit: the normalised head about a pivot behind the nose, in render units
         let s = fc.scale_mm;
@@ -312,6 +324,7 @@ impl<'h, H: Host> Pipeline<'h, H> {
         }
 
         // 7. spacing springs
+        self.host.event("stage", r#""face spacing""#);
         if fc.fit_spacing && p[..N_MESH].iter().all(finite) {
             let x0: Vec<V3> = p[..N_MESH].to_vec();
             let fs = face_size(&x0);
@@ -343,6 +356,7 @@ impl<'h, H: Host> Pipeline<'h, H> {
             p[..N_MESH].copy_from_slice(&y);
         }
 
+        self.host.event("stage", r#""face done""#);
         let p = p.iter().map(|x| if finite(x) { head.to_mesh(add(*x, piv)) } else { *x }).collect();
         Some(FaceOut { p, n_views, r_head: head.q, centre: head.c0 })
     }

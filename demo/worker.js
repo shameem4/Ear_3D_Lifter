@@ -2,7 +2,7 @@
 // seconds) never block the page and the browser never offers to kill it. The
 // host it talks to lives on the page (it needs WebGL and MediaPipe): every
 // host call is a message, answered by the page with a promise reply.
-import init, { run, runFace } from "./pkg/ear3d_core.js";
+import init, { run } from "./pkg/ear3d_core.js";
 
 let next = 0;
 const pending = {};
@@ -24,13 +24,8 @@ onmessage = async (e) => {
   if (m.type === "run") {
     try {
       await init();
-      if (m.face) {
-        const o = await runFace(host, ...m.args);
-        postMessage({ type: "done", result: o && { P: o.P, nViews: o.nViews } });
-      } else {
-        const o = await run(host, ...m.args);
-        postMessage({ type: "done", result: { L: o.L, R: o.R, earOnly: o.earOnly, fitResidual: o.fitResidual } });
-      }
+      const o = await run(host, ...m.args);
+      postMessage({ type: "done", result: { L: o.L, R: o.R, earOnly: o.earOnly, fitResidual: o.fitResidual, face: o.face, faceViews: o.faceViews } });
     } catch (err) { postMessage({ type: "error", message: String(err && err.message || err) }); }
   }
 };

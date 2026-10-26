@@ -129,6 +129,7 @@ pub struct Pipeline<'h, H: Host> {
     ear_f: Vec<[u32; 3]>,
     face_col: u32,
     ear_col: u32,
+    head: Option<(Frame, V3)>,   // run's normalised head and nose, for the face lift
 }
 
 fn log<H: Host>(h: &H, msg: String) { h.event("log", &serde_json::to_string(&msg).unwrap()); }
@@ -153,7 +154,7 @@ struct Pose { lat: V3, vert: V3, nose: V3 }
 impl<'h, H: Host> Pipeline<'h, H> {
     pub fn new(host: &'h H, mesh: Mesh, cfg: Cfg, a: Assets) -> Self {
         let k = intrinsics(cfg.size, cfg.vfov);
-        Pipeline { host, cfg, a, k, cur: Vec::new(), ear_f: Vec::new(), mesh, face_col: 0, ear_col: 1 }
+        Pipeline { host, cfg, a, k, cur: Vec::new(), ear_f: Vec::new(), mesh, face_col: 0, ear_col: 1, head: None }
     }
 
     fn skin(&self, m: &Mesh, tone: usize, noise: bool) -> Vec<V3> {
@@ -213,7 +214,7 @@ impl<'h, H: Host> Pipeline<'h, H> {
         let Some((head, nose)) = self.find_face().await else {
             return Output { left: None, right: None, ear_only: false, fit_residual: f64::NAN, r_head: None, centre: None };
         };
-        let _ = nose;
+        self.head = Some((head, nose));
         self.host.event("head", &serde_json::json!({"R": head.q, "centre": head.c0}).to_string());
         let mut out = [None, None];
         for (i, left) in [true, false].into_iter().enumerate() {

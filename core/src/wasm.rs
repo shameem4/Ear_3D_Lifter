@@ -98,16 +98,27 @@ impl Host for JsHost {
     }
 }
 
-/// run(host, V, F, cfgJson, table, angles, template, canon, anchors) -> Promise of
-/// {L, R (Float64Array or null), earOnly, fitResidual, R_head, centre}.
+/// run(host, V, F, cfgJson, table, angles, template, canon, anchors, faceCfgJson, off, miss, edges,
+/// edgeRest, canonV, canonF, denseV, denseF) -> Promise of {L, R (Float64Array or null), earOnly,
+/// fitResidual, R_head, centre, face (Float64Array 478 x 3, NaN unplaced, or null), faceViews}.
+/// A head gets the face lift after its ears; an empty faceCfgJson skips it.
 #[wasm_bindgen]
 #[allow(clippy::too_many_arguments)]
-pub async fn run(host: JsValue, v: Vec<f64>, f: Vec<u32>, cfg: String, table: Vec<f64>, angles: Vec<f64>, template: Vec<f64>, canon: Vec<f64>, anchors: Vec<f64>) -> Result<JsValue, JsValue> {
+pub async fn run(host: JsValue, v: Vec<f64>, f: Vec<u32>, cfg: String, table: Vec<f64>, angles: Vec<f64>, template: Vec<f64>, canon: Vec<f64>, anchors: Vec<f64>,
+                 face_cfg: String, off: Vec<f64>, miss: Vec<f64>, edges: Vec<u32>, edge_rest: Vec<f64>, cv: Vec<f64>, cf: Vec<u32>, dv: Vec<f64>, df: Vec<u32>) -> Result<JsValue, JsValue> {
     let cfg: crate::pipeline::Cfg = serde_json::from_str(&cfg).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let h = JsHost { obj: host };
     let mut p = crate::pipeline::Pipeline::new(&h, Mesh::from_flat(&v, &f), cfg, assets(&table, &angles, &template, &canon, &anchors));
     let out = p.run().await;
     let o = Object::new();
+    let mut face = None;
+    if !out.ear_only && !face_cfg.is_empty() {
+        let fc: crate::pipeline::face::FaceCfg = serde_json::from_str(&face_cfg).map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let fa = crate::exec::face_assets(&off, &miss, &edges, &edge_rest, &cv, &cf, &dv, &df);
+        face = p.face_after_run(&fc, &fa).await;
+    }
+    set(&o, "face", face.as_ref().map_or(JsValue::NULL, |r| f64a(&r.p.iter().flatten().cloned().collect::<Vec<f64>>())));
+    set(&o, "faceViews", face.as_ref().map_or(0, |r| r.n_views as u32).into());
     let pts = |x: &Option<Vec<V3>>| x.as_ref().map_or(JsValue::NULL, |p| f64a(&p.iter().flatten().cloned().collect::<Vec<f64>>()));
     set(&o, "L", pts(&out.left));
     set(&o, "R", pts(&out.right));
@@ -115,27 +126,6 @@ pub async fn run(host: JsValue, v: Vec<f64>, f: Vec<u32>, cfg: String, table: Ve
     set(&o, "fitResidual", out.fit_residual.into());
     set(&o, "R_head", out.r_head.map_or(JsValue::NULL, |r| f64a(&r.iter().flatten().cloned().collect::<Vec<f64>>())));
     set(&o, "centre", out.centre.map_or(JsValue::NULL, |c| f64a(&c)));
-    Ok(o.into())
-}
-
-/// runFace(host, V, F, cfgJson, faceCfgJson, canon, anchors, off, miss, edges, edgeRest, canonV, canonF,
-/// denseV, denseF) -> Promise of {P (Float64Array 478 x 3, NaN unplaced), nViews, R_head, centre}, or null.
-#[wasm_bindgen(js_name = runFace)]
-#[allow(clippy::too_many_arguments)]
-pub async fn run_face(host: JsValue, v: Vec<f64>, f: Vec<u32>, cfg: String, face_cfg: String, canon: Vec<f64>, anchors: Vec<f64>,
-                      off: Vec<f64>, miss: Vec<f64>, edges: Vec<u32>, edge_rest: Vec<f64>, cv: Vec<f64>, cf: Vec<u32>, dv: Vec<f64>, df: Vec<u32>) -> Result<JsValue, JsValue> {
-    let err = |e: serde_json::Error| JsValue::from_str(&e.to_string());
-    let cfg: crate::pipeline::Cfg = serde_json::from_str(&cfg).map_err(err)?;
-    let fc: crate::pipeline::face::FaceCfg = serde_json::from_str(&face_cfg).map_err(err)?;
-    let h = JsHost { obj: host };
-    let fa = crate::exec::face_assets(&off, &miss, &edges, &edge_rest, &cv, &cf, &dv, &df);
-    let mut p = crate::pipeline::Pipeline::new(&h, Mesh::from_flat(&v, &f), cfg, assets(&[], &[], &[], &canon, &anchors));
-    let Some(out) = p.run_face(&fc, &fa).await else { return Ok(JsValue::NULL) };
-    let o = Object::new();
-    set(&o, "P", f64a(&out.p.iter().flatten().cloned().collect::<Vec<f64>>()));
-    set(&o, "nViews", (out.n_views as u32).into());
-    set(&o, "R_head", f64a(&out.r_head.iter().flatten().cloned().collect::<Vec<f64>>()));
-    set(&o, "centre", f64a(&out.centre));
     Ok(o.into())
 }
 

@@ -81,7 +81,7 @@ label.up input { display: none; }
 <body>
 <header>
   <h1>Ear 3D Lifter</h1>
-  <p>A head or ear mesh in, 55 ear landmarks (or MediaPipe's 478 face landmarks) in 3D out. Runs entirely in your browser: the Rust pipeline as WebAssembly, ONNX models on the CPU.</p>
+  <p>A head or ear mesh in, 55 landmarks per ear (and, for a head, MediaPipe's 478 face landmarks) in 3D out. Runs entirely in your browser: the Rust pipeline as WebAssembly, ONNX models on the CPU.</p>
   <a class="gh" href="https://github.com/shameem4/Ear_3D_Lifter" target="_blank" rel="noopener">Source on GitHub</a>
 </header>
 <main>
@@ -90,8 +90,6 @@ label.up input { display: none; }
     <div class="tabs"><button id="tabHeads" class="on">Heads</button><button id="tabEars">Ears</button></div>
     <ul id="list"></ul>
     <label class="up">Upload your own (.ply, .obj, .stl, in mm)<input id="file" type="file" accept=".ply,.obj,.stl"></label>
-    <h2>Lift</h2>
-    <div class="tabs"><button id="modeEars" class="on">Ears (55 each)</button><button id="modeFace">Face (478)</button></div>
     <button id="run" class="primary" disabled>Loading models…</button>
     <h2>Stages</h2>
     <ul id="stages"></ul>
