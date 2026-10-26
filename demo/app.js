@@ -438,13 +438,15 @@ function showResult(o, secs) {
   status(`Done in ${secs.toFixed(0)} s.`);
   const rows = [["Scan", o.earOnly ? `ear only (${o.L ? "left" : "right"})` : "head"],
     ["Left ear", o.L ? `${n(o.L)} landmarks` : "—"], ["Right ear", o.R ? `${n(o.R)} landmarks` : "—"],
-    ...(o.earOnly ? [] : [["Face", o.face ? `${Array.from(o.face).filter((x, i) => i % 3 === 0 && isFinite(x)).length}/478 landmarks (face in ${o.faceViews}/33 views)` : "—"]]),
+    ...(o.earOnly ? [] : [["Face", o.face ? `${Array.from(o.face).filter((x, i) => i % 3 === 0 && isFinite(x)).length}/478 landmarks (face in ${o.faceViews}/33 views)` : "—"],
+                         ["", `<small style="color:var(--mute)">Iris (468-477) and eye detail are unverified: none of our available scans resolve the eyes.</small>`]]),
     ...(o.earOnly ? [["Template fit", `residual ${o.fitResidual.toFixed(2)}`]] : []), ["Time", `${secs.toFixed(1)} s, all in this tab`]];
   $("result").innerHTML = `<dl>${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join("")}</dl><button id="dl">Download landmarks (JSON)</button>`;
   $("dl").onclick = () => {
     const pts = (P) => (P ? Array.from({ length: P.length / 3 }, (_, i) => [P[3 * i], P[3 * i + 1], P[3 * i + 2]]) : null);
     const blob = new Blob([JSON.stringify({ mesh: current.label, units: "mm, the input mesh's own frame", left: pts(o.L), right: pts(o.R),
-                                            face: o.face ? pts(o.face).map((p) => (isFinite(p[0]) ? p : null)) : null, face_scheme: "MediaPipe FaceMesh 478" }, null, 1)], { type: "application/json" });
+                                            face: o.face ? pts(o.face).map((p) => (isFinite(p[0]) ? p : null)) : null, face_scheme: "MediaPipe FaceMesh 478",
+                                            face_caveat: "iris (468-477) and eye-region points are unverified: no available scan resolves the eyes" }, null, 1)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${current.id}_landmarks.json`; a.click();
   };
 }

@@ -19,6 +19,12 @@ generated and gitignored.
 
 ## Accuracy
 
+The face lift (a whole head gets MediaPipe's 478 points as well as the ears)
+matches the Python FaceLifter (2.46 mm on average against the canonical-fit
+pseudo GT, 16 demo heads). The iris points (468-477) and the eye region are
+UNRELIABLE: none of the scans we can use resolve the eyes, so they cannot be
+verified, and the iris points only get the per-landmark triangulation.
+
 The same pipeline as `EAR3D_CORE=rust` in Python, on different pictures and
 a different FaceMesh build: +0.04 mm paired over the 32 held-out ears
 (demo/parity: about half the three.js renderer, half the JS FaceLandmarker).
