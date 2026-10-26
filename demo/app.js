@@ -282,6 +282,17 @@ class DemoHost {
       fillStrip(lastBatch, p.uv, S);
       this.faceOn = { rgba: lastBatch[faceOnView()], uv: p.uv[faceOnView()], S, left: p.left };
       status("2D landmarks on every view; triangulating the rays");
+    } else if (kind === "face_views") {               // the face orbit's cameras, aimed at the face
+      this.faceCams = p;
+    } else if (kind === "face_triangulated") {        // step 4: per-landmark triangulation, before the fits
+      const pts = p.filter(valid);
+      dots(pts, css("--accent"), 0.5, triGroup);
+      const c = new THREE.Vector3(); pts.forEach((q) => c.add(new THREE.Vector3(...q))); c.divideScalar(pts.length || 1);
+      if (this.faceCams) {
+        dots(this.faceCams, css("--ray"), 2.2, camGroup);
+        const g = new THREE.BufferGeometry().setFromPoints(this.faceCams.flatMap((w) => [new THREE.Vector3(...w), c]));
+        camGroup.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: css("--ray"), transparent: true, opacity: 0.18 })));
+      }
     } else if (kind === "triangulated") {
       this.tri = p;
       this.triMesh = dots(p.filter(valid), css("--accent"), 0.55, triGroup);

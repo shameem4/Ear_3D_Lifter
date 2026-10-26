@@ -256,6 +256,9 @@ impl<'h, H: Host> Pipeline<'h, H> {
             crate::triangulate::ransac_point(&oo, &dd, fc.ransac_mm).map_or([f64::NAN; 3], |r| r.0)
         }).collect();
         p = seat(&p);
+        let to_mesh = |x: V3| if finite(&x) { head.to_mesh(add(x, piv)) } else { [0.0; 3] };
+        self.host.event("face_views", &serde_json::to_string(&views.iter().map(|v| to_mesh(scale(v.e.centre(), s))).collect::<Vec<_>>()).unwrap());
+        self.host.event("face_triangulated", &serde_json::to_string(&p.iter().map(|x| to_mesh(*x)).collect::<Vec<_>>()).unwrap());
         let vw: Option<Vec<f64>> = fc.fit_view_weights.then(|| fa.miss.iter().map(|&m| {
             let m = if m.is_finite() { m.max(0.5) } else { 50.0 };
             1.0 / (m * m)

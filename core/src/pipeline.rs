@@ -20,7 +20,7 @@ use crate::host::{Detect, Host, RenderReq, View, ViewOut};
 use crate::kdtree::KdTree;
 use crate::mesh::{add, cross, dot, mul_r, mul_rt, norm, scale, sub, unit, Mesh, V3};
 use crate::section::longest_section_y;
-use crate::skin::{skinned, SkinCfg};
+use crate::skin::{skinned_ao, SkinCfg};
 use serde::Deserialize;
 
 pub mod face;
@@ -130,6 +130,7 @@ pub struct Pipeline<'h, H: Host> {
     face_col: u32,
     ear_col: u32,
     head: Option<(Frame, V3)>,   // run's normalised head and nose, for the face lift
+    ao: std::cell::RefCell<Option<((usize, usize), Vec<f64>)>>,   // the skin's AO, by (vertices, faces): every skin of a run is the same shape
 }
 
 fn log<H: Host>(h: &H, msg: String) { h.event("log", &serde_json::to_string(&msg).unwrap()); }
@@ -154,12 +155,16 @@ struct Pose { lat: V3, vert: V3, nose: V3 }
 impl<'h, H: Host> Pipeline<'h, H> {
     pub fn new(host: &'h H, mesh: Mesh, cfg: Cfg, a: Assets) -> Self {
         let k = intrinsics(cfg.size, cfg.vfov);
-        Pipeline { host, cfg, a, k, cur: Vec::new(), ear_f: Vec::new(), mesh, face_col: 0, ear_col: 1, head: None }
+        Pipeline { host, cfg, a, k, cur: Vec::new(), ear_f: Vec::new(), mesh, face_col: 0, ear_col: 1, head: None, ao: Default::default() }
     }
 
     fn skin(&self, m: &Mesh, tone: usize, noise: bool) -> Vec<V3> {
         let c = &self.cfg;
-        skinned(m, &SkinCfg { seed: c.skin_seed, tone, ao_strength: c.ao_strength, n_rays: c.ao_rays, noise })
+        let key = (m.v.len(), m.f.len());
+        let cached = self.ao.borrow().as_ref().filter(|(k, _)| *k == key).map(|(_, a)| a.clone());
+        let (col, ao) = skinned_ao(m, &SkinCfg { seed: c.skin_seed, tone, ao_strength: c.ao_strength, n_rays: c.ao_rays, noise }, cached.as_deref());
+        *self.ao.borrow_mut() = Some((key, ao));
+        col
     }
 
     fn cur_of(&self, f: &Frame) -> Vec<V3> { self.mesh_of(f.mesh).iter().map(|p| f.to_cur(*p)).collect() }

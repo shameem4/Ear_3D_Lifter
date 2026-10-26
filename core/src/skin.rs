@@ -52,13 +52,17 @@ pub fn ambient_occlusion(m: &Mesh, normals: &[V3], n_rays: usize, radius_frac: f
 pub struct SkinCfg { pub seed: u64, pub tone: usize, pub ao_strength: f64, pub n_rays: usize, pub noise: bool }
 
 /// Vertex colours (RGB in [0, 1]) for `m` as given (its own axes).
-pub fn skin_colors(m: &Mesh, c: &SkinCfg) -> Vec<V3> {
+pub fn skin_colors(m: &Mesh, c: &SkinCfg) -> Vec<V3> { skin_colors_ao(m, c, None).0 }
+
+/// skin_colors, with the ambient occlusion given (it depends only on the shape,
+/// seed and ray count, not on tone or noise); returns the colours and the AO used.
+pub fn skin_colors_ao(m: &Mesh, c: &SkinCfg, ao: Option<&[f64]>) -> (Vec<V3>, Vec<f64>) {
     let mut rng = Rng::new(c.seed);
     let normals = m.vertex_normals();
     let mut base = ALL_TONES[c.tone];
     let expo = rng.uniform(0.94, 1.06);
     for k in 0..3 { base[k] *= expo; }
-    let acc = ambient_occlusion(m, &normals, c.n_rays, 0.04, c.seed);
+    let acc = match ao { Some(a) => a.to_vec(), None => ambient_occlusion(m, &normals, c.n_rays, 0.04, c.seed) };
     let ext = m.extent();
     let cen = m.centroid();
     let mut blotch_terms = Vec::new();
@@ -71,7 +75,7 @@ pub fn skin_colors(m: &Mesh, c: &SkinCfg) -> Vec<V3> {
     let freq: Vec<f64> = (0..n_wave).map(|_| rng.uniform(60.0, 400.0)).collect();
     let ph: Vec<f64> = (0..n_wave).map(|_| rng.random() * 2.0 * std::f64::consts::PI).collect();
     let amp = 0.012 * (2.0 / n_wave as f64).sqrt();
-    m.v.iter().enumerate().map(|(i, v)| {
+    let col = m.v.iter().enumerate().map(|(i, v)| {
         let p = scale(sub(*v, cen), 1.0 / ext);
         let a = acc[i];
         let shade = (1.0 - c.ao_strength) + c.ao_strength * a;
@@ -84,12 +88,18 @@ pub fn skin_colors(m: &Mesh, c: &SkinCfg) -> Vec<V3> {
             tex += amp * (0..n_wave).map(|k| (dot(p, scale(w[k], freq[k])) + ph[k]).sin()).sum::<f64>();
         }
         [0, 1, 2].map(|k| (base[k] * shade * warm[k] + tex).clamp(0.0, 1.0))
-    }).collect()
+    }).collect();
+    (col, acc)
 }
 
 /// Colours that do not depend on the mesh's orientation: computed in its own
 /// PCA frame (axis signs fixed by the third moment), as Pipeline._skinned does.
-pub fn skinned(m: &Mesh, c: &SkinCfg) -> Vec<V3> {
+pub fn skinned(m: &Mesh, c: &SkinCfg) -> Vec<V3> { skinned_ao(m, c, None).0 }
+
+/// skinned, with skin_colors_ao's AO pass-through. The AO is computed in the PCA
+/// frame at relative ray length, so it is the same for any rotated, translated or
+/// uniformly scaled copy of the same mesh.
+pub fn skinned_ao(m: &Mesh, c: &SkinCfg, ao: Option<&[f64]>) -> (Vec<V3>, Vec<f64>) {
     let c0 = m.centroid();
     let mut cov = [[0.0; 3]; 3];
     for p in &m.v { let d = sub(*p, c0); for i in 0..3 { for j in 0..3 { cov[i][j] += d[i] * d[j]; } } }
@@ -99,5 +109,5 @@ pub fn skinned(m: &Mesh, c: &SkinCfg) -> Vec<V3> {
         if m3 < 0.0 { vt[r] = scale(vt[r], -1.0); }
     }
     if crate::linalg::det(&vt) < 0.0 { vt[2] = scale(vt[2], -1.0); }
-    skin_colors(&m.rotated(&vt, c0), c)
+    skin_colors_ao(&m.rotated(&vt, c0), c, ao)
 }
