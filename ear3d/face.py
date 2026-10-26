@@ -10,8 +10,9 @@ The face counterpart of Pipeline, ported from Face_3D_Lifter (2026-10-25):
      Laplacian prior on MediaPipe's canonical mesh, re-seated each iteration. Per-landmark triangulation lets
      neighbours settle on different views and bunch; the joint fit keeps the canonical spacing.
   6. dense fit (fit_dense): the 2x-subdivided canonical face, posed on step 5, fitted point-to-plane to the
-     scan around the nose, with step 5's rays and a stiff Laplacian. FaceLandmarker misplaces hidden nostrils
-     on the upper lip in every view (pp22: 5.4 mm); the nose's own shape puts them back (1.2 mm).
+     scan around the nose, with step 5's rays and a stiff Laplacian; only the nose base (21 landmarks) takes
+     its result. FaceLandmarker misplaces hidden nostrils on the upper lip in every view (pp22: 5.4 mm); the
+     nose's own shape puts them back.
 Leave one head out on 50 HUTUBS heads vs the canonical-fit pseudo GT: 2.34 mm after step 4, 2.16 (p90 5.59
 -> 4.99, collapsed edges 0.62 -> 0.05%) after step 5; 2.10 with per-view weights (FINDINGS). Iris (468-477)
 keeps step 4's points.
@@ -57,6 +58,9 @@ FACE = dict(
     dense_beta=0.5,                      # weight of the rays against the surface term
     dense_region_mm=35.0,                # surface term only within this of the subnasale (canonical frame):
                                          # the lips fit the canonical shape badly and get dragged
+    dense_apply_mm=12.0,                 # ...but only landmarks this close to the subnasale take its result:
+                                         # the surface term slides the nose tip (17 mm away) down its slope
+                                         # (BJ002 sticker 1.7 -> 3.9 mm) and costs the lateral stickers
     dense_trim_mm=5.0,                   # ignore template vertices further than this from the scan
     dense_iters=8,
     fit_view_weights=True,               # weight each ray by 1/(its view's typical miss for that landmark)^2,
@@ -207,10 +211,17 @@ def dense_template(cfg=FACE):
     return Vd, sp.kron(L.T @ L, sp.eye(3)).tocsr(), np.linalg.norm(Vd - Vd[2], axis=1) < cfg["dense_region_mm"]
 
 
+def dense_applies(cfg=FACE):
+    """Landmarks (468) that take fit_dense's result: the nose base."""
+    V = canonical_raw(cfg)[0][:468]
+    return np.linalg.norm(V - V[2], axis=1) < cfg["dense_apply_mm"]
+
+
 def fit_dense(UV, cams, off, V, F, init, cfg=FACE, tpl=None, view_w=None):
     """Step 6: the dense canonical face fitted to the scan (V, F mm) from init (468 x 3, step 5), minimising
     point-to-plane distance over tpl's region + dense_beta x step 5's weighted ray term on vertices 0-467 +
-    dense_lambda |L (Y - canonical posed on Y)|^2. Returns 468 x 3, seated."""
+    dense_lambda |L (Y - canonical posed on Y)|^2. Returns 468 x 3, seated: the fit's points for the nose base
+    (dense_applies), init's elsewhere."""
     import scipy.sparse as sp, scipy.sparse.linalg as sla
     Vd, LL3, region = dense_template(cfg) if tpl is None else tpl
     N, n, s = len(Vd), 468, cfg["scale_mm"]
@@ -239,7 +250,9 @@ def fit_dense(UV, cams, off, V, F, init, cfg=FACE, tpl=None, view_w=None):
         ref = _similarity(Vd, Y)(Vd)                      # re-posed each pass: the prior is on shape, not pose
         Y = sla.spsolve((sp.block_diag(list(B)).tocsr() + lam * LL3).tocsc(),
                         b.ravel() + lam * (LL3 @ ref.ravel())).reshape(N, 3)
-    return seat(Y[:n], V, F)[0]
+    out = np.array(init, float).copy(); keep = dense_applies(cfg)
+    out[keep] = seat(Y[:n], V, F)[0][keep]
+    return out
 
 
 class FaceLifter:

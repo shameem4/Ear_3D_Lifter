@@ -179,6 +179,11 @@ FINDINGS.md is the long form. In brief:
   nose. Soft stiffness (lambda <= 3) lets the template slide along the skin and does nothing. Caveat: the
   pseudo GT is the same kind of fit (Wrap of the canonical face), so the HUTUBS score flatters it; judge by
   the renders and BJ002's stickers. ~10 s per head.
+  **Then restricted to the nose base (dense_apply_mm 12):** BJ002's stickers showed the surface term slides
+  the nose tip (lm 1) 2.5 mm down its lower slope (sticker 1.7 -> 3.9 mm; point-to-plane cannot hold an
+  apex) and costs the lateral stickers; region 15/22 did not cure both. HUTUBS liked the tip only because its
+  GT is the same canonical fit. Now only the 21 nose-base landmarks take the dense result; the rest keep step
+  5 exactly. Leave one head out: nose base 1.58 -> 1.07 mm, features 1.98 -> 1.96, rest 2.15 -> 2.10.
 - **Lip-corner spacing worsened by the view weights:** collapsed edges there 4.1% -> 11.1% (p90 0.36 ->
   0.86); after the dense fit 9.0%. Those edges are ~1.4 mm in the GT (closed lips), so the ratio is noisy,
   but this one is open.
