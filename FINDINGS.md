@@ -184,6 +184,11 @@ FINDINGS.md is the long form. In brief:
   apex) and costs the lateral stickers; region 15/22 did not cure both. HUTUBS liked the tip only because its
   GT is the same canonical fit. Now only the 21 nose-base landmarks take the dense result; the rest keep step
   5 exactly. Leave one head out: nose base 1.58 -> 1.07 mm, features 1.98 -> 1.96, rest 2.15 -> 2.10.
+  BJ002 (no sticker in the nose base): stickers identical to dense off; the nose base moves 5.4 mm median
+  (8.7 at lm 2), beyond any HUTUBS head (max per-head 4.1). It is a correction: lm 2 lands 0.97 mm from the
+  geometric subnasale with the fit, 8.6 mm (out on the columella) without; moves are all back toward the
+  face; nostril cavities are shallow (3.5 mm) and no landmark went into one. Unverified: the lateral
+  nose-base points (alar base, rim), which rest on the canonical prior.
 - **Lip-corner spacing worsened by the view weights:** collapsed edges there 4.1% -> 11.1% (p90 0.36 ->
   0.86); after the dense fit 9.0%. Those edges are ~1.4 mm in the GT (closed lips), so the ratio is noisy,
   but this one is open.
