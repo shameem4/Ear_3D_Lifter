@@ -227,6 +227,14 @@ FINDINGS.md is the long form. In brief:
   film normal: corners 2.48-2.58 mm (from 2.52), collapse 6.8-11% (from 11.1%), worst head +0.17..+0.71. Wrap
   reaches 1% but its spacing matches the GT partly by construction (same canonical wrap). Open; experiment
   scripts at tag face-experiments-2026-10-25.
+- **Rust core / web demo port (2026-10-25, core/src/pipeline/face.rs).** In-sample offsets (all 50 heads), mean
+  per-head error vs the v1 pseudo GT over 468: Python 2.469, Rust (Filament host) 2.475 mm; paired +0.006, worst
+  +0.16 (pp33); per-head median point gap 0.006 mm. Iris (468-477) differs: step 4 RANSAC is all-pairs in Rust,
+  random in Python. Browser (three.js + JS FaceMesh) on the 16 demo heads: 2.440 vs Rust 2.462 mm, per head
+  -1.22..+0.62 mm (renderer/FaceMesh differences, not a bias). Browser time per head (ears + face) 20-28 s idle:
+  WASM skinning 11-20 s (three AO skins of the same geometry), dense nose fit 4-5 s, host render + FaceMesh +
+  ONNX ~3 s. Native Rust's find_face is slower than Python's normalize_head (56 vs 33 s under 4-way load; not
+  diagnosed); its fit steps are faster (nose 3.5 vs 5.1 s, rays and springs <0.1 vs 0.7 / 3.2 s).
 - **ear3d drift:** v0 (Face_3D_Lifter era) vs v1 normalisation differs. pp1 was pitched in v0 and is
   upright in v1; the other heads moved <5 mm. BJ002 lost one view (stickers 2.4 -> 2.7 mm on the v0 offsets).
 - **Error is sliding along the skin** (0.26 mm along the normal), so off-surface checks cannot see it. RANSAC
