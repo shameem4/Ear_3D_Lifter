@@ -110,7 +110,7 @@ fn skinned<'py>(py: Python<'py>, v: &[u8], f: &[u8], seed: u64, tone: usize, ao_
     PyBytes::new(py, &bytes_f64(&c.iter().flatten().cloned().collect::<Vec<f64>>()))
 }
 
-// detect.rs for the drift test (demo/parity/detector_drift.py): RGB u8 bytes in, f32 out.
+// detect.rs for the drift test (demo/parity/detector_drift.py, at tag docs-parity-2026-10-26): RGB u8 bytes in, f32 out.
 #[pyfunction]
 fn landmarker_inputs(img: &[u8], w: usize, h: usize) -> (Vec<f32>, Vec<f32>) { crate::detect::landmarker_inputs(img, w, h) }
 #[pyfunction]

@@ -2,7 +2,7 @@
 //! host and the browser run identical code and differ only in the runtime that
 //! evaluates the graph (onnxruntime vs onnxruntime-web).
 //!
-//! Ported from, and checked against (demo/parity/detector_drift.py):
+//! Ported from, and checked against (demo/parity/detector_drift.py, at tag docs-parity-2026-10-26):
 //!  - Ear_Landmarker inference.LandmarkPredictor.predict: bilinear resize
 //!    (torch, align_corners=False, no antialias) to 192, [-1, 1], flip fusion
 //!    with the mirror arm un-mirrored as 1 - x and NO index permutation.

@@ -335,7 +335,7 @@ was composed from the older `corpus/canonical`, 0.06-0.09 mm off.
   left helix tops ~15 mm short (2026-10-18). If ICP is used, centre AND
   pre-scale the template first or its `max_dist` guard does nothing. *(inherited)*
 - AudioEar3D clouds have no head; fitting them needs a cloud method
-  (`docs/WRAP_AUDIOEAR3D_CLOUD.md`, which made esc's) or, as for lmw, a Poisson
+  (`docs/WRAP_AUDIOEAR3D_CLOUD.md` at tag docs-parity-2026-10-26, which made esc's) or, as for lmw, a Poisson
   mesh of the cloud landmarked and wrapped like a head ear.
 - Hand-written `.wrap` projects need `formatVersion` 69 and the full layout
   envelope; WrapCmd does not validate layout, so a bad one fails oddly.

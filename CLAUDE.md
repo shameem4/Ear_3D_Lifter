@@ -96,7 +96,8 @@ action and never Claude's.
   rules they left, what is closed and open.
 - `scripts/{corpus,caches}/README.md`: runbooks.
 - `RESULTS_inherited.md`: the inherited effort's long chronological log.
-- `docs/`: write-ups for other agents (AudioEar3D cloud wrapping).
+- Removed 2026-10-26, at tag `docs-parity-2026-10-26`: `docs/` (write-ups for
+  other agents) and `demo/parity/` (browser parity drivers).
 - `git show archive-final:archive/README.md`: index of the frozen
   experiments removed on 2026-10-25.
 
