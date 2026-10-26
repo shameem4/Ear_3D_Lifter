@@ -214,6 +214,11 @@ FINDINGS.md is the long form. In brief:
   definition gap. **Decision (user): the face lift outputs MediaPipe's 478 points** (the only accessible
   data). So BJ002 judges a lift on the 4 midline stickers: default 1.7 / 0.4 / 2.0 / 2.9 mm; wraps C and D tie
   on the first three and lose on the chin (3.7).
+- **In-house lip-corner fix: not achieved (2026-10-25).** Freeing only the lip-corner region (6-12 mm round
+  61/291), pinning everything else exactly, refilling it with the canonical membrane and seating along the
+  film normal: corners 2.48-2.58 mm (from 2.52), collapse 6.8-11% (from 11.1%), worst head +0.17..+0.71. Wrap
+  reaches 1% but its spacing matches the GT partly by construction (same canonical wrap). Open; experiment
+  scripts at tag face-experiments-2026-10-25.
 - **ear3d drift:** v0 (Face_3D_Lifter era) vs v1 normalisation differs. pp1 was pitched in v0 and is
   upright in v1; the other heads moved <5 mm. BJ002 lost one view (stickers 2.4 -> 2.7 mm on the v0 offsets).
 - **Error is sliding along the skin** (0.26 mm along the normal), so off-surface checks cannot see it. RANSAC
