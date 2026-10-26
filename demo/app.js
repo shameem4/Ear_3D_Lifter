@@ -485,7 +485,8 @@ function focusEar() {
 // ------------------------------------------------------------------ start
 (async () => {
   index = await (await fetch("meshes/index.json")).json();
-  $("credits").textContent = `Heads: ${index.credits.heads}. Ears: ${index.credits.ears}. 2D landmarker builds on SaifulULL's U-Net (CC BY 4.0). Ear boxes: BlazeEar. Face: MediaPipe FaceLandmarker.`;
+  if (!index.ears || !index.ears.length) $("tabEars").style.display = "none";   // a build without bundled ears
+  $("credits").textContent = `Heads: ${index.credits.heads}.${index.credits.ears ? ` Ears: ${index.credits.ears}.` : ""} 2D landmarker builds on SaifulULL's U-Net (CC BY 4.0). Ear boxes: BlazeEar. Face: MediaPipe FaceLandmarker.`;
   renderList();
   const f64 = async (n) => new Float64Array(await (await fetch(`models/${n}.bin`)).arrayBuffer());
   const [h, cfg, table, angles, template, canon, anchors] = await Promise.all([BrowserHost.create("models/", 600),
