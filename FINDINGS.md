@@ -208,6 +208,12 @@ FINDINGS.md is the long form. In brief:
   (12 stickers, labels = nearest landmark on the default, fixed): default 2.76 / mean 3.05 / max 6.32,
   wrap D 3.11 / 3.28 / 6.81, wrap C 3.54 / 3.38 / 6.76. Same ranking with neutral labels. 340 and 348
   (left lateral cheek) stay 5-7 mm in every method.
+  **The stickers are anatomical landmarks (user, 2026-10-25; ISO 8559 / 7250 chart):** pronasale, sellion,
+  glabella, chin, and L/R frontotemporale, zygofrontale, infraorbitale, zygion, tragion. Only the four
+  midline ones have MediaPipe equivalents (1, 168, 9, 175); the bony ones have none, so their 2-6 mm is mostly
+  definition gap. **Decision (user): the face lift outputs MediaPipe's 478 points** (the only accessible
+  data). So BJ002 judges a lift on the 4 midline stickers: default 1.7 / 0.4 / 2.0 / 2.9 mm; wraps C and D tie
+  on the first three and lose on the chin (3.7).
 - **ear3d drift:** v0 (Face_3D_Lifter era) vs v1 normalisation differs. pp1 was pitched in v0 and is
   upright in v1; the other heads moved <5 mm. BJ002 lost one view (stickers 2.4 -> 2.7 mm on the v0 offsets).
 - **Error is sliding along the skin** (0.26 mm along the normal), so off-surface checks cannot see it. RANSAC
