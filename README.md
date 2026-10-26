@@ -1,7 +1,8 @@
 # Ear 3D Lifter
 
 A head scan in, landmarks in 3D out: 55 per ear, and MediaPipe's 478 on the
-face. It runs in Python or entirely in a browser tab (`demo/`).
+face. It runs in Python or entirely in a browser tab (`demo/`):
+**[try it](https://shameem4.github.io/Ear_3D_Lifter/)** on HUTUBS heads or your own scan.
 
 ## The story
 
