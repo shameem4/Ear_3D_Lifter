@@ -1,0 +1,68 @@
+# The web demo on GitHub Pages: the Rust core built to WebAssembly from this
+# commit, the page code from demo/, and the data (ONNX models, HUTUBS heads)
+# from a release asset, so no binaries enter git history. New data: re-run
+# demo/export_models.py and demo/export_meshes.py, pack models/ and meshes/
+# (see demo/README.md), publish a new demo-data-vN release, and bump DATA here.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["core/**", "demo/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  DATA: demo-data-v1
+  DATA_SHA256: 64bd68460c09956d58468315cb1afd86c4991f7cdaf7462f3560967a71f67ba2
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack@0.15.0
+      - name: Build the core
+        run: wasm-pack build --release --target web -d ../site/pkg core -- --features wasm
+      - name: Page code
+        run: |
+          cp demo/index.html demo/app.js demo/worker.js site/
+          cp -r demo/js site/
+          rm -f site/pkg/.gitignore site/pkg/package.json site/pkg/README.md site/pkg/*.d.ts
+          touch site/.nojekyll
+      - name: Data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$DATA" -R "$GITHUB_REPOSITORY" -p "$DATA.tar.gz" -D /tmp
+          echo "$DATA_SHA256  /tmp/$DATA.tar.gz" | sha256sum -c
+          tar xzf "/tmp/$DATA.tar.gz" -C site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

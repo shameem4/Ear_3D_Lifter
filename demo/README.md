@@ -17,6 +17,20 @@ pipeline's events.
 then open http://127.0.0.1:8795/. `models/`, `meshes/` and `pkg/` are
 generated and gitignored.
 
+## Hosting (GitHub Pages)
+
+https://shameem4.github.io/Ear_3D_Lifter/ is built by
+`.github/workflows/pages.yml` on every push to `main` that touches `core/` or
+`demo/`: the core is compiled to WebAssembly from that commit and the page
+code copied from `demo/`. The data (ONNX models, HUTUBS heads) is NOT in git:
+it is the release asset `demo-data-vN.tar.gz`, which holds `models/` and
+`meshes/` (heads only, ears list empty; no `manifest.json`, it has local
+paths). New data: re-export, pack, publish a new release, bump `DATA` and
+`DATA_SHA256` in the workflow:
+
+    tar czf demo-data-v2.tar.gz models meshes     # from the assembled site dir
+    gh release create demo-data-v2 demo-data-v2.tar.gz --title "Web demo data v2"
+
 ## Accuracy
 
 The face lift (a whole head gets MediaPipe's 478 points as well as the ears)
