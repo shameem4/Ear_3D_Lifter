@@ -10,7 +10,7 @@ Run with the mocap python from the repo root:
     python scripts/face/lift.py --hutubs pp1 pp2 ...         # -> runs/face/v0/<head>.npz with diagnostics
     python scripts/face/proxy_gt.py [heads]                  # Wrap fit -> runs/face/v0/<head>_gtd.npz
     python scripts/face/view_table.py                        # per view x landmark miss -> runs/face/view_table.{npz,csv}
-    python scripts/face/score_loho.py                        # leave one head out (v1): 4.14 -> 2.34 -> 2.18 mm
+    python scripts/face/score_loho.py                        # leave one head out (v1), by region, every step
     python scripts/face/build_view_offsets.py v1             # new ear3d/face_view_offsets_v1.npz
 
 Data (local, never committed):

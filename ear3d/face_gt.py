@@ -9,7 +9,7 @@ without its WrapHead two-stage fit (superseded): nothing here derives from WrapH
 import json, pathlib, subprocess
 import numpy as np, open3d as o3d, trimesh
 from .faceform import WRAPCMD, BASE, one, connect, _wrap_env, _similarity
-from .face import canonical_raw
+from .face import canonical_raw, canonical_dense
 
 N_LM = 468
 INLIER_MM = 6.0
@@ -18,9 +18,7 @@ WORK_SIZE = 100.0            # Wrap's parameters are tuned for a scan ~100 units
 
 def canonical(levels=2):
     """canonical_raw, midpoint-subdivided for density (mm)."""
-    V, F = canonical_raw()
-    m = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(V), o3d.utility.Vector3iVector(F)).subdivide_midpoint(levels)
-    return np.asarray(m.vertices, float), np.asarray(m.triangles)
+    return canonical_dense(levels=levels)
 
 
 def wrap_points(pj):

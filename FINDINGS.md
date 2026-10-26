@@ -170,6 +170,18 @@ FINDINGS.md is the long form. In brief:
   bias across heads (+0.1 mm). A geometric subnasale snap (deepest midline point under the tip-to-labrale
   chord) is worse than the detection at lm 2 (2.26 vs 1.42 mm median); gated to vertical disagreements >3 mm
   it fixes pp22 (3.6 -> 2.0) but helps 4 heads and hurts 3. Not adopted.
+- **Dense nose fit fixes the nostrils (2026-10-25, default, step 6):** the 2x-subdivided canonical face is
+  fitted point-to-plane to the scan within 35 mm of the subnasale, with the weighted rays at 0.5 and a stiff
+  Laplacian (10). The nose's own shape puts back nostrils FaceLandmarker misplaced. Leave one head out, from
+  step 5: nose base 1.58 -> 1.07 mm (p90 3.41 -> 2.07; better on 39/50; heads over 3 mm 6 -> 0); features
+  1.98 -> 1.71; rest 2.15 -> 1.84; whole face better on 38/50, worst +0.45 (pp31). pp22's septum 5.4 -> 1.2.
+  Sweep: the surface term over the whole face drags closed lips (pp44 1.92 -> 2.61), so it is limited to the
+  nose. Soft stiffness (lambda <= 3) lets the template slide along the skin and does nothing. Caveat: the
+  pseudo GT is the same kind of fit (Wrap of the canonical face), so the HUTUBS score flatters it; judge by
+  the renders and BJ002's stickers. ~10 s per head.
+- **Lip-corner spacing worsened by the view weights:** collapsed edges there 4.1% -> 11.1% (p90 0.36 ->
+  0.86); after the dense fit 9.0%. Those edges are ~1.4 mm in the GT (closed lips), so the ratio is noisy,
+  but this one is open.
 - **ear3d drift:** v0 (Face_3D_Lifter era) vs v1 normalisation differs. pp1 was pitched in v0 and is
   upright in v1; the other heads moved <5 mm. BJ002 lost one view (stickers 2.4 -> 2.7 mm on the v0 offsets).
 - **Error is sliding along the skin** (0.26 mm along the normal), so off-surface checks cannot see it. RANSAC

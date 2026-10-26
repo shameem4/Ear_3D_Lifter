@@ -9,6 +9,9 @@ The face counterpart of Pipeline, ported from Face_3D_Lifter (2026-10-25):
   5. joint ray fit (fit_rays): all 468 points at once to every view's rays, Cauchy-weighted per ray, with a
      Laplacian prior on MediaPipe's canonical mesh, re-seated each iteration. Per-landmark triangulation lets
      neighbours settle on different views and bunch; the joint fit keeps the canonical spacing.
+  6. dense fit (fit_dense): the 2x-subdivided canonical face, posed on step 5, fitted point-to-plane to the
+     scan around the nose, with step 5's rays and a stiff Laplacian. FaceLandmarker misplaces hidden nostrils
+     on the upper lip in every view (pp22: 5.4 mm); the nose's own shape puts them back (1.2 mm).
 Leave one head out on 50 HUTUBS heads vs the canonical-fit pseudo GT: 2.34 mm after step 4, 2.16 (p90 5.59
 -> 4.99, collapsed edges 0.62 -> 0.05%) after step 5; 2.10 with per-view weights (FINDINGS). Iris (468-477)
 keeps step 4's points.
@@ -49,6 +52,13 @@ FACE = dict(
     fit_lambda=0.3,                      # Laplacian prior weight (swept 0.3-3: all within 0.02 mm)
     fit_cauchy_mm=2.0,                   # ray residual scale for the Cauchy weights
     fit_iters=6,
+    fit_dense=True,                      # step 6: dense canonical-face fit to the scan's nose geometry
+    dense_lambda=10.0,                   # stiffness (Laplacian weight) of the dense template
+    dense_beta=0.5,                      # weight of the rays against the surface term
+    dense_region_mm=35.0,                # surface term only within this of the subnasale (canonical frame):
+                                         # the lips fit the canonical shape badly and get dragged
+    dense_trim_mm=5.0,                   # ignore template vertices further than this from the scan
+    dense_iters=8,
     fit_view_weights=True,               # weight each ray by 1/(its view's typical miss for that landmark)^2,
                                          # miss_mm in the view-offset file; leave one head out 2.18 -> 2.10 mm
 )
@@ -67,6 +77,13 @@ def canonical_raw(cfg=FACE):
         if l.startswith("v "): V.append([float(x) for x in l.split()[1:4]])
         elif l.startswith("f "): F.append([int(x.split("/")[0]) - 1 for x in l.split()[1:4]])
     return np.array(V) * 10.0, np.array(F)
+
+
+def canonical_dense(cfg=FACE, levels=2):
+    """canonical_raw, midpoint-subdivided (mm); vertices 0-467 stay the landmarks."""
+    V, F = canonical_raw(cfg)
+    m = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(V), o3d.utility.Vector3iVector(F)).subdivide_midpoint(levels)
+    return np.asarray(m.vertices, float), np.asarray(m.triangles)
 
 
 def views(cfg=FACE):
@@ -179,6 +196,52 @@ def fit_rays(UV, cams, off, V, F, init, cfg=FACE, lap=None, view_w=None):
     return X
 
 
+def dense_template(cfg=FACE):
+    """What fit_dense needs from the canonical face, built once: vertices, Laplacian^T Laplacian (3N), and
+    the per-vertex mask of where the surface term applies."""
+    import scipy.sparse as sp
+    Vd, Fd = canonical_dense(cfg); n = len(Vd)
+    E = np.unique(np.sort(np.r_[Fd[:, [0, 1]], Fd[:, [1, 2]], Fd[:, [2, 0]]], 1), axis=0)
+    A = sp.coo_matrix((np.ones(2 * len(E)), (np.r_[E[:, 0], E[:, 1]], np.r_[E[:, 1], E[:, 0]])), (n, n)).tocsr()
+    L = (sp.diags(np.asarray(A.sum(1)).ravel()) - A).tocsr()
+    return Vd, sp.kron(L.T @ L, sp.eye(3)).tocsr(), np.linalg.norm(Vd - Vd[2], axis=1) < cfg["dense_region_mm"]
+
+
+def fit_dense(UV, cams, off, V, F, init, cfg=FACE, tpl=None, view_w=None):
+    """Step 6: the dense canonical face fitted to the scan (V, F mm) from init (468 x 3, step 5), minimising
+    point-to-plane distance over tpl's region + dense_beta x step 5's weighted ray term on vertices 0-467 +
+    dense_lambda |L (Y - canonical posed on Y)|^2. Returns 468 x 3, seated."""
+    import scipy.sparse as sp, scipy.sparse.linalg as sla
+    Vd, LL3, region = dense_template(cfg) if tpl is None else tpl
+    N, n, s = len(Vd), 468, cfg["scale_mm"]
+    sc = o3d.t.geometry.RaycastingScene()
+    sc.add_triangles(o3d.core.Tensor(np.asarray(V, np.float32)), o3d.core.Tensor(np.asarray(F, np.uint32)))
+    m = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(V), o3d.utility.Vector3iVector(F)); m.compute_triangle_normals()
+    TN = np.asarray(m.triangle_normals)
+    ok = np.isfinite(init).all(1)
+    if ok.sum() < 4:
+        return init
+    Y = _similarity(Vd[:n][ok], init[ok])(Vd)
+    O = np.zeros((len(cams), n, 3)); D = np.zeros((len(cams), n, 3)); has = np.isfinite(UV[:, :n, 0])
+    for k, cam in enumerate(cams):
+        if has[k].any():
+            o, d = cam.rays(UV[k, :n][has[k]] - off[k, :n][has[k]]); O[k, has[k]] = o * s; D[k, has[k]] = d
+    Pm = np.eye(3)[None, None] - D[..., :, None] * D[..., None, :]; PmO = (Pm @ O[..., None])[..., 0]
+    lam, beta, c = cfg["dense_lambda"], cfg["dense_beta"], cfg["fit_cauchy_mm"]
+    for _ in range(cfg["dense_iters"]):
+        q = sc.compute_closest_points(o3d.core.Tensor(Y.astype(np.float32)))
+        C = q["points"].numpy().astype(float); nrm = TN[q["primitive_ids"].numpy()]
+        wd = region * (np.linalg.norm(C - Y, axis=1) < cfg["dense_trim_mm"])
+        B = wd[:, None, None] * nrm[:, :, None] * nrm[:, None, :]; b = (B @ C[..., None])[..., 0]
+        v = Y[None, :n] - O; miss = np.linalg.norm(v - (v * D).sum(2, keepdims=True) * D, axis=2)
+        w = np.where(has, 1 / (1 + (miss / c) ** 2), 0.0) * (1 if view_w is None else view_w[:, :n])
+        B[:n] += beta * (w[..., None, None] * Pm).sum(0); b[:n] += beta * (w[..., None] * PmO).sum(0)
+        ref = _similarity(Vd, Y)(Vd)                      # re-posed each pass: the prior is on shape, not pose
+        Y = sla.spsolve((sp.block_diag(list(B)).tocsr() + lam * LL3).tocsc(),
+                        b.ravel() + lam * (LL3 @ ref.ravel())).reshape(N, 3)
+    return seat(Y[:n], V, F)[0]
+
+
 class FaceLifter:
     def __init__(self, cfg=None):
         import mediapipe as mp
@@ -190,6 +253,7 @@ class FaceLifter:
             base_options=mpp.BaseOptions(model_asset_path=self.cfg["face_task"]), num_faces=1))
         self.off = load_offsets(self.cfg)
         self.lap = canonical_laplacian(self.cfg) if self.cfg["fit_rays"] else None
+        self.tpl = dense_template(self.cfg) if self.cfg["fit_dense"] else None
         miss = load_offsets(self.cfg, "miss_mm") if self.cfg["fit_view_weights"] else None
         self.view_w = None if miss is None else view_weights(miss)
 
@@ -230,6 +294,10 @@ class FaceLifter:
             n = len(self.lap[1])
             Ps[:n] = fit_rays(UV, cams, self.off, np.asarray(geo.vertices) * s, np.asarray(geo.triangles),
                               Ps[:n] * s, c, self.lap, self.view_w) / s
+        if c["fit_dense"]:
+            n = len(self.lap[1]) if self.lap is not None else 468
+            Ps[:n] = fit_dense(UV, cams, self.off, np.asarray(geo.vertices) * s, np.asarray(geo.triangles),
+                               Ps[:n] * s, c, self.tpl, self.view_w) / s
         to_input = lambda X: (X * s + piv) @ R_head + centre
         out = dict(P=to_input(Ps), P_raw=to_input(P), P_tri=to_input(Pt), off_surface_mm=dist * s, residual_mm=res * s,
                    n_inliers=inliers.sum(1), n_views=np.isfinite(UV[:, 0, 0]).sum())
