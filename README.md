@@ -57,6 +57,13 @@ roughly right but wrong as a face:
 The general rule: triangulation finds where a landmark is roughly, and
 knowledge of what an ear or a face looks like decides the rest.
 
+**This is a stopgap.** Rendering a scan and reading it in 2D is a detour. The
+goal is direct 3D landmarking: a model that takes the 3D scan itself and
+places the landmarks on it. That model needs training data, many scans with
+their landmarks, and there is no such dataset for this scheme. This
+repository is the intermediate step that builds it: lifting 2D landmarks onto
+scans to produce the 3D labels a direct model can learn from.
+
 ## Use it
 
     python scripts/run_pipeline.py head.obj [out.npz]          # ears
