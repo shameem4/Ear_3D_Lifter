@@ -13,6 +13,9 @@ The face counterpart of Pipeline, ported from Face_3D_Lifter (2026-10-25):
      scan around the nose, with step 5's rays and a stiff Laplacian; only the nose base (21 landmarks) takes
      its result. FaceLandmarker misplaces hidden nostrils on the upper lip in every view (pp22: 5.4 mm); the
      nose's own shape puts them back.
+  7. spacing (fit_spacing): one-sided edge springs on the landmark mesh push apart any neighbours closer than
+     spacing_rho x their typical distance (learned from the training heads' GT, scaled to the face), seated on
+     the scan each sweep. Mouth-corner collapsed edges 11.1% -> 0.2%; error unchanged (2.06 -> 2.05 mm).
 Leave one head out on 50 HUTUBS heads vs the canonical-fit pseudo GT: 2.34 mm after step 4, 2.16 (p90 5.59
 -> 4.99, collapsed edges 0.62 -> 0.05%) after step 5; 2.10 with per-view weights (FINDINGS). Iris (468-477)
 keeps step 4's points.
@@ -63,6 +66,10 @@ FACE = dict(
                                          # (BJ002 sticker 1.7 -> 3.9 mm) and costs the lateral stickers
     dense_trim_mm=5.0,                   # ignore template vertices further than this from the scan
     dense_iters=8,
+    fit_spacing=True,                    # step 7: anti-bunching edge springs
+    spacing_rho=0.85,                    # push apart edges shorter than this x their typical length
+    spacing_sweeps=30,
+    spacing_anchor=0.05,                 # per sweep, pull back toward step 6's points by this fraction
     fit_view_weights=True,               # weight each ray by 1/(its view's typical miss for that landmark)^2,
                                          # miss_mm in the view-offset file; leave one head out 2.18 -> 2.10 mm
 )
@@ -102,7 +109,8 @@ def cameras(E, cfg=FACE):
 
 def load_offsets(cfg=FACE, what="off_px"):
     """From the view-offset file, checked against the view grid: "off_px" (view x 478 x 2, zeros when
-    view_offsets is None) or "miss_mm" (view x 468, each view's median ray miss per landmark, raw detections)."""
+    view_offsets is None), "miss_mm" (view x 468, each view's median ray miss per landmark, raw detections) or
+    "edge_rest" (per canonical_edges edge, its typical length / face_size, over the GT heads)."""
     vs = views(cfg)
     if not cfg["view_offsets"]:
         return np.zeros((len(vs), N_LM, 2)) if what == "off_px" else None
@@ -255,6 +263,36 @@ def fit_dense(UV, cams, off, V, F, init, cfg=FACE, tpl=None, view_w=None):
     return out
 
 
+def canonical_edges(cfg=FACE):
+    """The canonical mesh's edges among the 468 landmarks (sorted pairs)."""
+    F = canonical_raw(cfg)[1]
+    return np.unique(np.sort(np.r_[F[:, [0, 1]], F[:, [1, 2]], F[:, [2, 0]]], 1), axis=0)
+
+
+def face_size(X):
+    """RMS distance of the points from their centroid (mm)."""
+    return float(np.sqrt(((X - X.mean(0)) ** 2).sum(1).mean()))
+
+
+def spread(X, V, F, edge_rest, cfg=FACE, E=None):
+    """Step 7: push apart every landmark-mesh edge shorter than spacing_rho x its typical length
+    (edge_rest x face_size(X)), averaging the pushes per point, pulling back toward X by spacing_anchor, and
+    seating on the scan (V, F mm), for up to spacing_sweeps sweeps. Edges at normal length are untouched."""
+    E = canonical_edges(cfg) if E is None else E
+    rho, L = cfg["spacing_rho"], edge_rest * face_size(X)
+    Y = X.copy()
+    for _ in range(cfg["spacing_sweeps"]):
+        d = Y[E[:, 1]] - Y[E[:, 0]]; l = np.linalg.norm(d, axis=1); short = l < rho * L
+        if not short.any():
+            break
+        k = 0.5 * (rho * L[short] - l[short])[:, None] * d[short] / np.maximum(l[short], 1e-9)[:, None]
+        c = np.zeros_like(Y); n = np.zeros(len(Y))
+        np.add.at(c, E[short, 0], -k); np.add.at(c, E[short, 1], k); np.add.at(n, E[short].ravel(), 1)
+        Y = Y + c / np.maximum(n, 1)[:, None]
+        Y = seat(Y + cfg["spacing_anchor"] * (X - Y), V, F)[0]
+    return Y
+
+
 class FaceLifter:
     def __init__(self, cfg=None):
         import mediapipe as mp
@@ -267,6 +305,7 @@ class FaceLifter:
         self.off = load_offsets(self.cfg)
         self.lap = canonical_laplacian(self.cfg) if self.cfg["fit_rays"] else None
         self.tpl = dense_template(self.cfg) if self.cfg["fit_dense"] else None
+        self.edge_rest = load_offsets(self.cfg, "edge_rest") if self.cfg["fit_spacing"] else None
         miss = load_offsets(self.cfg, "miss_mm") if self.cfg["fit_view_weights"] else None
         self.view_w = None if miss is None else view_weights(miss)
 
@@ -311,6 +350,8 @@ class FaceLifter:
             n = len(self.lap[1]) if self.lap is not None else 468
             Ps[:n] = fit_dense(UV, cams, self.off, np.asarray(geo.vertices) * s, np.asarray(geo.triangles),
                                Ps[:n] * s, c, self.tpl, self.view_w) / s
+        if c["fit_spacing"]:
+            Ps[:468] = spread(Ps[:468] * s, np.asarray(geo.vertices) * s, np.asarray(geo.triangles), self.edge_rest, c) / s
         to_input = lambda X: (X * s + piv) @ R_head + centre
         out = dict(P=to_input(Ps), P_raw=to_input(P), P_tri=to_input(Pt), off_surface_mm=dist * s, residual_mm=res * s,
                    n_inliers=inliers.sum(1), n_views=np.isfinite(UV[:, 0, 0]).sum())

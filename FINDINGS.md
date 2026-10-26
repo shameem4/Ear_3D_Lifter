@@ -214,6 +214,14 @@ FINDINGS.md is the long form. In brief:
   definition gap. **Decision (user): the face lift outputs MediaPipe's 478 points** (the only accessible
   data). So BJ002 judges a lift on the 4 midline stickers: default 1.7 / 0.4 / 2.0 / 2.9 mm; wraps C and D tie
   on the first three and lose on the chin (3.7).
+- **Spacing springs fix the corner bunching (2026-10-25, default, step 7).** One-sided edge springs on the
+  landmark mesh: any edge shorter than 0.85 x its typical length (median GT edge / face size over the training
+  heads, edge_rest in the offsets file) is pushed apart, with a 5% pull back to the lift and a re-seat each
+  sweep. Leave one head out: mouth-corner collapsed edges 11.1% -> 0.17%, spacing p90 0.855 -> 0.259; eye
+  corners p90 0.259 -> 0.225; error unchanged (whole face 2.06 -> 2.05, per head -0.16..+0.04; mouth corners
+  2.52 -> 2.52). Learned spacing, not canonical: closed lips are not pushed apart. It does not pull toward the
+  canonical shape, so the GT's wrap bias does not flatter it. A loop over ~1,300 edges plus closest-point
+  queries: web-portable. Rho 0.5 / 0.7: collapse 7.3% / 0.5%.
 - **In-house lip-corner fix: not achieved (2026-10-25).** Freeing only the lip-corner region (6-12 mm round
   61/291), pinning everything else exactly, refilling it with the canonical membrane and seating along the
   film normal: corners 2.48-2.58 mm (from 2.52), collapse 6.8-11% (from 11.1%), worst head +0.17..+0.71. Wrap

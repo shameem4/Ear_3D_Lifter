@@ -15,12 +15,12 @@ import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 import pathlib, numpy as np
 from concurrent.futures import ProcessPoolExecutor
-from ear3d.face import FACE, cameras, triangulate, seat, fit_rays, canonical_laplacian, canonical_raw, view_weights, fit_dense, dense_template
+from ear3d.face import FACE, cameras, triangulate, seat, fit_rays, canonical_laplacian, canonical_raw, view_weights, fit_dense, dense_template, spread, canonical_edges, face_size
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 RUN_TAG = __import__("os").environ.get("FACE_RUN", "v1")       # runs/face/<tag>: one lift generation + its GT
 RUN = ROOT / "runs" / "face" / RUN_TAG; s = FACE["scale_mm"]
-LAP = canonical_laplacian(); TPL = dense_template()
+LAP = canonical_laplacian(); TPL = dense_template(); CE = canonical_edges()
 
 
 def regions():
@@ -39,6 +39,7 @@ def regions():
 
 REG = regions()
 T = np.load(RUN / "view_table.npz"); H, OFF, RAY = list(T["heads"]), T["off_px"], T["ray_mm"]
+GT = {h: np.load(RUN / f"{h}_gtd.npz")["G"] for h in H}
 
 
 def one(j):
@@ -54,6 +55,9 @@ def one(j):
     w = view_weights(np.nanmedian(RAY[[i for i in range(len(H)) if i != j]], 0))
     out["+ view weights"] = fit_rays(z["UV"], cams, off, z["V"], z["F"], out["offsets on"], FACE, LAP, w)
     out["+ dense nose fit"] = fit_dense(z["UV"], cams, off, z["V"], z["F"], out["+ view weights"], FACE, TPL, w)
+    tr = [H[i] for i in range(len(H)) if i != j]
+    rest = np.median([np.linalg.norm(GT[h][CE[:, 0]] - GT[h][CE[:, 1]], axis=1) / face_size(GT[h]) for h in tr], 0)
+    out["+ spacing springs"] = spread(out["+ dense nose fit"], z["V"], z["F"], rest, FACE, CE)
     res = {}
     for arm, X in out.items():
         for r, (m, E) in REG.items():

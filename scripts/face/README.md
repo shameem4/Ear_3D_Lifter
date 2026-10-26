@@ -11,7 +11,7 @@ Run with the mocap python from the repo root:
     python scripts/face/proxy_gt.py [heads]                  # Wrap fit -> runs/face/v0/<head>_gtd.npz
     python scripts/face/view_table.py                        # per view x landmark miss -> runs/face/view_table.{npz,csv}
     python scripts/face/score_loho.py                        # leave one head out (v1), by region, every step
-    python scripts/face/build_view_offsets.py v1             # new ear3d/face_view_offsets_v1.npz
+    python scripts/face/build_view_offsets.py v1             # ear3d/face_view_offsets_v1.npz: offsets, view misses, edge spacing
 
 Data (local, never committed):
 - `runs/face/v0/`: 50 HUTUBS heads, copied from Face_3D_Lifter `runs/v0` (older ear3d). `runs/face/v1/`: re-lifted 2026-10-25, the default (`FACE_RUN`). Holds the lifts, with offsets off
